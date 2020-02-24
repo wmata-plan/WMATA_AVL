@@ -1,0 +1,38 @@
+--------------------------------------------------------
+--  File created - Tuesday-February-11-2020   
+--------------------------------------------------------
+--------------------------------------------------------
+--  DDL for Table RAWNAV_GPS_READING
+--------------------------------------------------------
+
+  CREATE TABLE "PLANAPI"."RAWNAV_GPS_READING" 
+   (	"ID" NUMBER, 
+	"LAT_FIXED" FLOAT(126), 
+	"LON_FIXED" FLOAT(126), 
+	"HEADING_DEG" NUMBER, 
+	"DOOR_STATE" VARCHAR2(1 BYTE), 
+	"VEHICLE_STATE" VARCHAR2(1 BYTE), 
+	"ODO_FEET" NUMBER, 
+	"TIME_SECONDS" NUMBER, 
+	"SAT_COUNT" NUMBER, 
+	"STOP_WINDOW_DATA" VARCHAR2(20 BYTE), 
+	"LAT_ORIG" FLOAT(126), 
+	"LON_ORIG" FLOAT(126), 
+	"ROUTE_RUN_ID" NUMBER, 
+	"ODO_OFFSET" NUMBER, 
+	"TIME_OFFSET" NUMBER
+   ) SEGMENT CREATION IMMEDIATE 
+  PCTFREE 10 PCTUSED 40 INITRANS 1 MAXTRANS 255 
+ NOCOMPRESS LOGGING
+  STORAGE(INITIAL 65536 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS 2147483645
+  PCTINCREASE 0 FREELISTS 1 FREELIST GROUPS 1
+  BUFFER_POOL DEFAULT FLASH_CACHE DEFAULT CELL_FLASH_CACHE DEFAULT)
+  TABLESPACE "PLANAPI_T" ;
+
+   COMMENT ON COLUMN "PLANAPI"."RAWNAV_GPS_READING"."ODO_OFFSET" IS 'In feet';
+   COMMENT ON COLUMN "PLANAPI"."RAWNAV_GPS_READING"."TIME_OFFSET" IS 'In seconds';
+--------------------------------------------------------
+--  Constraints for Table RAWNAV_GPS_READING
+--------------------------------------------------------
+
+  ALTER TABLE "PLANAPI"."RAWNAV_GPS_READING" MODIFY ("ID" NOT NULL ENABLE);
