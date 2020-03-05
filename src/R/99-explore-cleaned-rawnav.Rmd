@@ -7,7 +7,7 @@ output:
     toc_float: yes
     df_print: paged
     theme: simplex
-date: "February 25, 2020"
+date: "Updated March 5, 2020"
 
 ---
 
@@ -31,7 +31,10 @@ suppressPackageStartupMessages({
 #Paths
 if ("WylieTimmerman" %in% Sys.info()){
   sharepointpath <- "C:/OD/Foursquare ITP/Foursquare ITP SharePoint Site - Shared Documents/WMATA Queue Jump Analysis"
-  datadir <- file.path(sharepointpath,"data","00-raw")
+  datadir <- file.path(sharepointpath,
+                       "Client Shared Folder",
+                       "data",
+                       "00-raw")
 } else {
   stop('need to set dir where files live')
 }
@@ -286,6 +289,27 @@ Note that because of map tile layer limitations, you cannot zoom in any further 
   arrange(door_state) %>%
   mapview(.,
           zcol = "mph",
+          map.types = c("Esri.WorldImagery","CartoDB.Positron"))}@map %>%
+  setView( #zoom on 16th and U
+    lng = -77.0363,
+    lat = 38.9169,
+    zoom = 18
+  )
+```
+
+
+### What do headings tell us about lane use?
+
+Can the heading field indicate whether a bus is pulling in to a queue jump lane? In this case, it looks like the bus is heading north (degrees of around 3 to 5) then turns to the right (headings of 9 to 12) and then upon exiting the stop zone veers to the left (headings of 355 or so).
+
+```{r}
+{rawnav %>%
+    filter(id == 48942 &
+           (gps_reading_secs_past_midnight >= 26307 |
+             gps_reading_secs_past_midnight < 26365)) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mapview(.,
+          zcol = "heading_deg",
           map.types = c("Esri.WorldImagery","CartoDB.Positron"))}@map %>%
   setView( #zoom on 16th and U
     lng = -77.0363,
