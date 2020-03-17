@@ -17,27 +17,9 @@ Settings, data sources, and parameters are included in a chunk below that is not
 ```{r, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-# Load Packages
-suppressPackageStartupMessages({
-  library(tidyverse) #1.2.1
-  library(sf) #.7-4
-  library(leaflet)
-  library(leafem) #0.0.1
-  library(mapview)
-  library(janitor)
-  library(tidytransit) #need 0.5 or higher i think
-})
-
-#Paths
-if ("WylieTimmerman" %in% Sys.info()){
-  sharepointpath <- "C:/OD/Foursquare ITP/Foursquare ITP SharePoint Site - Shared Documents/WMATA Queue Jump Analysis"
-  datadir <- file.path(sharepointpath,
-                       "Client Shared Folder",
-                       "data",
-                       "00-raw")
-} else {
-  stop('need to set dir where files live')
-}
+#Load libraries, basic params, and other data in separate script
+source("00-master-exploratory.R", local = TRUE)
+source("01-readin-exploratory.R", local = TRUE)
 
 #Read and briefly clean
 rawnav_raw <- 
@@ -66,26 +48,6 @@ rawnav <-
   arrange(gps_reading_secs_past_midnight,.by_group = TRUE) %>% #hope this is reasonable!
   mutate(rowno = row_number()) %>%
   ungroup()
-
-#Grab GTFS data for later
-#NB: Pulled for a few weeks later than I meant to (should have been 
-#May 1, 2019, but I instead grabbed May 19, 2019), shouldn't be too 
-#problematic for this exercise ()
-gtfs_obj <- 
-  tidytransit::read_gtfs(
-    path = file.path(datadir,
-                     "wmata-2019-05-18 dl20200205gtfs.zip")
-    )
-
-
-#Map settings
-mapviewOptions(basemaps = c("CartoDB.Positron", 
-                            "CartoDB.DarkMatter",
-                            "Esri.WorldImagery"))
-# mapviewOptions(viewer.suppress = TRUE) #if needed for full screen
-
-wgs84CRS <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
-DCCRS <- 2893L #using Maryland's
 ```
 
 ### What's in this file?
@@ -180,35 +142,6 @@ We'll compare to an S9 NB trip departing around 7:00pm (ID 48942). Note that the
 #### Bus Stop Locations vs. "In Stop Window"
 Let's plot rawnav points with in_stop_window = 1 against stop locations for S9 NB.
 
-```{r include=FALSE}
-stops <-
-  gtfs_obj$stops %>%
-  st_as_sf(., 
-           coords = c("stop_lon", "stop_lat"),
-           crs = 4326L, #WGS84
-           agr = "constant")
-
-#Note, setting aside any weird calendar business, this is a quickie...
-#could also do for all routes/stops, but want to be a little more conservative
-#on memory in a map-laden notebook. 
-get_route_stops <- function(gtfs_obj,
-                            stops,
-                            rt_shrt_nm){
-  out <- 
-  gtfs_obj$routes %>%
-    filter(route_short_name == rt_shrt_nm) %>%
-    left_join(gtfs_obj$trips, by = "route_id") %>%
-    left_join(gtfs_obj$stop_times, by = "trip_id") %>%
-    group_by(route_short_name,direction_id,trip_headsign,shape_id,stop_id) %>%
-    summarize(trips = length(unique(trip_id)),
-              #not a great assumption, but this is a quickie
-              stop_sequence = max(stop_sequence)) %>%
-    left_join(stops, by = "stop_id") %>%
-    arrange(stop_sequence, .by_group = TRUE) %>%
-    ungroup() %>%
-    st_sf() 
-}
-```
 These are the stops (note that you can page to the right to see more columns)
 ```{r}
 #Picked direction by trial and error! - this is NB
