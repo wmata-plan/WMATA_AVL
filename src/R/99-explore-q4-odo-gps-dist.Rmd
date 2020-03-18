@@ -314,7 +314,7 @@ cases_to_check
 
 The northbound S9 48942 trip shows visual 'gaps' between rawnav points in certain places. Each yellow point is an indication that the GPS reading has shown virtually the same location while the odometer reading has nevertheless increased. The GPS reading may then be catching up when the next reading appears further along the route after a short gap.
 
-However, other gaps between rawnav GPS readings do not necessarily result in differences between GPS and odometer readings (as shown further south near rowno 730). Again, these differences appear more common near stop locations, but not exclusively so. Notably, this trip shown has these differences appear most frequently, so other trips in the current universe of trips have fewer of these cases.
+However, other gaps between rawnav GPS readings do not necessarily result in differences between GPS and odometer readings (found in other trips, not necessarily shown here). 
 
 ```{r message=FALSE, warning=FALSE}
 
@@ -396,7 +396,7 @@ At this time, use of the odometer distance reading for speed and distance calcul
 #### For possible further research
 
 * What are the other sources of variation for differences between odometer and GPS reading distancecs? Door closed/open, at stop or not, etc?
-* Explore other cases where GPS and odometer readings vary: dometer marginal difference much greater than GPS marginal distance, and vice versa
+* Explore other cases where GPS and odometer readings vary: where is odometer marginal difference much greater than GPS marginal distance, and vice versa?
 * Why do differences seem to arise between GPS and odometer readings after vehicles depart bus stops? We don't yet see these differences arise when a bus accelerates from a signal controlled intersection (or midblock locations where traffic delays the vehicle).
 * Which cumulative value best matches GTFS-based travel distances?
 * Consider a ride-a-long observation on selected trips -- could help to validate traffic conditions for a particular vehicle, including whether the vehicle stopped.
