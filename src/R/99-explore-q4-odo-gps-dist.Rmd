@@ -39,33 +39,6 @@ viewersupp <- FALSE
 #Used for replacing geometry
 empty <- st_as_sfc("POINT(EMPTY)")
 
-#Read and briefly clean
-rawnav_raw <- 
-  readxl::read_excel(
-    path = file.path(datadir,
-                     "Rawnav project sample data",
-                     "Rawnav sample data 2019 05 01.xlsx"),
-    sheet = 1
-  ) %>%
-  janitor::clean_names()
-
-rawnav_interim <- 
-  rawnav_raw %>%
-  st_as_sf(., 
-           coords = c("lon_fixed", "lat_fixed"),
-           crs = 4326L, #WGS84
-           agr = "constant",
-           remove = FALSE) %>%
-  #cleaning up a few fields into posixct
-  mutate(run_start_time_pxct = lubridate::mdy_hms(paste0(run_date," ",run_start_time)),
-         gps_reading_time_pxct = lubridate::dmy_hms(gps_reading_time),
-         gps_reading_dtm_pxct = lubridate::dmy_hms(gps_reading_dtm) #what is this field, exactly?
-  ) %>%
-  group_by(id,bus_id) %>%
-  arrange(gps_reading_secs_past_midnight,.by_group = TRUE) %>% #hope this is reasonable!
-  mutate(rowno = row_number()) %>%
-  ungroup()
-
 ```
 
 ### 4. What to use; GPS distance or Odometer Distance?
