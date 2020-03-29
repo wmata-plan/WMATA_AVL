@@ -1,0 +1,1626 @@
+<!DOCTYPE html>
+<head>    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    
+        <script>
+            L_NO_TOUCH = false;
+            L_DISABLE_3D = false;
+        </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.4.0/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.4.0/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css"/>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://rawcdn.githack.com/python-visualization/folium/master/folium/templates/leaflet.awesome.rotate.css"/>
+    <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
+    <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_cfda3b8b5ec7475aaa7d5e2655bbfe65 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+            </style>
+        
+    <script src="https://unpkg.com/leaflet.featuregroup.subgroup@1.0.2/dist/leaflet.featuregroup.subgroup.js"></script>
+</head>
+<body>    
+    
+            <div class="folium-map" id="map_cfda3b8b5ec7475aaa7d5e2655bbfe65" ></div>
+        
+</body>
+<script>    
+    
+            var map_cfda3b8b5ec7475aaa7d5e2655bbfe65 = L.map(
+                "map_cfda3b8b5ec7475aaa7d5e2655bbfe65",
+                {
+                    center: [0, 0],
+                    crs: L.CRS.EPSG3857,
+                    zoom: 1,
+                    zoomControl: true,
+                    preferCanvas: false,
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_264e31412d8e4dfa95c0079a893ce092 = L.tileLayer(
+                "https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg",
+                {"attribution": "Map tiles by \u003ca href=\"http://stamen.com\"\u003eStamen Design\u003c/a\u003e, under \u003ca href=\"http://creativecommons.org/licenses/by/3.0\"\u003eCC BY 3.0\u003c/a\u003e. Data by \u0026copy; \u003ca href=\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e, under \u003ca href=\"http://creativecommons.org/licenses/by-sa/3.0\"\u003eCC BY SA\u003c/a\u003e.", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+            ).addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var tile_layer_f5c471da2ec24679bc6ba42b6e6eeb92 = L.tileLayer(
+                "https://api.tiles.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}.png?access_token=pk.eyJ1IjoiYWJpYmVrYSIsImEiOiJjazZlMjBmdmkxanhkM2ZuM2trMXUyamxzIn0.KPyEwm5pqfc4JQe60Rf3DA",
+                {"attribution": "mapbox.com", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+            ).addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var tile_layer_32c86f85010e41a6b73d762363921a53 = L.tileLayer(
+                "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {"attribution": "Data by \u0026copy; \u003ca href=\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e, under \u003ca href=\"http://www.openstreetmap.org/copyright\"\u003eODbL\u003c/a\u003e.", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+            ).addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var tile_layer_7e0d094613dc4ac5951a1a79a80f9613 = L.tileLayer(
+                "https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
+                {"attribution": "\u0026copy; \u003ca href=\"http://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca href=\"http://cartodb.com/attributions\"\u003eCartoDB\u003c/a\u003e, CartoDB \u003ca href =\"http://cartodb.com/attributions\"\u003eattributions\u003c/a\u003e", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+            ).addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var tile_layer_6af4c4bba1e349d0bbbed09a65ffd1c0 = L.tileLayer(
+                "https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
+                {"attribution": "\u0026copy; \u003ca href=\"http://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca href=\"http://cartodb.com/attributions\"\u003eCartoDB\u003c/a\u003e, CartoDB \u003ca href =\"http://cartodb.com/attributions\"\u003eattributions\u003c/a\u003e", "detectRetina": false, "maxNativeZoom": 18, "maxZoom": 18, "minZoom": 0, "noWrap": false, "opacity": 1, "subdomains": "abc", "tms": false}
+            ).addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var feature_group_42f46034530645579d2fbd87d7507df0 = L.featureGroup(
+                {}
+            ).addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var feature_group_sub_group_1325a74af7b54dceac0b16388054b760 = L.featureGroup.subGroup(
+                feature_group_42f46034530645579d2fbd87d7507df0
+            );
+            feature_group_sub_group_1325a74af7b54dceac0b16388054b760.addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var marker_3f22d1541ea34dddaa7539f45cb40b0b = L.marker(
+                [38.948325, -77.032147],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_197148e9b06642e69e01dc7ff25cfb00 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_3f22d1541ea34dddaa7539f45cb40b0b.setIcon(icon_197148e9b06642e69e01dc7ff25cfb00);
+        
+    
+        var popup_cbde593e85de479e828dc59804ff82c8 = L.popup({"maxWidth": "150"});
+
+        
+            var html_6f2f8aee023e4dd8ad72f1fe16bbca72 = $(`<div id="html_6f2f8aee023e4dd8ad72f1fe16bbca72" style="width: 100.0%; height: 100.0%;">Tag: PO03408<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 07:12:00<br>TripEndTime: 07:27:49<br>TripDurationFromTags: 0 days 00:15:49<br>TripDurationFromRawData: 0 days 00:15:49<br>DistanceMi: 3.72<br>TripSpeed_Tags: 14.13<br>TripSpeed_RawData: 14.13<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.948325<br>StartLong: -77.032147<br>EndLat: 38.994065<br>EndLong: -77.030505</div>`)[0];
+            popup_cbde593e85de479e828dc59804ff82c8.setContent(html_6f2f8aee023e4dd8ad72f1fe16bbca72);
+        
+
+        marker_3f22d1541ea34dddaa7539f45cb40b0b.bindPopup(popup_cbde593e85de479e828dc59804ff82c8)
+        ;
+
+        
+    
+    
+            var marker_7e5adc681cfb43abb0c067c2b4663467 = L.marker(
+                [38.993305, -77.02993199999999],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_055a1b5ad9c14bdf873ea5777f624ca2 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_7e5adc681cfb43abb0c067c2b4663467.setIcon(icon_055a1b5ad9c14bdf873ea5777f624ca2);
+        
+    
+        var popup_d16649e4360448d291d664f4b0298c58 = L.popup({"maxWidth": "150"});
+
+        
+            var html_23b4906df7854614be8de9b67b6552fe = $(`<div id="html_23b4906df7854614be8de9b67b6552fe" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 07:30:00<br>TripEndTime: 08:35:14<br>TripDurationFromTags: 0 days 01:05:14<br>TripDurationFromRawData: 0 days 01:05:14<br>DistanceMi: 7.6<br>TripSpeed_Tags: 6.99<br>TripSpeed_RawData: 6.99<br>SecPastSt: 1.0<br>StartFt: 0.0<br>StartLat: 38.993305<br>StartLong: -77.02993199999999<br>EndLat: 38.892433<br>EndLong: -77.023917</div>`)[0];
+            popup_d16649e4360448d291d664f4b0298c58.setContent(html_23b4906df7854614be8de9b67b6552fe);
+        
+
+        marker_7e5adc681cfb43abb0c067c2b4663467.bindPopup(popup_d16649e4360448d291d664f4b0298c58)
+        ;
+
+        
+    
+    
+            var marker_fa6efb396a64480db1dc6b12f4fac118 = L.marker(
+                [38.892433, -77.023917],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_8e05ef8f2b4444ac91f11d07316a3849 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_fa6efb396a64480db1dc6b12f4fac118.setIcon(icon_8e05ef8f2b4444ac91f11d07316a3849);
+        
+    
+        var popup_83b9b9f1a93f4e7e84b396b6dafe2911 = L.popup({"maxWidth": "150"});
+
+        
+            var html_109cb50d956a4951bc3b4fc14ef0fbf7 = $(`<div id="html_109cb50d956a4951bc3b4fc14ef0fbf7" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 08:35:14<br>TripEndTime: 09:24:51<br>TripDurationFromTags: 0 days 00:49:37<br>TripDurationFromRawData: 0 days 00:49:37<br>DistanceMi: 7.59<br>TripSpeed_Tags: 9.18<br>TripSpeed_RawData: 9.18<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.892433<br>StartLong: -77.023917<br>EndLat: 38.993288<br>EndLong: -77.029917</div>`)[0];
+            popup_83b9b9f1a93f4e7e84b396b6dafe2911.setContent(html_109cb50d956a4951bc3b4fc14ef0fbf7);
+        
+
+        marker_fa6efb396a64480db1dc6b12f4fac118.bindPopup(popup_83b9b9f1a93f4e7e84b396b6dafe2911)
+        ;
+
+        
+    
+    
+            var marker_ae455f28d3de4771bd4ed8b7d4242da3 = L.marker(
+                [38.993288, -77.029917],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_e1642d454d2d4150b6bd4b34579d5311 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_ae455f28d3de4771bd4ed8b7d4242da3.setIcon(icon_e1642d454d2d4150b6bd4b34579d5311);
+        
+    
+        var popup_d20a691728b94823a2221b7eeecc8ef2 = L.popup({"maxWidth": "150"});
+
+        
+            var html_48668bf87d2c4f369c4464ae9366251e = $(`<div id="html_48668bf87d2c4f369c4464ae9366251e" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 09:27:00<br>TripEndTime: 10:21:26<br>TripDurationFromTags: 0 days 00:54:26<br>TripDurationFromRawData: 0 days 00:54:26<br>DistanceMi: 7.61<br>TripSpeed_Tags: 8.39<br>TripSpeed_RawData: 8.39<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993288<br>StartLong: -77.029917<br>EndLat: 38.892677<br>EndLong: -77.023848</div>`)[0];
+            popup_d20a691728b94823a2221b7eeecc8ef2.setContent(html_48668bf87d2c4f369c4464ae9366251e);
+        
+
+        marker_ae455f28d3de4771bd4ed8b7d4242da3.bindPopup(popup_d20a691728b94823a2221b7eeecc8ef2)
+        ;
+
+        
+    
+    
+            var marker_30ada45b2362467b8a0469d09bfe7ec5 = L.marker(
+                [38.892677, -77.023848],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_f38dde2768ee46ffaf1eb9d3f695d330 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_30ada45b2362467b8a0469d09bfe7ec5.setIcon(icon_f38dde2768ee46ffaf1eb9d3f695d330);
+        
+    
+        var popup_1dd61fe6081247beaf00887b551152ea = L.popup({"maxWidth": "150"});
+
+        
+            var html_49e585cab11d47819ca739943dfcd48c = $(`<div id="html_49e585cab11d47819ca739943dfcd48c" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 10:27:00<br>TripEndTime: 11:18:50<br>TripDurationFromTags: 0 days 00:51:50<br>TripDurationFromRawData: 0 days 00:51:50<br>DistanceMi: 7.58<br>TripSpeed_Tags: 8.77<br>TripSpeed_RawData: 8.77<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.892677<br>StartLong: -77.023848<br>EndLat: 38.993218<br>EndLong: -77.02999200000001</div>`)[0];
+            popup_1dd61fe6081247beaf00887b551152ea.setContent(html_49e585cab11d47819ca739943dfcd48c);
+        
+
+        marker_30ada45b2362467b8a0469d09bfe7ec5.bindPopup(popup_1dd61fe6081247beaf00887b551152ea)
+        ;
+
+        
+    
+    
+            var marker_d4dda08a318a40dfba0822a5deab14f1 = L.marker(
+                [38.993218, -77.02999200000001],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_829cfdf81f8b4373bbe93220a0702ea9 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_d4dda08a318a40dfba0822a5deab14f1.setIcon(icon_829cfdf81f8b4373bbe93220a0702ea9);
+        
+    
+        var popup_608b25f5bd35478bb172ceb13324fa69 = L.popup({"maxWidth": "150"});
+
+        
+            var html_61d8dbf9bddf416386e06c0e87ded12d = $(`<div id="html_61d8dbf9bddf416386e06c0e87ded12d" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 11:27:00<br>TripEndTime: 12:23:31<br>TripDurationFromTags: 0 days 00:56:31<br>TripDurationFromRawData: 0 days 00:56:31<br>DistanceMi: 7.61<br>TripSpeed_Tags: 8.08<br>TripSpeed_RawData: 8.08<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993218<br>StartLong: -77.02999200000001<br>EndLat: 38.892752<br>EndLong: -77.023877</div>`)[0];
+            popup_608b25f5bd35478bb172ceb13324fa69.setContent(html_61d8dbf9bddf416386e06c0e87ded12d);
+        
+
+        marker_d4dda08a318a40dfba0822a5deab14f1.bindPopup(popup_608b25f5bd35478bb172ceb13324fa69)
+        ;
+
+        
+    
+    
+            var marker_5e14dbf94e31433ab71721db84788c89 = L.marker(
+                [38.892752, -77.023877],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_bd5b92fa29da497e845b84bc0be01502 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_5e14dbf94e31433ab71721db84788c89.setIcon(icon_bd5b92fa29da497e845b84bc0be01502);
+        
+    
+        var popup_72216bb79830436b9b0ac893e53344a6 = L.popup({"maxWidth": "150"});
+
+        
+            var html_3fa3da53f8c548778274846cc8f1e5c2 = $(`<div id="html_3fa3da53f8c548778274846cc8f1e5c2" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 12:27:00<br>TripEndTime: 13:18:34<br>TripDurationFromTags: 0 days 00:51:34<br>TripDurationFromRawData: 0 days 00:51:34<br>DistanceMi: 7.58<br>TripSpeed_Tags: 8.82<br>TripSpeed_RawData: 8.82<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.892752<br>StartLong: -77.023877<br>EndLat: 38.99327<br>EndLong: -77.029575</div>`)[0];
+            popup_72216bb79830436b9b0ac893e53344a6.setContent(html_3fa3da53f8c548778274846cc8f1e5c2);
+        
+
+        marker_5e14dbf94e31433ab71721db84788c89.bindPopup(popup_72216bb79830436b9b0ac893e53344a6)
+        ;
+
+        
+    
+    
+            var marker_1875966cc29641e19d2b2eee5e413300 = L.marker(
+                [38.99328, -77.029907],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_833c20a1c0d948d1bce95d161a77d8fd = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_1875966cc29641e19d2b2eee5e413300.setIcon(icon_833c20a1c0d948d1bce95d161a77d8fd);
+        
+    
+        var popup_1a499d5047c94bc1a0e1ec64a32162ae = L.popup({"maxWidth": "150"});
+
+        
+            var html_566c687d3f944e19a52804767cc15e30 = $(`<div id="html_566c687d3f944e19a52804767cc15e30" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 13:27:00<br>TripEndTime: 14:30:53<br>TripDurationFromTags: 0 days 01:03:53<br>TripDurationFromRawData: 0 days 01:03:53<br>DistanceMi: 7.63<br>TripSpeed_Tags: 7.16<br>TripSpeed_RawData: 7.16<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.99328<br>StartLong: -77.029907<br>EndLat: 38.89291<br>EndLong: -77.02385799999999</div>`)[0];
+            popup_1a499d5047c94bc1a0e1ec64a32162ae.setContent(html_566c687d3f944e19a52804767cc15e30);
+        
+
+        marker_1875966cc29641e19d2b2eee5e413300.bindPopup(popup_1a499d5047c94bc1a0e1ec64a32162ae)
+        ;
+
+        
+    
+    
+            var marker_a9f984d2a1a54b67bcb1f163ac6bf967 = L.marker(
+                [38.89291, -77.02385799999999],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_1c6d855be3124db0b65018b4e37cef67 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_a9f984d2a1a54b67bcb1f163ac6bf967.setIcon(icon_1c6d855be3124db0b65018b4e37cef67);
+        
+    
+        var popup_13df4693bfab47f09b34dc23086c7843 = L.popup({"maxWidth": "150"});
+
+        
+            var html_8220ec205d334ea582f19be250f197bb = $(`<div id="html_8220ec205d334ea582f19be250f197bb" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 14:30:54<br>TripEndTime: 15:17:36<br>TripDurationFromTags: 0 days 00:46:42<br>TripDurationFromRawData: 0 days 00:46:42<br>DistanceMi: 7.57<br>TripSpeed_Tags: 9.72<br>TripSpeed_RawData: 9.72<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.89291<br>StartLong: -77.02385799999999<br>EndLat: 38.993225<br>EndLong: -77.029587</div>`)[0];
+            popup_13df4693bfab47f09b34dc23086c7843.setContent(html_8220ec205d334ea582f19be250f197bb);
+        
+
+        marker_a9f984d2a1a54b67bcb1f163ac6bf967.bindPopup(popup_13df4693bfab47f09b34dc23086c7843)
+        ;
+
+        
+    
+    
+            var marker_eb9ce7b6f4724c93999f5b36b04a548e = L.marker(
+                [38.993932, -77.03057700000001],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_152fe31a34ed47b0ba00791155442df4 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_eb9ce7b6f4724c93999f5b36b04a548e.setIcon(icon_152fe31a34ed47b0ba00791155442df4);
+        
+    
+        var popup_28595dbf69cf4718b3beae368a5d0b8b = L.popup({"maxWidth": "150"});
+
+        
+            var html_298045727d774ebc888069a5f082d1be = $(`<div id="html_298045727d774ebc888069a5f082d1be" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 15:27:00<br>TripEndTime: 16:36:07<br>TripDurationFromTags: 0 days 01:09:07<br>TripDurationFromRawData: 0 days 01:09:07<br>DistanceMi: 7.69<br>TripSpeed_Tags: 6.67<br>TripSpeed_RawData: 6.67<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993932<br>StartLong: -77.03057700000001<br>EndLat: 38.893138<br>EndLong: -77.023877</div>`)[0];
+            popup_28595dbf69cf4718b3beae368a5d0b8b.setContent(html_298045727d774ebc888069a5f082d1be);
+        
+
+        marker_eb9ce7b6f4724c93999f5b36b04a548e.bindPopup(popup_28595dbf69cf4718b3beae368a5d0b8b)
+        ;
+
+        
+    
+    
+            var marker_0c1b95457cbb459a971d42714392ba6d = L.marker(
+                [38.893138, -77.023877],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_04819b96471b4be3a86f81cb57e16b17 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_0c1b95457cbb459a971d42714392ba6d.setIcon(icon_04819b96471b4be3a86f81cb57e16b17);
+        
+    
+        var popup_7c5e1a519446444eb7d420555a93c6c1 = L.popup({"maxWidth": "150"});
+
+        
+            var html_722b677abd0643df9d8db8aafe5fd61e = $(`<div id="html_722b677abd0643df9d8db8aafe5fd61e" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 16:36:08<br>TripEndTime: 17:32:33<br>TripDurationFromTags: 0 days 00:56:25<br>TripDurationFromRawData: 0 days 00:56:25<br>DistanceMi: 7.55<br>TripSpeed_Tags: 8.03<br>TripSpeed_RawData: 8.03<br>SecPastSt: 1.0<br>StartFt: 0.0<br>StartLat: 38.893138<br>StartLong: -77.023877<br>EndLat: 38.993237<br>EndLong: -77.02959</div>`)[0];
+            popup_7c5e1a519446444eb7d420555a93c6c1.setContent(html_722b677abd0643df9d8db8aafe5fd61e);
+        
+
+        marker_0c1b95457cbb459a971d42714392ba6d.bindPopup(popup_7c5e1a519446444eb7d420555a93c6c1)
+        ;
+
+        
+    
+    
+            var marker_4df7f8cadbce4b0ca9c5ac92e7fec31f = L.marker(
+                [38.993237, -77.02959],
+                {}
+            ).addTo(feature_group_sub_group_1325a74af7b54dceac0b16388054b760);
+        
+    
+            var icon_142f5542d08b45a4bb71a5fcd60c73f8 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_4df7f8cadbce4b0ca9c5ac92e7fec31f.setIcon(icon_142f5542d08b45a4bb71a5fcd60c73f8);
+        
+    
+        var popup_f4fef43d12154b1b921af4d3c5405c9e = L.popup({"maxWidth": "150"});
+
+        
+            var html_26ec5fc6613c4b92bb8c796514189492 = $(`<div id="html_26ec5fc6613c4b92bb8c796514189492" style="width: 100.0%; height: 100.0%;">Tag: PI03114<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 17:32:33<br>TripEndTime: 18:03:02<br>TripDurationFromTags: 0 days 00:30:29<br>TripDurationFromRawData: 0 days 00:28:15<br>DistanceMi: 3.87<br>TripSpeed_Tags: 7.61<br>TripSpeed_RawData: 8.21<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993237<br>StartLong: -77.02959<br>EndLat: 38.947345<br>EndLong: -77.031137</div>`)[0];
+            popup_f4fef43d12154b1b921af4d3c5405c9e.setContent(html_26ec5fc6613c4b92bb8c796514189492);
+        
+
+        marker_4df7f8cadbce4b0ca9c5ac92e7fec31f.bindPopup(popup_f4fef43d12154b1b921af4d3c5405c9e)
+        ;
+
+        
+    
+    
+            var feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d = L.featureGroup.subGroup(
+                feature_group_42f46034530645579d2fbd87d7507df0
+            );
+            feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d.addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var marker_96ae38d3ba9e4be48838236045b819de = L.marker(
+                [38.994065, -77.030505],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_4c1853ff0bb34a3b8fe4c56b79ed89b1 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_96ae38d3ba9e4be48838236045b819de.setIcon(icon_4c1853ff0bb34a3b8fe4c56b79ed89b1);
+        
+    
+        var popup_10c208b8ead64fcebdfd50e22080e4b4 = L.popup({"maxWidth": "150"});
+
+        
+            var html_49b1d3fd178f46639febfcc479b9e986 = $(`<div id="html_49b1d3fd178f46639febfcc479b9e986" style="width: 100.0%; height: 100.0%;">Tag: PO03408<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 07:12:00<br>TripEndTime: 07:27:49<br>TripDurationFromTags: 0 days 00:15:49<br>TripDurationFromRawData: 0 days 00:15:49<br>DistanceMi: 3.72<br>TripSpeed_Tags: 14.13<br>TripSpeed_RawData: 14.13<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.948325<br>StartLong: -77.032147<br>EndLat: 38.994065<br>EndLong: -77.030505</div>`)[0];
+            popup_10c208b8ead64fcebdfd50e22080e4b4.setContent(html_49b1d3fd178f46639febfcc479b9e986);
+        
+
+        marker_96ae38d3ba9e4be48838236045b819de.bindPopup(popup_10c208b8ead64fcebdfd50e22080e4b4)
+        ;
+
+        
+    
+    
+            var marker_d428049da94b4ccea5a77273b1476ee1 = L.marker(
+                [38.892433, -77.023917],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_e9c34aa8ec864672a0cec497e9f07e60 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_d428049da94b4ccea5a77273b1476ee1.setIcon(icon_e9c34aa8ec864672a0cec497e9f07e60);
+        
+    
+        var popup_a359494fc43e4a8f9cbbb240d1d38ec2 = L.popup({"maxWidth": "150"});
+
+        
+            var html_0de9a21bcf634241b177087aedb6e8ad = $(`<div id="html_0de9a21bcf634241b177087aedb6e8ad" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 07:30:00<br>TripEndTime: 08:35:14<br>TripDurationFromTags: 0 days 01:05:14<br>TripDurationFromRawData: 0 days 01:05:14<br>DistanceMi: 7.6<br>TripSpeed_Tags: 6.99<br>TripSpeed_RawData: 6.99<br>SecPastSt: 1.0<br>StartFt: 0.0<br>StartLat: 38.993305<br>StartLong: -77.02993199999999<br>EndLat: 38.892433<br>EndLong: -77.023917</div>`)[0];
+            popup_a359494fc43e4a8f9cbbb240d1d38ec2.setContent(html_0de9a21bcf634241b177087aedb6e8ad);
+        
+
+        marker_d428049da94b4ccea5a77273b1476ee1.bindPopup(popup_a359494fc43e4a8f9cbbb240d1d38ec2)
+        ;
+
+        
+    
+    
+            var marker_6e04c5f33a8e4039939df8f2a3011622 = L.marker(
+                [38.993288, -77.029917],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_4bcb3f9b184149a5b75feaa44d81babe = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_6e04c5f33a8e4039939df8f2a3011622.setIcon(icon_4bcb3f9b184149a5b75feaa44d81babe);
+        
+    
+        var popup_78b077ccce9f468ab4c1b05d7b701335 = L.popup({"maxWidth": "150"});
+
+        
+            var html_183009ffe47c49218c2d88490dcd8c07 = $(`<div id="html_183009ffe47c49218c2d88490dcd8c07" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 08:35:14<br>TripEndTime: 09:24:51<br>TripDurationFromTags: 0 days 00:49:37<br>TripDurationFromRawData: 0 days 00:49:37<br>DistanceMi: 7.59<br>TripSpeed_Tags: 9.18<br>TripSpeed_RawData: 9.18<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.892433<br>StartLong: -77.023917<br>EndLat: 38.993288<br>EndLong: -77.029917</div>`)[0];
+            popup_78b077ccce9f468ab4c1b05d7b701335.setContent(html_183009ffe47c49218c2d88490dcd8c07);
+        
+
+        marker_6e04c5f33a8e4039939df8f2a3011622.bindPopup(popup_78b077ccce9f468ab4c1b05d7b701335)
+        ;
+
+        
+    
+    
+            var marker_61b3f2525f144b81954a4c7aeb2ac64d = L.marker(
+                [38.892677, -77.023848],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_93afad2fb05947b0a96832127f81c6da = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_61b3f2525f144b81954a4c7aeb2ac64d.setIcon(icon_93afad2fb05947b0a96832127f81c6da);
+        
+    
+        var popup_fcc1251d2dc64f359782eb4c4197f5ca = L.popup({"maxWidth": "150"});
+
+        
+            var html_a2f027f337b143ac81548e00c8745a4d = $(`<div id="html_a2f027f337b143ac81548e00c8745a4d" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 09:27:00<br>TripEndTime: 10:21:26<br>TripDurationFromTags: 0 days 00:54:26<br>TripDurationFromRawData: 0 days 00:54:26<br>DistanceMi: 7.61<br>TripSpeed_Tags: 8.39<br>TripSpeed_RawData: 8.39<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993288<br>StartLong: -77.029917<br>EndLat: 38.892677<br>EndLong: -77.023848</div>`)[0];
+            popup_fcc1251d2dc64f359782eb4c4197f5ca.setContent(html_a2f027f337b143ac81548e00c8745a4d);
+        
+
+        marker_61b3f2525f144b81954a4c7aeb2ac64d.bindPopup(popup_fcc1251d2dc64f359782eb4c4197f5ca)
+        ;
+
+        
+    
+    
+            var marker_6e3b960d0e5641818c82045e3f14b791 = L.marker(
+                [38.993218, -77.02999200000001],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_1192f69243724fefbe7f50dcbd385589 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_6e3b960d0e5641818c82045e3f14b791.setIcon(icon_1192f69243724fefbe7f50dcbd385589);
+        
+    
+        var popup_db42136d073343e88650ba1b0c61ac4c = L.popup({"maxWidth": "150"});
+
+        
+            var html_3bd74191f6fa4bacbff8d11c018a5272 = $(`<div id="html_3bd74191f6fa4bacbff8d11c018a5272" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 10:27:00<br>TripEndTime: 11:18:50<br>TripDurationFromTags: 0 days 00:51:50<br>TripDurationFromRawData: 0 days 00:51:50<br>DistanceMi: 7.58<br>TripSpeed_Tags: 8.77<br>TripSpeed_RawData: 8.77<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.892677<br>StartLong: -77.023848<br>EndLat: 38.993218<br>EndLong: -77.02999200000001</div>`)[0];
+            popup_db42136d073343e88650ba1b0c61ac4c.setContent(html_3bd74191f6fa4bacbff8d11c018a5272);
+        
+
+        marker_6e3b960d0e5641818c82045e3f14b791.bindPopup(popup_db42136d073343e88650ba1b0c61ac4c)
+        ;
+
+        
+    
+    
+            var marker_6da70535476a4fc89a5cab37ac90a5e9 = L.marker(
+                [38.892752, -77.023877],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_621a90db51e24896a5e13d84200718c8 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_6da70535476a4fc89a5cab37ac90a5e9.setIcon(icon_621a90db51e24896a5e13d84200718c8);
+        
+    
+        var popup_b58a6a0753ee40d4ba114ed9d3d3ca51 = L.popup({"maxWidth": "150"});
+
+        
+            var html_5ecbbcf081fc424f8548dfc0300be7fc = $(`<div id="html_5ecbbcf081fc424f8548dfc0300be7fc" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 11:27:00<br>TripEndTime: 12:23:31<br>TripDurationFromTags: 0 days 00:56:31<br>TripDurationFromRawData: 0 days 00:56:31<br>DistanceMi: 7.61<br>TripSpeed_Tags: 8.08<br>TripSpeed_RawData: 8.08<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993218<br>StartLong: -77.02999200000001<br>EndLat: 38.892752<br>EndLong: -77.023877</div>`)[0];
+            popup_b58a6a0753ee40d4ba114ed9d3d3ca51.setContent(html_5ecbbcf081fc424f8548dfc0300be7fc);
+        
+
+        marker_6da70535476a4fc89a5cab37ac90a5e9.bindPopup(popup_b58a6a0753ee40d4ba114ed9d3d3ca51)
+        ;
+
+        
+    
+    
+            var marker_ac14eea1ad8c4808a89f2e5b6bb28b01 = L.marker(
+                [38.99327, -77.029575],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_92348fde06f547cf8654a43c4ac180af = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_ac14eea1ad8c4808a89f2e5b6bb28b01.setIcon(icon_92348fde06f547cf8654a43c4ac180af);
+        
+    
+        var popup_76873ed78a7d4ae8b8bf0d956e818cec = L.popup({"maxWidth": "150"});
+
+        
+            var html_c696946b92d44793ad83ea3d0ee8cd24 = $(`<div id="html_c696946b92d44793ad83ea3d0ee8cd24" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 12:27:00<br>TripEndTime: 13:18:34<br>TripDurationFromTags: 0 days 00:51:34<br>TripDurationFromRawData: 0 days 00:51:34<br>DistanceMi: 7.58<br>TripSpeed_Tags: 8.82<br>TripSpeed_RawData: 8.82<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.892752<br>StartLong: -77.023877<br>EndLat: 38.99327<br>EndLong: -77.029575</div>`)[0];
+            popup_76873ed78a7d4ae8b8bf0d956e818cec.setContent(html_c696946b92d44793ad83ea3d0ee8cd24);
+        
+
+        marker_ac14eea1ad8c4808a89f2e5b6bb28b01.bindPopup(popup_76873ed78a7d4ae8b8bf0d956e818cec)
+        ;
+
+        
+    
+    
+            var marker_287314b1f31b4e59a8f514e58857d0e3 = L.marker(
+                [38.89291, -77.02385799999999],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_b077c083e9b5400ba9b62ca438ef6a8d = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_287314b1f31b4e59a8f514e58857d0e3.setIcon(icon_b077c083e9b5400ba9b62ca438ef6a8d);
+        
+    
+        var popup_e760b4eaafc7471d95d9138b05316adb = L.popup({"maxWidth": "150"});
+
+        
+            var html_5692ed1e82ec40929bc32e59ec369588 = $(`<div id="html_5692ed1e82ec40929bc32e59ec369588" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 13:27:00<br>TripEndTime: 14:30:53<br>TripDurationFromTags: 0 days 01:03:53<br>TripDurationFromRawData: 0 days 01:03:53<br>DistanceMi: 7.63<br>TripSpeed_Tags: 7.16<br>TripSpeed_RawData: 7.16<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.99328<br>StartLong: -77.029907<br>EndLat: 38.89291<br>EndLong: -77.02385799999999</div>`)[0];
+            popup_e760b4eaafc7471d95d9138b05316adb.setContent(html_5692ed1e82ec40929bc32e59ec369588);
+        
+
+        marker_287314b1f31b4e59a8f514e58857d0e3.bindPopup(popup_e760b4eaafc7471d95d9138b05316adb)
+        ;
+
+        
+    
+    
+            var marker_bdbad2ca5fef4018bdbbe708d9a9087c = L.marker(
+                [38.993225, -77.029587],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_a267c94799884fe2871ec03f4fe32d3b = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_bdbad2ca5fef4018bdbbe708d9a9087c.setIcon(icon_a267c94799884fe2871ec03f4fe32d3b);
+        
+    
+        var popup_1e5c8d947a9e40099d3f8e929b9a5d1d = L.popup({"maxWidth": "150"});
+
+        
+            var html_1e94675cd7314ca7bf0a418439f9acba = $(`<div id="html_1e94675cd7314ca7bf0a418439f9acba" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 14:30:54<br>TripEndTime: 15:17:36<br>TripDurationFromTags: 0 days 00:46:42<br>TripDurationFromRawData: 0 days 00:46:42<br>DistanceMi: 7.57<br>TripSpeed_Tags: 9.72<br>TripSpeed_RawData: 9.72<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.89291<br>StartLong: -77.02385799999999<br>EndLat: 38.993225<br>EndLong: -77.029587</div>`)[0];
+            popup_1e5c8d947a9e40099d3f8e929b9a5d1d.setContent(html_1e94675cd7314ca7bf0a418439f9acba);
+        
+
+        marker_bdbad2ca5fef4018bdbbe708d9a9087c.bindPopup(popup_1e5c8d947a9e40099d3f8e929b9a5d1d)
+        ;
+
+        
+    
+    
+            var marker_44934cbe399d491f9646ef36fd834f3d = L.marker(
+                [38.893138, -77.023877],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_3f08f27adb604e9e8ba9dffa6da0d0b5 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_44934cbe399d491f9646ef36fd834f3d.setIcon(icon_3f08f27adb604e9e8ba9dffa6da0d0b5);
+        
+    
+        var popup_2e055609d5364ce3be79a9b0d1bfe5e8 = L.popup({"maxWidth": "150"});
+
+        
+            var html_dfeab96299f34ee2b7621c121240b2b4 = $(`<div id="html_dfeab96299f34ee2b7621c121240b2b4" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 15:27:00<br>TripEndTime: 16:36:07<br>TripDurationFromTags: 0 days 01:09:07<br>TripDurationFromRawData: 0 days 01:09:07<br>DistanceMi: 7.69<br>TripSpeed_Tags: 6.67<br>TripSpeed_RawData: 6.67<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993932<br>StartLong: -77.03057700000001<br>EndLat: 38.893138<br>EndLong: -77.023877</div>`)[0];
+            popup_2e055609d5364ce3be79a9b0d1bfe5e8.setContent(html_dfeab96299f34ee2b7621c121240b2b4);
+        
+
+        marker_44934cbe399d491f9646ef36fd834f3d.bindPopup(popup_2e055609d5364ce3be79a9b0d1bfe5e8)
+        ;
+
+        
+    
+    
+            var marker_c87ff8e78101492884ecc2e7c12792ac = L.marker(
+                [38.993237, -77.02959],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_2f1c8730254d49419259be56d2adfda1 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_c87ff8e78101492884ecc2e7c12792ac.setIcon(icon_2f1c8730254d49419259be56d2adfda1);
+        
+    
+        var popup_d801fbadef4c4612ad8e83ea790a6ff7 = L.popup({"maxWidth": "150"});
+
+        
+            var html_4fc8c0250778416888c70bef6f4c2910 = $(`<div id="html_4fc8c0250778416888c70bef6f4c2910" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 16:36:08<br>TripEndTime: 17:32:33<br>TripDurationFromTags: 0 days 00:56:25<br>TripDurationFromRawData: 0 days 00:56:25<br>DistanceMi: 7.55<br>TripSpeed_Tags: 8.03<br>TripSpeed_RawData: 8.03<br>SecPastSt: 1.0<br>StartFt: 0.0<br>StartLat: 38.893138<br>StartLong: -77.023877<br>EndLat: 38.993237<br>EndLong: -77.02959</div>`)[0];
+            popup_d801fbadef4c4612ad8e83ea790a6ff7.setContent(html_4fc8c0250778416888c70bef6f4c2910);
+        
+
+        marker_c87ff8e78101492884ecc2e7c12792ac.bindPopup(popup_d801fbadef4c4612ad8e83ea790a6ff7)
+        ;
+
+        
+    
+    
+            var marker_77a2e2f9c7b0413cb1969ca3f0b8a79d = L.marker(
+                [38.947345, -77.031137],
+                {}
+            ).addTo(feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d);
+        
+    
+            var icon_bd6f069f47b94713a536add8938fa39c = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_77a2e2f9c7b0413cb1969ca3f0b8a79d.setIcon(icon_bd6f069f47b94713a536add8938fa39c);
+        
+    
+        var popup_a8c1b5dd9e6c462a9b8c8e7a98944ad9 = L.popup({"maxWidth": "150"});
+
+        
+            var html_13453532fdaa48279c6e126e00258536 = $(`<div id="html_13453532fdaa48279c6e126e00258536" style="width: 100.0%; height: 100.0%;">Tag: PI03114<br>BusID: 6431<br>Date: 04/30/19<br>TripStartTime: 17:32:33<br>TripEndTime: 18:03:02<br>TripDurationFromTags: 0 days 00:30:29<br>TripDurationFromRawData: 0 days 00:28:15<br>DistanceMi: 3.87<br>TripSpeed_Tags: 7.61<br>TripSpeed_RawData: 8.21<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993237<br>StartLong: -77.02959<br>EndLat: 38.947345<br>EndLong: -77.031137</div>`)[0];
+            popup_a8c1b5dd9e6c462a9b8c8e7a98944ad9.setContent(html_13453532fdaa48279c6e126e00258536);
+        
+
+        marker_77a2e2f9c7b0413cb1969ca3f0b8a79d.bindPopup(popup_a8c1b5dd9e6c462a9b8c8e7a98944ad9)
+        ;
+
+        
+    
+    
+            var feature_group_9ca5bbfb4e194630b8f4fcf00521f563 = L.featureGroup(
+                {}
+            ).addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb = L.featureGroup.subGroup(
+                feature_group_9ca5bbfb4e194630b8f4fcf00521f563
+            );
+            feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb.addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var marker_09cfebb4956548189a4de52e34912435 = L.marker(
+                [38.955218, -77.03341],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_54cd79609155462eaa306127eb3a6ad0 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_09cfebb4956548189a4de52e34912435.setIcon(icon_54cd79609155462eaa306127eb3a6ad0);
+        
+    
+        var popup_f0c6cf7f7024458cbdb48d12dcced1cd = L.popup({"maxWidth": "150"});
+
+        
+            var html_fbf3ac6f58c149c1bd8e34ec325e1adb = $(`<div id="html_fbf3ac6f58c149c1bd8e34ec325e1adb" style="width: 100.0%; height: 100.0%;">Tag:    S904<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 07:25:34<br>TripEndTime: 07:55:32<br>TripDurationFromTags: 0 days 00:29:58<br>TripDurationFromRawData: 0 days 00:29:58<br>DistanceMi: 5.4<br>TripSpeed_Tags: 10.82<br>TripSpeed_RawData: 10.82<br>SecPastSt: 1.0<br>StartFt: 0.0<br>StartLat: 38.955218<br>StartLong: -77.03341<br>EndLat: 38.901408<br>EndLong: -77.03104499999999</div>`)[0];
+            popup_f0c6cf7f7024458cbdb48d12dcced1cd.setContent(html_fbf3ac6f58c149c1bd8e34ec325e1adb);
+        
+
+        marker_09cfebb4956548189a4de52e34912435.bindPopup(popup_f0c6cf7f7024458cbdb48d12dcced1cd)
+        ;
+
+        
+    
+    
+            var marker_8a4574043f4341599eb794bf902d5491 = L.marker(
+                [38.901982, -77.03653800000001],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_5f580801b5934295a47d601075a3f063 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_8a4574043f4341599eb794bf902d5491.setIcon(icon_5f580801b5934295a47d601075a3f063);
+        
+    
+        var popup_e8e0a26399c249d19b3485acce0a7b14 = L.popup({"maxWidth": "150"});
+
+        
+            var html_6a35c857fd11415fba2c7d7e3d30e42c = $(`<div id="html_6a35c857fd11415fba2c7d7e3d30e42c" style="width: 100.0%; height: 100.0%;">Tag: DH27005<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 07:58:00<br>TripEndTime: 08:27:47<br>TripDurationFromTags: 0 days 00:29:47<br>TripDurationFromRawData: 0 days 00:29:47<br>DistanceMi: 4.44<br>TripSpeed_Tags: 8.94<br>TripSpeed_RawData: 8.94<br>SecPastSt: 2.0<br>StartFt: 0.0<br>StartLat: 38.901982<br>StartLong: -77.03653800000001<br>EndLat: 38.96288<br>EndLong: -77.03649200000001</div>`)[0];
+            popup_e8e0a26399c249d19b3485acce0a7b14.setContent(html_6a35c857fd11415fba2c7d7e3d30e42c);
+        
+
+        marker_8a4574043f4341599eb794bf902d5491.bindPopup(popup_e8e0a26399c249d19b3485acce0a7b14)
+        ;
+
+        
+    
+    
+            var marker_395d6919b34e40d995db7121302316e9 = L.marker(
+                [38.96288, -77.03649200000001],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_f37b23443f214c2e8d2759618d571a1e = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_395d6919b34e40d995db7121302316e9.setIcon(icon_f37b23443f214c2e8d2759618d571a1e);
+        
+    
+        var popup_686af9f4f34a47cbb8fa11420f040e8a = L.popup({"maxWidth": "150"});
+
+        
+            var html_c52621683c5d43588be4db57bff981df = $(`<div id="html_c52621683c5d43588be4db57bff981df" style="width: 100.0%; height: 100.0%;">Tag: S904<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 08:27:47<br>TripEndTime: 09:17:01<br>TripDurationFromTags: 0 days 00:49:14<br>TripDurationFromRawData: 0 days 00:47:54<br>DistanceMi: 6.88<br>TripSpeed_Tags: 8.38<br>TripSpeed_RawData: 8.61<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.96288<br>StartLong: -77.03649200000001<br>EndLat: 38.930027<br>EndLong: -77.032432</div>`)[0];
+            popup_686af9f4f34a47cbb8fa11420f040e8a.setContent(html_c52621683c5d43588be4db57bff981df);
+        
+
+        marker_395d6919b34e40d995db7121302316e9.bindPopup(popup_686af9f4f34a47cbb8fa11420f040e8a)
+        ;
+
+        
+    
+    
+            var marker_b4e8424450de42379f215f7b9960fdcc = L.marker(
+                [38.930037, -77.03244699999999],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_6c92d2361e6a49cc86ca53ed9eaf9543 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_b4e8424450de42379f215f7b9960fdcc.setIcon(icon_6c92d2361e6a49cc86ca53ed9eaf9543);
+        
+    
+        var popup_d56cb0bb193f419fb19e1d8a825dcaba = L.popup({"maxWidth": "150"});
+
+        
+            var html_2b77cd20e38241cda55efc3ce203f406 = $(`<div id="html_2b77cd20e38241cda55efc3ce203f406" style="width: 100.0%; height: 100.0%;">Tag: PI03117<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 09:17:01<br>TripEndTime: 09:21:41<br>TripDurationFromTags: 0 days 00:04:40<br>TripDurationFromRawData: 0 days 00:04:40<br>DistanceMi: 1.14<br>TripSpeed_Tags: 14.65<br>TripSpeed_RawData: 14.65<br>SecPastSt: 2.0<br>StartFt: 0.0<br>StartLat: 38.930037<br>StartLong: -77.03244699999999<br>EndLat: 38.94615<br>EndLong: -77.032557</div>`)[0];
+            popup_d56cb0bb193f419fb19e1d8a825dcaba.setContent(html_2b77cd20e38241cda55efc3ce203f406);
+        
+
+        marker_b4e8424450de42379f215f7b9960fdcc.bindPopup(popup_d56cb0bb193f419fb19e1d8a825dcaba)
+        ;
+
+        
+    
+    
+            var marker_5d162300d9bd4bcbb55ce5353a25ae77 = L.marker(
+                [38.993222, -77.02994],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_e57632779d694bf582b8e2178810fb65 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_5d162300d9bd4bcbb55ce5353a25ae77.setIcon(icon_e57632779d694bf582b8e2178810fb65);
+        
+    
+        var popup_a587830ce1804a2996b1957a97c2e5c3 = L.popup({"maxWidth": "150"});
+
+        
+            var html_4a96ce7a44ca47b194d271cacb874291 = $(`<div id="html_4a96ce7a44ca47b194d271cacb874291" style="width: 100.0%; height: 100.0%;">Tag: PO03408<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 14:54:34<br>TripEndTime: 14:57:01<br>TripDurationFromTags: 0 days 00:02:27<br>TripDurationFromRawData: 0 days 00:00:33<br>DistanceMi: 0.0<br>TripSpeed_Tags: 0.0<br>TripSpeed_RawData: 0.0<br>SecPastSt: 2.0<br>StartFt: 0.0<br>StartLat: 38.993222<br>StartLong: -77.02994<br>EndLat: 38.993222<br>EndLong: -77.02994</div>`)[0];
+            popup_a587830ce1804a2996b1957a97c2e5c3.setContent(html_4a96ce7a44ca47b194d271cacb874291);
+        
+
+        marker_5d162300d9bd4bcbb55ce5353a25ae77.bindPopup(popup_a587830ce1804a2996b1957a97c2e5c3)
+        ;
+
+        
+    
+    
+            var marker_fff1d7b7797d40249a938d8fd6e7609c = L.marker(
+                [38.993222, -77.02994],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_cdc6cfb53dfe4894a9f533e607b17f82 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_fff1d7b7797d40249a938d8fd6e7609c.setIcon(icon_cdc6cfb53dfe4894a9f533e607b17f82);
+        
+    
+        var popup_b2e3b61a1f2c485086c28e60302153b0 = L.popup({"maxWidth": "150"});
+
+        
+            var html_4209db7cc2d3488dbcd9c50c2fc580a1 = $(`<div id="html_4209db7cc2d3488dbcd9c50c2fc580a1" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 14:57:01<br>TripEndTime: 15:49:19<br>TripDurationFromTags: 0 days 00:52:18<br>TripDurationFromRawData: 0 days 00:52:18<br>DistanceMi: 7.65<br>TripSpeed_Tags: 8.77<br>TripSpeed_RawData: 8.77<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.993222<br>StartLong: -77.02994<br>EndLat: 38.893193<br>EndLong: -77.023905</div>`)[0];
+            popup_b2e3b61a1f2c485086c28e60302153b0.setContent(html_4209db7cc2d3488dbcd9c50c2fc580a1);
+        
+
+        marker_fff1d7b7797d40249a938d8fd6e7609c.bindPopup(popup_b2e3b61a1f2c485086c28e60302153b0)
+        ;
+
+        
+    
+    
+            var marker_40ae68c910e046ff930e22fb9fc5d3fe = L.marker(
+                [38.893493, -77.023843],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_36daa0c55c9249388c1360da43f2433d = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_40ae68c910e046ff930e22fb9fc5d3fe.setIcon(icon_36daa0c55c9249388c1360da43f2433d);
+        
+    
+        var popup_b9b68210f74c425a8790d9a94ae0729b = L.popup({"maxWidth": "150"});
+
+        
+            var html_91cd2f351a184f55b3b89c4e536fddda = $(`<div id="html_91cd2f351a184f55b3b89c4e536fddda" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 16:01:00<br>TripEndTime: 17:08:04<br>TripDurationFromTags: 0 days 01:07:04<br>TripDurationFromRawData: 0 days 01:07:04<br>DistanceMi: 7.54<br>TripSpeed_Tags: 6.74<br>TripSpeed_RawData: 6.74<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.893493<br>StartLong: -77.023843<br>EndLat: 38.993265<br>EndLong: -77.029653</div>`)[0];
+            popup_b9b68210f74c425a8790d9a94ae0729b.setContent(html_91cd2f351a184f55b3b89c4e536fddda);
+        
+
+        marker_40ae68c910e046ff930e22fb9fc5d3fe.bindPopup(popup_b9b68210f74c425a8790d9a94ae0729b)
+        ;
+
+        
+    
+    
+            var marker_a3641434f18e4b11adbcf7ca99706da8 = L.marker(
+                [38.993442, -77.029575],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_3dccf1ad64e945aba948776b7e37749c = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_a3641434f18e4b11adbcf7ca99706da8.setIcon(icon_3dccf1ad64e945aba948776b7e37749c);
+        
+    
+        var popup_24abacd50ce04653af2e2c018ef10f62 = L.popup({"maxWidth": "150"});
+
+        
+            var html_83193b69f3934491941775d216f2ad33 = $(`<div id="html_83193b69f3934491941775d216f2ad33" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 17:08:04<br>TripEndTime: 18:01:13<br>TripDurationFromTags: 0 days 00:53:09<br>TripDurationFromRawData: 0 days 00:53:09<br>DistanceMi: 7.76<br>TripSpeed_Tags: 8.76<br>TripSpeed_RawData: 8.76<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993442<br>StartLong: -77.029575<br>EndLat: 38.892865<br>EndLong: -77.023925</div>`)[0];
+            popup_24abacd50ce04653af2e2c018ef10f62.setContent(html_83193b69f3934491941775d216f2ad33);
+        
+
+        marker_a3641434f18e4b11adbcf7ca99706da8.bindPopup(popup_24abacd50ce04653af2e2c018ef10f62)
+        ;
+
+        
+    
+    
+            var marker_98a2aba0bdab42f1ab76bb4d1fd36ac3 = L.marker(
+                [38.892977, -77.023905],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_5d66ef43d9b04647b553d174b7a7c5a5 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_98a2aba0bdab42f1ab76bb4d1fd36ac3.setIcon(icon_5d66ef43d9b04647b553d174b7a7c5a5);
+        
+    
+        var popup_e5835f5be8774d83b3ad71ac3d3f225e = L.popup({"maxWidth": "150"});
+
+        
+            var html_0209c6c128d74069934fd9bc1b43ecb1 = $(`<div id="html_0209c6c128d74069934fd9bc1b43ecb1" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 18:07:00<br>TripEndTime: 19:09:32<br>TripDurationFromTags: 0 days 01:02:32<br>TripDurationFromRawData: 0 days 01:02:32<br>DistanceMi: 7.54<br>TripSpeed_Tags: 7.24<br>TripSpeed_RawData: 7.24<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.892977<br>StartLong: -77.023905<br>EndLat: 38.993285<br>EndLong: -77.02996999999999</div>`)[0];
+            popup_e5835f5be8774d83b3ad71ac3d3f225e.setContent(html_0209c6c128d74069934fd9bc1b43ecb1);
+        
+
+        marker_98a2aba0bdab42f1ab76bb4d1fd36ac3.bindPopup(popup_e5835f5be8774d83b3ad71ac3d3f225e)
+        ;
+
+        
+    
+    
+            var marker_577d9ac433394d1ebdf09cfb844301fb = L.marker(
+                [38.993285, -77.02996999999999],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_7b86339ffba0497594fe1c4592df6f64 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_577d9ac433394d1ebdf09cfb844301fb.setIcon(icon_7b86339ffba0497594fe1c4592df6f64);
+        
+    
+        var popup_01fbcd02783544448d1875b0a8406ea4 = L.popup({"maxWidth": "150"});
+
+        
+            var html_98977575345f4bba8de392de30476b5d = $(`<div id="html_98977575345f4bba8de392de30476b5d" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 19:09:32<br>TripEndTime: 19:53:00<br>TripDurationFromTags: 0 days 00:43:28<br>TripDurationFromRawData: 0 days 00:43:28<br>DistanceMi: 7.65<br>TripSpeed_Tags: 10.56<br>TripSpeed_RawData: 10.56<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993285<br>StartLong: -77.02996999999999<br>EndLat: 38.893177<br>EndLong: -77.023942</div>`)[0];
+            popup_01fbcd02783544448d1875b0a8406ea4.setContent(html_98977575345f4bba8de392de30476b5d);
+        
+
+        marker_577d9ac433394d1ebdf09cfb844301fb.bindPopup(popup_01fbcd02783544448d1875b0a8406ea4)
+        ;
+
+        
+    
+    
+            var marker_4df42676693c4eefab57c93a630980ee = L.marker(
+                [38.893307, -77.023935],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_d2fa15efbc72430aa060f2fcb07943d9 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_4df42676693c4eefab57c93a630980ee.setIcon(icon_d2fa15efbc72430aa060f2fcb07943d9);
+        
+    
+        var popup_ef6f95cbe66544188e75caaeea6fe33d = L.popup({"maxWidth": "150"});
+
+        
+            var html_3af0d22fcb96442597e215cfd792a5d3 = $(`<div id="html_3af0d22fcb96442597e215cfd792a5d3" style="width: 100.0%; height: 100.0%;">Tag: PI03101<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 19:53:00<br>TripEndTime: 20:22:02<br>TripDurationFromTags: 0 days 00:29:02<br>TripDurationFromRawData: 0 days 00:24:28<br>DistanceMi: 0.81<br>TripSpeed_Tags: 1.67<br>TripSpeed_RawData: 1.98<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.893307<br>StartLong: -77.023935<br>EndLat: 38.893925<br>EndLong: -77.026032</div>`)[0];
+            popup_ef6f95cbe66544188e75caaeea6fe33d.setContent(html_3af0d22fcb96442597e215cfd792a5d3);
+        
+
+        marker_4df42676693c4eefab57c93a630980ee.bindPopup(popup_ef6f95cbe66544188e75caaeea6fe33d)
+        ;
+
+        
+    
+    
+            var marker_ebdeb79218e046d19bc290416067a69c = L.marker(
+                [38.893925, -77.026032],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_23e50d79187e40deb1e45bf367a785c5 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_ebdeb79218e046d19bc290416067a69c.setIcon(icon_23e50d79187e40deb1e45bf367a785c5);
+        
+    
+        var popup_7f8aceb2e62849b9a7da3a186eb8c9fd = L.popup({"maxWidth": "150"});
+
+        
+            var html_3c925dd8ecc940ac8f8e5ec4a1afb4ac = $(`<div id="html_3c925dd8ecc940ac8f8e5ec4a1afb4ac" style="width: 100.0%; height: 100.0%;">Tag: S402<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 21:47:17<br>TripEndTime: 22:38:51<br>TripDurationFromTags: 0 days 00:51:34<br>TripDurationFromRawData: 0 days 00:51:34<br>DistanceMi: 8.19<br>TripSpeed_Tags: 9.54<br>TripSpeed_RawData: 9.54<br>SecPastSt: 2.0<br>StartFt: 0.0<br>StartLat: 38.893925<br>StartLong: -77.026032<br>EndLat: 38.993187<br>EndLong: -77.029647</div>`)[0];
+            popup_7f8aceb2e62849b9a7da3a186eb8c9fd.setContent(html_3c925dd8ecc940ac8f8e5ec4a1afb4ac);
+        
+
+        marker_ebdeb79218e046d19bc290416067a69c.bindPopup(popup_7f8aceb2e62849b9a7da3a186eb8c9fd)
+        ;
+
+        
+    
+    
+            var marker_a7b5c7d16b424381a532676d20f92449 = L.marker(
+                [38.993253, -77.029595],
+                {}
+            ).addTo(feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb);
+        
+    
+            var icon_819fc12064454f41b116f26a446aed81 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_a7b5c7d16b424381a532676d20f92449.setIcon(icon_819fc12064454f41b116f26a446aed81);
+        
+    
+        var popup_0acddb536e4c4913aad36ff6ecbb9ac6 = L.popup({"maxWidth": "150"});
+
+        
+            var html_cb5980078af741d7968151bef5232c3d = $(`<div id="html_cb5980078af741d7968151bef5232c3d" style="width: 100.0%; height: 100.0%;">Tag: PI03114<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 22:38:51<br>TripEndTime: 23:05:02<br>TripDurationFromTags: 0 days 00:26:11<br>TripDurationFromRawData: 0 days 00:26:11<br>DistanceMi: 3.81<br>TripSpeed_Tags: 8.74<br>TripSpeed_RawData: 8.74<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993253<br>StartLong: -77.029595<br>EndLat: 38.946762<br>EndLong: -77.031447</div>`)[0];
+            popup_0acddb536e4c4913aad36ff6ecbb9ac6.setContent(html_cb5980078af741d7968151bef5232c3d);
+        
+
+        marker_a7b5c7d16b424381a532676d20f92449.bindPopup(popup_0acddb536e4c4913aad36ff6ecbb9ac6)
+        ;
+
+        
+    
+    
+            var feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37 = L.featureGroup.subGroup(
+                feature_group_9ca5bbfb4e194630b8f4fcf00521f563
+            );
+            feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37.addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var marker_b17bfee633344052b6bc16e911b66b95 = L.marker(
+                [38.901408, -77.03104499999999],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_e18ae1c418c5441ebad15e06b5b41c01 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_b17bfee633344052b6bc16e911b66b95.setIcon(icon_e18ae1c418c5441ebad15e06b5b41c01);
+        
+    
+        var popup_cf961a5be8864ff49318c8dd2f5515ef = L.popup({"maxWidth": "150"});
+
+        
+            var html_faa511fe6ec344aeac1b54cbee28fecd = $(`<div id="html_faa511fe6ec344aeac1b54cbee28fecd" style="width: 100.0%; height: 100.0%;">Tag:    S904<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 07:25:34<br>TripEndTime: 07:55:32<br>TripDurationFromTags: 0 days 00:29:58<br>TripDurationFromRawData: 0 days 00:29:58<br>DistanceMi: 5.4<br>TripSpeed_Tags: 10.82<br>TripSpeed_RawData: 10.82<br>SecPastSt: 1.0<br>StartFt: 0.0<br>StartLat: 38.955218<br>StartLong: -77.03341<br>EndLat: 38.901408<br>EndLong: -77.03104499999999</div>`)[0];
+            popup_cf961a5be8864ff49318c8dd2f5515ef.setContent(html_faa511fe6ec344aeac1b54cbee28fecd);
+        
+
+        marker_b17bfee633344052b6bc16e911b66b95.bindPopup(popup_cf961a5be8864ff49318c8dd2f5515ef)
+        ;
+
+        
+    
+    
+            var marker_7884865291e14efeb785ffc325da771f = L.marker(
+                [38.96288, -77.03649200000001],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_37a03f3bfd844613b80c5f46a5b068f4 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_7884865291e14efeb785ffc325da771f.setIcon(icon_37a03f3bfd844613b80c5f46a5b068f4);
+        
+    
+        var popup_bf0d3f840ac84652a6f3295d5213327c = L.popup({"maxWidth": "150"});
+
+        
+            var html_b79c1bc334574612a2328275dc421907 = $(`<div id="html_b79c1bc334574612a2328275dc421907" style="width: 100.0%; height: 100.0%;">Tag: DH27005<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 07:58:00<br>TripEndTime: 08:27:47<br>TripDurationFromTags: 0 days 00:29:47<br>TripDurationFromRawData: 0 days 00:29:47<br>DistanceMi: 4.44<br>TripSpeed_Tags: 8.94<br>TripSpeed_RawData: 8.94<br>SecPastSt: 2.0<br>StartFt: 0.0<br>StartLat: 38.901982<br>StartLong: -77.03653800000001<br>EndLat: 38.96288<br>EndLong: -77.03649200000001</div>`)[0];
+            popup_bf0d3f840ac84652a6f3295d5213327c.setContent(html_b79c1bc334574612a2328275dc421907);
+        
+
+        marker_7884865291e14efeb785ffc325da771f.bindPopup(popup_bf0d3f840ac84652a6f3295d5213327c)
+        ;
+
+        
+    
+    
+            var marker_3c413e0529844d988e458bd53dcf0bd8 = L.marker(
+                [38.930027, -77.032432],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_49d692fb1da341b2b15089736f731536 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_3c413e0529844d988e458bd53dcf0bd8.setIcon(icon_49d692fb1da341b2b15089736f731536);
+        
+    
+        var popup_58de96cbce5c411083b45014acbc07f3 = L.popup({"maxWidth": "150"});
+
+        
+            var html_55b4225893f345b4b0c901044529120a = $(`<div id="html_55b4225893f345b4b0c901044529120a" style="width: 100.0%; height: 100.0%;">Tag: S904<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 08:27:47<br>TripEndTime: 09:17:01<br>TripDurationFromTags: 0 days 00:49:14<br>TripDurationFromRawData: 0 days 00:47:54<br>DistanceMi: 6.88<br>TripSpeed_Tags: 8.38<br>TripSpeed_RawData: 8.61<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.96288<br>StartLong: -77.03649200000001<br>EndLat: 38.930027<br>EndLong: -77.032432</div>`)[0];
+            popup_58de96cbce5c411083b45014acbc07f3.setContent(html_55b4225893f345b4b0c901044529120a);
+        
+
+        marker_3c413e0529844d988e458bd53dcf0bd8.bindPopup(popup_58de96cbce5c411083b45014acbc07f3)
+        ;
+
+        
+    
+    
+            var marker_3359389454bf430ba4aba57d42b90ac4 = L.marker(
+                [38.94615, -77.032557],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_7b00d9d086344891b0244f912de34136 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_3359389454bf430ba4aba57d42b90ac4.setIcon(icon_7b00d9d086344891b0244f912de34136);
+        
+    
+        var popup_b03256c11fb648cbb0bf7948e58cb465 = L.popup({"maxWidth": "150"});
+
+        
+            var html_2849408a3f5347c9a7b1f73974dfc7b3 = $(`<div id="html_2849408a3f5347c9a7b1f73974dfc7b3" style="width: 100.0%; height: 100.0%;">Tag: PI03117<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 09:17:01<br>TripEndTime: 09:21:41<br>TripDurationFromTags: 0 days 00:04:40<br>TripDurationFromRawData: 0 days 00:04:40<br>DistanceMi: 1.14<br>TripSpeed_Tags: 14.65<br>TripSpeed_RawData: 14.65<br>SecPastSt: 2.0<br>StartFt: 0.0<br>StartLat: 38.930037<br>StartLong: -77.03244699999999<br>EndLat: 38.94615<br>EndLong: -77.032557</div>`)[0];
+            popup_b03256c11fb648cbb0bf7948e58cb465.setContent(html_2849408a3f5347c9a7b1f73974dfc7b3);
+        
+
+        marker_3359389454bf430ba4aba57d42b90ac4.bindPopup(popup_b03256c11fb648cbb0bf7948e58cb465)
+        ;
+
+        
+    
+    
+            var marker_5bddb806c8284b37b878de22faa826c2 = L.marker(
+                [38.993222, -77.02994],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_62e6ae3e2c354efdbfe375f69b2d014e = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_5bddb806c8284b37b878de22faa826c2.setIcon(icon_62e6ae3e2c354efdbfe375f69b2d014e);
+        
+    
+        var popup_4ae53de974f64376b9d04188dc918929 = L.popup({"maxWidth": "150"});
+
+        
+            var html_a9dbc2402677447f9c0857506b378222 = $(`<div id="html_a9dbc2402677447f9c0857506b378222" style="width: 100.0%; height: 100.0%;">Tag: PO03408<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 14:54:34<br>TripEndTime: 14:57:01<br>TripDurationFromTags: 0 days 00:02:27<br>TripDurationFromRawData: 0 days 00:00:33<br>DistanceMi: 0.0<br>TripSpeed_Tags: 0.0<br>TripSpeed_RawData: 0.0<br>SecPastSt: 2.0<br>StartFt: 0.0<br>StartLat: 38.993222<br>StartLong: -77.02994<br>EndLat: 38.993222<br>EndLong: -77.02994</div>`)[0];
+            popup_4ae53de974f64376b9d04188dc918929.setContent(html_a9dbc2402677447f9c0857506b378222);
+        
+
+        marker_5bddb806c8284b37b878de22faa826c2.bindPopup(popup_4ae53de974f64376b9d04188dc918929)
+        ;
+
+        
+    
+    
+            var marker_ecb61879692b4ccea1b83e5c2ff67a58 = L.marker(
+                [38.893193, -77.023905],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_95ab658360534676816ae5ba07b0806f = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_ecb61879692b4ccea1b83e5c2ff67a58.setIcon(icon_95ab658360534676816ae5ba07b0806f);
+        
+    
+        var popup_e0e07766876042bf8557d0d591fcb5e6 = L.popup({"maxWidth": "150"});
+
+        
+            var html_12115d54eaf849cd8f50d68c16a7e92c = $(`<div id="html_12115d54eaf849cd8f50d68c16a7e92c" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 14:57:01<br>TripEndTime: 15:49:19<br>TripDurationFromTags: 0 days 00:52:18<br>TripDurationFromRawData: 0 days 00:52:18<br>DistanceMi: 7.65<br>TripSpeed_Tags: 8.77<br>TripSpeed_RawData: 8.77<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.993222<br>StartLong: -77.02994<br>EndLat: 38.893193<br>EndLong: -77.023905</div>`)[0];
+            popup_e0e07766876042bf8557d0d591fcb5e6.setContent(html_12115d54eaf849cd8f50d68c16a7e92c);
+        
+
+        marker_ecb61879692b4ccea1b83e5c2ff67a58.bindPopup(popup_e0e07766876042bf8557d0d591fcb5e6)
+        ;
+
+        
+    
+    
+            var marker_143494d4edfc48b08f7f2706dfa1bf3d = L.marker(
+                [38.993265, -77.029653],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_c10700b2e42643c3a363e9d9fa6d7231 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_143494d4edfc48b08f7f2706dfa1bf3d.setIcon(icon_c10700b2e42643c3a363e9d9fa6d7231);
+        
+    
+        var popup_3a3e3912516a470c9e17f5004967c576 = L.popup({"maxWidth": "150"});
+
+        
+            var html_4b318be13e8e4827b124cae8550952d6 = $(`<div id="html_4b318be13e8e4827b124cae8550952d6" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 16:01:00<br>TripEndTime: 17:08:04<br>TripDurationFromTags: 0 days 01:07:04<br>TripDurationFromRawData: 0 days 01:07:04<br>DistanceMi: 7.54<br>TripSpeed_Tags: 6.74<br>TripSpeed_RawData: 6.74<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.893493<br>StartLong: -77.023843<br>EndLat: 38.993265<br>EndLong: -77.029653</div>`)[0];
+            popup_3a3e3912516a470c9e17f5004967c576.setContent(html_4b318be13e8e4827b124cae8550952d6);
+        
+
+        marker_143494d4edfc48b08f7f2706dfa1bf3d.bindPopup(popup_3a3e3912516a470c9e17f5004967c576)
+        ;
+
+        
+    
+    
+            var marker_3a051dcd86c447abbfa036869f13e21b = L.marker(
+                [38.892865, -77.023925],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_b8208cab32ba42c6b5b19dab1431eb0e = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_3a051dcd86c447abbfa036869f13e21b.setIcon(icon_b8208cab32ba42c6b5b19dab1431eb0e);
+        
+    
+        var popup_fe3e00a924c8467785312c4fafb15fb6 = L.popup({"maxWidth": "150"});
+
+        
+            var html_354fb0ca0bdf4bb1ade9a461de5cafe3 = $(`<div id="html_354fb0ca0bdf4bb1ade9a461de5cafe3" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 17:08:04<br>TripEndTime: 18:01:13<br>TripDurationFromTags: 0 days 00:53:09<br>TripDurationFromRawData: 0 days 00:53:09<br>DistanceMi: 7.76<br>TripSpeed_Tags: 8.76<br>TripSpeed_RawData: 8.76<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993442<br>StartLong: -77.029575<br>EndLat: 38.892865<br>EndLong: -77.023925</div>`)[0];
+            popup_fe3e00a924c8467785312c4fafb15fb6.setContent(html_354fb0ca0bdf4bb1ade9a461de5cafe3);
+        
+
+        marker_3a051dcd86c447abbfa036869f13e21b.bindPopup(popup_fe3e00a924c8467785312c4fafb15fb6)
+        ;
+
+        
+    
+    
+            var marker_b49f1015306c427f9193491e4a5e4fd5 = L.marker(
+                [38.993285, -77.02996999999999],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_d71874e000b8483db5d1e6d7fcac4908 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_b49f1015306c427f9193491e4a5e4fd5.setIcon(icon_d71874e000b8483db5d1e6d7fcac4908);
+        
+    
+        var popup_f246aa2a0bd54afdbc6abfd1ee06577e = L.popup({"maxWidth": "150"});
+
+        
+            var html_82463892ec414e46aa980a3631bbc1e9 = $(`<div id="html_82463892ec414e46aa980a3631bbc1e9" style="width: 100.0%; height: 100.0%;">Tag: 7902<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 18:07:00<br>TripEndTime: 19:09:32<br>TripDurationFromTags: 0 days 01:02:32<br>TripDurationFromRawData: 0 days 01:02:32<br>DistanceMi: 7.54<br>TripSpeed_Tags: 7.24<br>TripSpeed_RawData: 7.24<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.892977<br>StartLong: -77.023905<br>EndLat: 38.993285<br>EndLong: -77.02996999999999</div>`)[0];
+            popup_f246aa2a0bd54afdbc6abfd1ee06577e.setContent(html_82463892ec414e46aa980a3631bbc1e9);
+        
+
+        marker_b49f1015306c427f9193491e4a5e4fd5.bindPopup(popup_f246aa2a0bd54afdbc6abfd1ee06577e)
+        ;
+
+        
+    
+    
+            var marker_201cc4634e57444c9e4ef4417b863fd7 = L.marker(
+                [38.893177, -77.023942],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_317bbff61ed748bcb4042ffb02eab4d7 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_201cc4634e57444c9e4ef4417b863fd7.setIcon(icon_317bbff61ed748bcb4042ffb02eab4d7);
+        
+    
+        var popup_a7ec897ba0e24c35a87ae88f935096a7 = L.popup({"maxWidth": "150"});
+
+        
+            var html_35e3d4b223604fcd93f005e71ea2be61 = $(`<div id="html_35e3d4b223604fcd93f005e71ea2be61" style="width: 100.0%; height: 100.0%;">Tag: 7901<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 19:09:32<br>TripEndTime: 19:53:00<br>TripDurationFromTags: 0 days 00:43:28<br>TripDurationFromRawData: 0 days 00:43:28<br>DistanceMi: 7.65<br>TripSpeed_Tags: 10.56<br>TripSpeed_RawData: 10.56<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993285<br>StartLong: -77.02996999999999<br>EndLat: 38.893177<br>EndLong: -77.023942</div>`)[0];
+            popup_a7ec897ba0e24c35a87ae88f935096a7.setContent(html_35e3d4b223604fcd93f005e71ea2be61);
+        
+
+        marker_201cc4634e57444c9e4ef4417b863fd7.bindPopup(popup_a7ec897ba0e24c35a87ae88f935096a7)
+        ;
+
+        
+    
+    
+            var marker_e4b10d903af14909a909d08ef6c56e72 = L.marker(
+                [38.893925, -77.026032],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_ad30ea7765704d9b9c471306039f6c15 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_e4b10d903af14909a909d08ef6c56e72.setIcon(icon_ad30ea7765704d9b9c471306039f6c15);
+        
+    
+        var popup_2eaa0cf004a34bae9b6590bb5bf187a1 = L.popup({"maxWidth": "150"});
+
+        
+            var html_cbfc80b9acee4364ba59021e544622d2 = $(`<div id="html_cbfc80b9acee4364ba59021e544622d2" style="width: 100.0%; height: 100.0%;">Tag: PI03101<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 19:53:00<br>TripEndTime: 20:22:02<br>TripDurationFromTags: 0 days 00:29:02<br>TripDurationFromRawData: 0 days 00:24:28<br>DistanceMi: 0.81<br>TripSpeed_Tags: 1.67<br>TripSpeed_RawData: 1.98<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.893307<br>StartLong: -77.023935<br>EndLat: 38.893925<br>EndLong: -77.026032</div>`)[0];
+            popup_2eaa0cf004a34bae9b6590bb5bf187a1.setContent(html_cbfc80b9acee4364ba59021e544622d2);
+        
+
+        marker_e4b10d903af14909a909d08ef6c56e72.bindPopup(popup_2eaa0cf004a34bae9b6590bb5bf187a1)
+        ;
+
+        
+    
+    
+            var marker_065c18eb10254e42a84b04a7a703d873 = L.marker(
+                [38.993187, -77.029647],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_a1b6298182dd42f884f3c06d59217373 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_065c18eb10254e42a84b04a7a703d873.setIcon(icon_a1b6298182dd42f884f3c06d59217373);
+        
+    
+        var popup_f588462d156b4c309d13cbea479475e9 = L.popup({"maxWidth": "150"});
+
+        
+            var html_a8bac93674e44a7e83b2cd30a8593925 = $(`<div id="html_a8bac93674e44a7e83b2cd30a8593925" style="width: 100.0%; height: 100.0%;">Tag: S402<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 21:47:17<br>TripEndTime: 22:38:51<br>TripDurationFromTags: 0 days 00:51:34<br>TripDurationFromRawData: 0 days 00:51:34<br>DistanceMi: 8.19<br>TripSpeed_Tags: 9.54<br>TripSpeed_RawData: 9.54<br>SecPastSt: 2.0<br>StartFt: 0.0<br>StartLat: 38.893925<br>StartLong: -77.026032<br>EndLat: 38.993187<br>EndLong: -77.029647</div>`)[0];
+            popup_f588462d156b4c309d13cbea479475e9.setContent(html_a8bac93674e44a7e83b2cd30a8593925);
+        
+
+        marker_065c18eb10254e42a84b04a7a703d873.bindPopup(popup_f588462d156b4c309d13cbea479475e9)
+        ;
+
+        
+    
+    
+            var marker_32a471577b7b4769bfa728f88d6c9362 = L.marker(
+                [38.946762, -77.031447],
+                {}
+            ).addTo(feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37);
+        
+    
+            var icon_cf3809e643d14aa4b61a9089929fb0d7 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_32a471577b7b4769bfa728f88d6c9362.setIcon(icon_cf3809e643d14aa4b61a9089929fb0d7);
+        
+    
+        var popup_eca5155446c94841948e553b69dbc4cd = L.popup({"maxWidth": "150"});
+
+        
+            var html_4b45e15818514682a4ea36ab8d0735ed = $(`<div id="html_4b45e15818514682a4ea36ab8d0735ed" style="width: 100.0%; height: 100.0%;">Tag: PI03114<br>BusID: 6464<br>Date: 04/30/19<br>TripStartTime: 22:38:51<br>TripEndTime: 23:05:02<br>TripDurationFromTags: 0 days 00:26:11<br>TripDurationFromRawData: 0 days 00:26:11<br>DistanceMi: 3.81<br>TripSpeed_Tags: 8.74<br>TripSpeed_RawData: 8.74<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.993253<br>StartLong: -77.029595<br>EndLat: 38.946762<br>EndLong: -77.031447</div>`)[0];
+            popup_eca5155446c94841948e553b69dbc4cd.setContent(html_4b45e15818514682a4ea36ab8d0735ed);
+        
+
+        marker_32a471577b7b4769bfa728f88d6c9362.bindPopup(popup_eca5155446c94841948e553b69dbc4cd)
+        ;
+
+        
+    
+    
+            var feature_group_708c698480e84b7b8836d0056cb46c3d = L.featureGroup(
+                {}
+            ).addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var feature_group_sub_group_0c16a23f4c924631aadb3e6f486a5143 = L.featureGroup.subGroup(
+                feature_group_708c698480e84b7b8836d0056cb46c3d
+            );
+            feature_group_sub_group_0c16a23f4c924631aadb3e6f486a5143.addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var marker_fa1e8694fadf4f169cbd5c68161fa5b9 = L.marker(
+                [38.97659, -77.01689],
+                {}
+            ).addTo(feature_group_sub_group_0c16a23f4c924631aadb3e6f486a5143);
+        
+    
+            var icon_8a3703b38f5e4ca5be9a1dcb60931c66 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_fa1e8694fadf4f169cbd5c68161fa5b9.setIcon(icon_8a3703b38f5e4ca5be9a1dcb60931c66);
+        
+    
+        var popup_2f0e240ffc39437e82ee4a9264ce1d90 = L.popup({"maxWidth": "150"});
+
+        
+            var html_a6be3b16f2ad4babb77afc15c880bea5 = $(`<div id="html_a6be3b16f2ad4babb77afc15c880bea5" style="width: 100.0%; height: 100.0%;">Tag: PO03413<br>BusID: 6468<br>Date: 04/30/19<br>TripStartTime: 15:57:14<br>TripEndTime: 16:14:01<br>TripDurationFromTags: 0 days 00:16:47<br>TripDurationFromRawData: 0 days 00:11:08<br>DistanceMi: 0.1<br>TripSpeed_Tags: 0.35<br>TripSpeed_RawData: 0.53<br>SecPastSt: 2.0<br>StartFt: 0.0<br>StartLat: 38.97659<br>StartLong: -77.01689<br>EndLat: 38.97606<br>EndLong: -77.017042</div>`)[0];
+            popup_2f0e240ffc39437e82ee4a9264ce1d90.setContent(html_a6be3b16f2ad4babb77afc15c880bea5);
+        
+
+        marker_fa1e8694fadf4f169cbd5c68161fa5b9.bindPopup(popup_2f0e240ffc39437e82ee4a9264ce1d90)
+        ;
+
+        
+    
+    
+            var marker_4cbb01f1762a4ee3932ce886230fb66a = L.marker(
+                [38.97606, -77.017042],
+                {}
+            ).addTo(feature_group_sub_group_0c16a23f4c924631aadb3e6f486a5143);
+        
+    
+            var icon_c17ad4e276404e189ad5c6bc53b70115 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_4cbb01f1762a4ee3932ce886230fb66a.setIcon(icon_c17ad4e276404e189ad5c6bc53b70115);
+        
+    
+        var popup_f55b3060fbb248fc86b054dec1a5750f = L.popup({"maxWidth": "150"});
+
+        
+            var html_65c60b0887cb42a5a26b857a30b1d7df = $(`<div id="html_65c60b0887cb42a5a26b857a30b1d7df" style="width: 100.0%; height: 100.0%;">Tag: 5901<br>BusID: 6468<br>Date: 04/30/19<br>TripStartTime: 16:14:01<br>TripEndTime: 17:05:15<br>TripDurationFromTags: 0 days 00:51:14<br>TripDurationFromRawData: 0 days 00:51:14<br>DistanceMi: 6.91<br>TripSpeed_Tags: 8.09<br>TripSpeed_RawData: 8.09<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.97606<br>StartLong: -77.017042<br>EndLat: 38.893495<br>EndLong: -77.026053</div>`)[0];
+            popup_f55b3060fbb248fc86b054dec1a5750f.setContent(html_65c60b0887cb42a5a26b857a30b1d7df);
+        
+
+        marker_4cbb01f1762a4ee3932ce886230fb66a.bindPopup(popup_f55b3060fbb248fc86b054dec1a5750f)
+        ;
+
+        
+    
+    
+            var marker_37133fef42cf434a8ffc35178aec8dee = L.marker(
+                [38.89347, -77.026055],
+                {}
+            ).addTo(feature_group_sub_group_0c16a23f4c924631aadb3e6f486a5143);
+        
+    
+            var icon_2638105e795b43e28081296153ce02c7 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_37133fef42cf434a8ffc35178aec8dee.setIcon(icon_2638105e795b43e28081296153ce02c7);
+        
+    
+        var popup_549c58d25ffe48aaa75497c14aa3e1fd = L.popup({"maxWidth": "150"});
+
+        
+            var html_69cb5da32f4b4bd7bfb034191b16614e = $(`<div id="html_69cb5da32f4b4bd7bfb034191b16614e" style="width: 100.0%; height: 100.0%;">Tag: 5902<br>BusID: 6468<br>Date: 04/30/19<br>TripStartTime: 17:12:00<br>TripEndTime: 18:09:13<br>TripDurationFromTags: 0 days 00:57:13<br>TripDurationFromRawData: 0 days 00:57:13<br>DistanceMi: 7.23<br>TripSpeed_Tags: 7.58<br>TripSpeed_RawData: 7.58<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.89347<br>StartLong: -77.026055<br>EndLat: 38.975517<br>EndLong: -77.017145</div>`)[0];
+            popup_549c58d25ffe48aaa75497c14aa3e1fd.setContent(html_69cb5da32f4b4bd7bfb034191b16614e);
+        
+
+        marker_37133fef42cf434a8ffc35178aec8dee.bindPopup(popup_549c58d25ffe48aaa75497c14aa3e1fd)
+        ;
+
+        
+    
+    
+            var marker_a583a2974c0d4b7ba82b81236b51550c = L.marker(
+                [38.975347, -77.017088],
+                {}
+            ).addTo(feature_group_sub_group_0c16a23f4c924631aadb3e6f486a5143);
+        
+    
+            var icon_55a1a868f33c4e8ebde3ad1fbfd6612d = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkblue", "prefix": "glyphicon"}
+            );
+            marker_a583a2974c0d4b7ba82b81236b51550c.setIcon(icon_55a1a868f33c4e8ebde3ad1fbfd6612d);
+        
+    
+        var popup_c10ff3fdd49b409ca2c9362e58020cc0 = L.popup({"maxWidth": "150"});
+
+        
+            var html_8a4bb715e1304f97b4041c5cbb920f76 = $(`<div id="html_8a4bb715e1304f97b4041c5cbb920f76" style="width: 100.0%; height: 100.0%;">Tag: PI03109<br>BusID: 6468<br>Date: 04/30/19<br>TripStartTime: 18:09:13<br>TripEndTime: 18:30:03<br>TripDurationFromTags: 0 days 00:20:50<br>TripDurationFromRawData: 0 days 00:18:39<br>DistanceMi: 2.78<br>TripSpeed_Tags: 8.01<br>TripSpeed_RawData: 8.94<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.975347<br>StartLong: -77.017088<br>EndLat: 38.947842<br>EndLong: -77.03231</div>`)[0];
+            popup_c10ff3fdd49b409ca2c9362e58020cc0.setContent(html_8a4bb715e1304f97b4041c5cbb920f76);
+        
+
+        marker_a583a2974c0d4b7ba82b81236b51550c.bindPopup(popup_c10ff3fdd49b409ca2c9362e58020cc0)
+        ;
+
+        
+    
+    
+            var feature_group_sub_group_1e49146608214782a2eee7ae19318351 = L.featureGroup.subGroup(
+                feature_group_708c698480e84b7b8836d0056cb46c3d
+            );
+            feature_group_sub_group_1e49146608214782a2eee7ae19318351.addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+        
+    
+            var marker_957949b38d5643dcb204f410debc35eb = L.marker(
+                [38.97606, -77.017042],
+                {}
+            ).addTo(feature_group_sub_group_1e49146608214782a2eee7ae19318351);
+        
+    
+            var icon_9a3ca645d40c41499233c7b9fa5b81dc = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_957949b38d5643dcb204f410debc35eb.setIcon(icon_9a3ca645d40c41499233c7b9fa5b81dc);
+        
+    
+        var popup_ccfaa3ecf9b144f290a1295082a97714 = L.popup({"maxWidth": "150"});
+
+        
+            var html_56a1ca1796b44ca98383482f6730a2c4 = $(`<div id="html_56a1ca1796b44ca98383482f6730a2c4" style="width: 100.0%; height: 100.0%;">Tag: PO03413<br>BusID: 6468<br>Date: 04/30/19<br>TripStartTime: 15:57:14<br>TripEndTime: 16:14:01<br>TripDurationFromTags: 0 days 00:16:47<br>TripDurationFromRawData: 0 days 00:11:08<br>DistanceMi: 0.1<br>TripSpeed_Tags: 0.35<br>TripSpeed_RawData: 0.53<br>SecPastSt: 2.0<br>StartFt: 0.0<br>StartLat: 38.97659<br>StartLong: -77.01689<br>EndLat: 38.97606<br>EndLong: -77.017042</div>`)[0];
+            popup_ccfaa3ecf9b144f290a1295082a97714.setContent(html_56a1ca1796b44ca98383482f6730a2c4);
+        
+
+        marker_957949b38d5643dcb204f410debc35eb.bindPopup(popup_ccfaa3ecf9b144f290a1295082a97714)
+        ;
+
+        
+    
+    
+            var marker_d64c6171055d4b8b96bdac3be6466639 = L.marker(
+                [38.893495, -77.026053],
+                {}
+            ).addTo(feature_group_sub_group_1e49146608214782a2eee7ae19318351);
+        
+    
+            var icon_59a7ec9fca02414ab0cecdcf89d72920 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_d64c6171055d4b8b96bdac3be6466639.setIcon(icon_59a7ec9fca02414ab0cecdcf89d72920);
+        
+    
+        var popup_a5df332ae49944a0983c5b308b0694dd = L.popup({"maxWidth": "150"});
+
+        
+            var html_bd67587ab6b44adab2c714b58b32a15b = $(`<div id="html_bd67587ab6b44adab2c714b58b32a15b" style="width: 100.0%; height: 100.0%;">Tag: 5901<br>BusID: 6468<br>Date: 04/30/19<br>TripStartTime: 16:14:01<br>TripEndTime: 17:05:15<br>TripDurationFromTags: 0 days 00:51:14<br>TripDurationFromRawData: 0 days 00:51:14<br>DistanceMi: 6.91<br>TripSpeed_Tags: 8.09<br>TripSpeed_RawData: 8.09<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.97606<br>StartLong: -77.017042<br>EndLat: 38.893495<br>EndLong: -77.026053</div>`)[0];
+            popup_a5df332ae49944a0983c5b308b0694dd.setContent(html_bd67587ab6b44adab2c714b58b32a15b);
+        
+
+        marker_d64c6171055d4b8b96bdac3be6466639.bindPopup(popup_a5df332ae49944a0983c5b308b0694dd)
+        ;
+
+        
+    
+    
+            var marker_02231f077aa94ce5a88b5211ec2d00e4 = L.marker(
+                [38.975517, -77.017145],
+                {}
+            ).addTo(feature_group_sub_group_1e49146608214782a2eee7ae19318351);
+        
+    
+            var icon_190d077eaa2241f68f1e39a857c26ce4 = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_02231f077aa94ce5a88b5211ec2d00e4.setIcon(icon_190d077eaa2241f68f1e39a857c26ce4);
+        
+    
+        var popup_34ebd0f8b2d14a82808a066979ecc37e = L.popup({"maxWidth": "150"});
+
+        
+            var html_6126e47b1dae4b80a55a82c553b93ff6 = $(`<div id="html_6126e47b1dae4b80a55a82c553b93ff6" style="width: 100.0%; height: 100.0%;">Tag: 5902<br>BusID: 6468<br>Date: 04/30/19<br>TripStartTime: 17:12:00<br>TripEndTime: 18:09:13<br>TripDurationFromTags: 0 days 00:57:13<br>TripDurationFromRawData: 0 days 00:57:13<br>DistanceMi: 7.23<br>TripSpeed_Tags: 7.58<br>TripSpeed_RawData: 7.58<br>SecPastSt: 3.0<br>StartFt: 0.0<br>StartLat: 38.89347<br>StartLong: -77.026055<br>EndLat: 38.975517<br>EndLong: -77.017145</div>`)[0];
+            popup_34ebd0f8b2d14a82808a066979ecc37e.setContent(html_6126e47b1dae4b80a55a82c553b93ff6);
+        
+
+        marker_02231f077aa94ce5a88b5211ec2d00e4.bindPopup(popup_34ebd0f8b2d14a82808a066979ecc37e)
+        ;
+
+        
+    
+    
+            var marker_72b0e4a06e504ccdb6e39ef153f58a60 = L.marker(
+                [38.947842, -77.03231],
+                {}
+            ).addTo(feature_group_sub_group_1e49146608214782a2eee7ae19318351);
+        
+    
+            var icon_309ec3234117414b81d97644783f579a = L.AwesomeMarkers.icon(
+                {"extraClasses": "fa-rotate-0", "icon": "ok-sign", "iconColor": "white", "markerColor": "darkred", "prefix": "glyphicon"}
+            );
+            marker_72b0e4a06e504ccdb6e39ef153f58a60.setIcon(icon_309ec3234117414b81d97644783f579a);
+        
+    
+        var popup_96d240b507814d058629cdb54d249b4e = L.popup({"maxWidth": "150"});
+
+        
+            var html_ebc2b83ad6c3420cb343b2a982a4f228 = $(`<div id="html_ebc2b83ad6c3420cb343b2a982a4f228" style="width: 100.0%; height: 100.0%;">Tag: PI03109<br>BusID: 6468<br>Date: 04/30/19<br>TripStartTime: 18:09:13<br>TripEndTime: 18:30:03<br>TripDurationFromTags: 0 days 00:20:50<br>TripDurationFromRawData: 0 days 00:18:39<br>DistanceMi: 2.78<br>TripSpeed_Tags: 8.01<br>TripSpeed_RawData: 8.94<br>SecPastSt: 0.0<br>StartFt: 0.0<br>StartLat: 38.975347<br>StartLong: -77.017088<br>EndLat: 38.947842<br>EndLong: -77.03231</div>`)[0];
+            popup_96d240b507814d058629cdb54d249b4e.setContent(html_ebc2b83ad6c3420cb343b2a982a4f228);
+        
+
+        marker_72b0e4a06e504ccdb6e39ef153f58a60.bindPopup(popup_96d240b507814d058629cdb54d249b4e)
+        ;
+
+        
+    
+    
+            map_cfda3b8b5ec7475aaa7d5e2655bbfe65.fitBounds(
+                [[38.948325, -77.032147], [38.993305, -77.02993199999999], [38.892433, -77.023917], [38.993288, -77.029917], [38.892677, -77.023848], [38.993218, -77.02999200000001], [38.892752, -77.023877], [38.99328, -77.029907], [38.89291, -77.02385799999999], [38.993932, -77.03057700000001], [38.893138, -77.023877], [38.993237, -77.02959], [38.955218, -77.03341], [38.901982, -77.03653800000001], [38.96288, -77.03649200000001], [38.930037, -77.03244699999999], [38.993222, -77.02994], [38.993222, -77.02994], [38.893493, -77.023843], [38.993442, -77.029575], [38.892977, -77.023905], [38.993285, -77.02996999999999], [38.893307, -77.023935], [38.893925, -77.026032], [38.993253, -77.029595], [38.97659, -77.01689], [38.97606, -77.017042], [38.89347, -77.026055], [38.975347, -77.017088]],
+                {}
+            );
+        
+    
+            var layer_control_da03f95272524a9fbb674437a2820dad = {
+                base_layers : {
+                    "stamenterrain" : tile_layer_264e31412d8e4dfa95c0079a893ce092,
+                    "Mapbox" : tile_layer_f5c471da2ec24679bc6ba42b6e6eeb92,
+                    "openstreetmap" : tile_layer_32c86f85010e41a6b73d762363921a53,
+                    "cartodbpositron" : tile_layer_7e0d094613dc4ac5951a1a79a80f9613,
+                    "cartodbdark_matter" : tile_layer_6af4c4bba1e349d0bbbed09a65ffd1c0,
+                },
+                overlays :  {
+                    "06431190501" : feature_group_42f46034530645579d2fbd87d7507df0,
+                    "06431190501 TripStart" : feature_group_sub_group_1325a74af7b54dceac0b16388054b760,
+                    "06431190501 TripEnd" : feature_group_sub_group_a81a85feb2384ba78eabe580878ba20d,
+                    "06464190501" : feature_group_9ca5bbfb4e194630b8f4fcf00521f563,
+                    "06464190501 TripStart" : feature_group_sub_group_9ba69750ae8c457aa5b8ec455320bbfb,
+                    "06464190501 TripEnd" : feature_group_sub_group_5f90b458124d4984b7da84cbcb40af37,
+                    "06468190501" : feature_group_708c698480e84b7b8836d0056cb46c3d,
+                    "06468190501 TripStart" : feature_group_sub_group_0c16a23f4c924631aadb3e6f486a5143,
+                    "06468190501 TripEnd" : feature_group_sub_group_1e49146608214782a2eee7ae19318351,
+                },
+            };
+            L.control.layers(
+                layer_control_da03f95272524a9fbb674437a2820dad.base_layers,
+                layer_control_da03f95272524a9fbb674437a2820dad.overlays,
+                {"autoZIndex": true, "collapsed": false, "position": "topright"}
+            ).addTo(map_cfda3b8b5ec7475aaa7d5e2655bbfe65);
+            tile_layer_f5c471da2ec24679bc6ba42b6e6eeb92.remove();
+            tile_layer_32c86f85010e41a6b73d762363921a53.remove();
+            tile_layer_7e0d094613dc4ac5951a1a79a80f9613.remove();
+            tile_layer_6af4c4bba1e349d0bbbed09a65ffd1c0.remove();
+        
+</script>
