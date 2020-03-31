@@ -1,0 +1,301 @@
+---
+title: "Rawnav Data: Dwell Time Checks"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 5
+    toc_float: yes
+    df_print: paged
+    number_sections: false
+    theme: simplex
+date: "Updated March 31, 2020"
+---
+
+This notebook explores the distribution of dwell times at selected stops. We'll explore results under different assumptions about how dwell time and time in stop windows are calculated.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#Load libraries and basic params in separate script
+source("00-master-exploratory.R", local = TRUE)
+source("01-readin-exploratory.R", local = TRUE)
+
+#Additional libraries
+library(extrafont)
+library(scales)
+library(patchwork)
+#First run only
+# extrafont::font_import()
+# extrafont::loadfonts(device="win")
+
+#Some parameters 
+#Suppress internal viewer for mapview (TRUE during writing, use FALSE on knitting)
+viewersupp <- TRUE
+
+#Used for replacing geometry
+empty <- st_as_sfc("POINT(EMPTY)")
+
+knitr::opts_chunk$set(
+  cache = FALSE,
+  highlight = TRUE
+)
+
+rawnav <-
+  rawnav_interim %>%
+  mutate(geometry = if_else(lon_fixed == 0,
+                            st_cast(empty,"GEOMETRY"),
+                            st_cast(geometry,"GEOMETRY"))) %>%
+  st_set_crs(wgs84CRS) %>%
+  group_by(id, bus_id) %>%
+  mutate(next_seconds_marginal = lead(prev_seconds_marginal, default = NA)) %>%
+  ungroup()
+
+```
+
+#### Key fields
+Dwell time calculations will be based on a few key fields:
+
+* **"stop_window"** - This is calculated by M. Eichler based on the stop window data in the rawnav data. In the source data, this data is missing (NA/NULL) until a change in status occurs. In the processed data, the current status is propagated to all of the missing cells. This column has value "X-1" outside of a stop window and a value along the lines of "E-22" for each stop. The numeric component after "E-" appears to reference a unique stop, as it can skip in some cases. There is currently no crosswalk between this field and existing WMATA stop IDs/stop codes. It is possible these numeric values are specific to a route and pattern, such that "E-22" may correspond to a different stop between routes (or even in the same route on a different pattern).
+* **"door_state"** - "O" or "C", sourced directly from the rawnav data. The seconds between an "O" record and the next or previous record (specified on a case-by-case basis below) determine the amount of dwell time.
+
+Notably:
+
+* A door_state of "O" or Open does not correspond to being in a stop window.
+* We do not have APC data associated with these rawnav records (M. Eichler's initial processing did not pull in these records to this processed table). 
+
+```{r}
+rawnav %>%
+  st_drop_geometry() %>%
+  filter(id != 48942) %>%
+  select(
+  id,
+  bus_id,
+  route,
+  pattern,
+  gps_reading_time_txt,
+  door_state,
+  stop_window,
+  prev_seconds_marginal
+  ) %>%
+  head(n=200)
+```
+
+
+#### Dwell Time distributions
+
+For our preliminary look, we filter to a single route (S9) and pattern (01) to put off work on matching the vehicle to particular stop locations. 
+
+```{r}
+rawnav_s9_01 <-
+  rawnav %>%
+  filter(route == "S9", pattern == "01")
+```
+
+First, let's double check that these stop_windows are indeed the same location across observations.
+```{r}
+rawnav_s9_01 %>%
+  filter(stop_window != "X-1") %>%
+  mapview(zcol = "stop_window",
+        viewer.suppress = viewersupp)
+```
+It seems this is the case. For this pattern, E-01 is Silver Spring Transit Center, E-18 is found at its southern terminus. In aggregate, there are no missing increments (e.g., there are 18 stops here).
+
+
+```{r}
+make_hist <- function(data, yvar, bins = 10, facet = TRUE,titletext = NULL){
+  
+  if ("sf" %in% class(data)){
+    data <- st_drop_geometry(data)
+  }
+  
+  p <-
+    data %>%
+    filter(stop_window != "X-1") %>%
+    ggplot(., aes(x = {{yvar}})) +
+    geom_density() +
+    ggtitle(titletext) +
+    FITP_Theme
+  
+  if (facet){
+  p <- p +
+    facet_wrap(vars(stop_window))
+  }
+  p
+}
+
+use_secs_val <- rlang::quo(prev_seconds_marginal)
+
+```
+
+##### Calcs based on Previous Seconds
+
+Moving forward, we'll assume that when we see a record showing an open door, all time between that record and the previous record will be associated with an open door status. Later, we'll reverse this choice and assume time *after* the door open record (until the next change in status) is associated with the door being open. A similar principle will be applied to the stop window variable. While using the time *after* the door open flag is seen is more intuitive for this context, in earlier examinations of speed and distance traveled during various door states, we found inconsistent indications of how to treat this lead vs. lag question.
+
+Let's aggregate our data to the run-stop-door_status level for further analysis.
+```{r}
+rawnav_s9_01_stops <-
+  rawnav_s9_01 %>%
+  st_drop_geometry() %>%
+  filter(stop_window != "X-1") %>%
+  group_by(stop_window,door_state,id) %>%
+  summarize(tot_secs = sum(!!use_secs_val, na.rm = TRUE),
+            max_secs = max(!!use_secs_val, na.rm = TRUE)) %>%
+  mutate_at(
+    vars(tot_secs,max_secs),
+    ~ if_else(is.infinite(.),0,.)) %>%
+  arrange(desc(tot_secs))
+
+rawnav_s9_01_stops %>% head(n=10)
+```
+
+ In general, we see that the first and last stop have lots of time in the stop window.To keep our exploratory analysis simple, we'll filter out the first and last stop.
+
+```{r}
+rawnav_s9_01_stops_fil <-
+  rawnav_s9_01_stops %>%
+  filter(!(stop_window %in% c("E01","E18")))
+
+```
+
+
+Next, let's look at the overall distribution of time at any given stop for a particular run.
+```{r}
+rawnav_s9_01_stops_fil %>%
+  group_by(id,stop_window) %>% #adding closed and open time together at each stop
+  summarize(tot_secs = sum(tot_secs, na.rm =TRUE)) %>%
+  make_hist(tot_secs, facet = FALSE, titletext = "Distribution of Time (Seconds) at Stops Over All Stops and Runs")
+```
+
+We still see a long tail of stop window time. On average across our runs, we see about 35 seconds in a stop window, or 28 seconds at the median (again, filtering out the first and last stop and on the previously stated assumption about how time is associated to records)
+```{r}
+out <-
+  rawnav_s9_01_stops_fil %>%
+  group_by(id,stop_window) %>% #adding closed and open time together at each stop
+  summarize(tot_secs = sum(tot_secs, na.rm =TRUE))
+
+out %>%
+  ungroup() %>%
+  select(tot_secs) %>%
+  summary()
+```
+
+```{r}
+the95th <- quantile(out$tot_secs,.95) %>% as.vector() %>% ceiling()
+```
+
+
+Let's look at the distribution by stop. We'll filter out time greater than `r the95th` seconds (the 95th percentile) in the stop window. 
+
+```{r}
+rawnav_s9_01_stops_fil %>%
+  group_by(id,stop_window) %>% #adding closed and open time together at each stop
+  summarize(tot_secs = sum(tot_secs, na.rm =TRUE)) %>%
+  filter(tot_secs < the95th) %>%
+  make_hist(yvar = tot_secs,
+            facet = TRUE, 
+            titletext = "Distribution of Time (Seconds) Over All Runs, by Stop")
+```
+
+How about just time in the stop window with the door open? This is our approximation of boarding and alighting time. On average, runs spend 12 seconds with their door open (excluding first and last stop and using calculation method discussed earlier)
+
+```{r}
+
+out <-
+  rawnav_s9_01_stops_fil %>%
+  filter(door_state == "O") 
+
+out %>% 
+  ungroup() %>%
+  select(tot_secs) %>%
+  summary()
+```
+
+We'll show only door open time within the 95th percentile.
+```{r}
+the95th <- quantile(out$tot_secs,.95) %>% as.vector() %>% ceiling()
+
+out %>%
+  filter(tot_secs < the95th) %>%
+  make_hist(yvar = tot_secs,
+            facet = FALSE,
+            titletext = "Distribution of Time (Seconds) at Stops Over All Stops and Runs")
+```
+
+And by stop:
+```{r}
+out %>%
+  filter(tot_secs < the95th) %>%
+  make_hist(yvar = tot_secs,
+            facet = TRUE,
+            titletext = "Distribution of Time (Seconds) Over All Runs, by Stop")
+```
+
+Under these assumptions, we see quite little time with doors open for the S9. 
+
+
+##### Calcs based on Next Seconds
+
+Next, we rerun the earlier sets of charts for a door state of 'open' using the time following a door state of "open". 
+
+```{r}
+use_secs_val <- rlang::quo(next_seconds_marginal)
+
+rawnav_s9_01_stops_fil <-
+  rawnav_s9_01 %>%
+  st_drop_geometry() %>%
+  filter(stop_window != "X-1") %>%
+  group_by(stop_window,door_state,id) %>%
+  summarize(tot_secs = sum(!!use_secs_val, na.rm = TRUE),
+            max_secs = max(!!use_secs_val, na.rm = TRUE)) %>%
+  mutate_at(
+    vars(tot_secs,max_secs),
+    ~ if_else(is.infinite(.),0,.)) %>%
+  arrange(desc(tot_secs)) %>%
+  filter(!(stop_window %in% c("E01","E18")))
+
+rawnav_s9_01_stops %>% head(n=10)
+```
+
+```{r}
+
+out <-
+  rawnav_s9_01_stops_fil %>%
+  filter(door_state == "O") 
+
+out %>% 
+  ungroup() %>%
+  select(tot_secs) %>%
+  summary()
+
+```
+
+```{r}
+the95th <- quantile(out$tot_secs,.95) %>% as.vector() %>% ceiling()
+
+out %>%
+  filter(tot_secs < the95th) %>%
+  make_hist(yvar = tot_secs,
+            facet = FALSE,
+            titletext = "Distribution of Time (Seconds) at Stops Over All Stops and Runs")
+```
+
+And by stop:
+```{r message=FALSE, warning=FALSE}
+out %>%
+  filter(tot_secs < the95th) %>%
+  make_hist(yvar = tot_secs,
+            facet = TRUE,
+            titletext = "Distribution of Time (Seconds) Over All Runs, by Stop")
+```
+E04 data is not shown because there are few observations of an open door state at that stop.
+
+#### Conclusions
+
+* Whereas the vehicle_state field provided implausible amounts of time "stopped", the dwell time values seem plausible at a glance.
+* Using the previous interval of time to calculate door open time resulted in door open times of only 4 seconds on average, an implausibly low figure. Using the leading interval resulted in door open times averaging 12 seconds, a more reasonable figure. Using the leading interval approach going forward appears more plausible based on this preliminary look at the S9 Southbound.
+
+#### For future research
+
+* What should we think of a door state of "O"/Open outside of a stop window? Does the rawnav stop window (or M. Eichler's approach for filling this column's missing values) need to be reevaluated?
+* Time breakdown in stop window: decelerating, stopped, doors open, doors closed, accelerating, etc.
+* What time of day effects are there (will need larger sample)?
+* How would reevaluating the stop_window and then calculating these stats affect results.
+* Are these results consistent with bus state data?
