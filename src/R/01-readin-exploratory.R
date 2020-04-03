@@ -17,13 +17,21 @@ rawnav_raw <-
   ) %>%
   janitor::clean_names()
 
-rawnav_interim <- 
+empty <- st_as_sfc("POINT(EMPTY)")
+
+#Note, this is a little untidy -- transformations tacked on as we continued
+#exploratory analysis
+rawnav_interim_1 <- 
   rawnav_raw %>%
   st_as_sf(., 
            coords = c("lon_fixed", "lat_fixed"),
            crs = 4326L, #WGS84
            agr = "constant",
            remove = FALSE) %>%
+  mutate(geometry = if_else(lon_fixed == 0,
+                            st_cast(empty,"GEOMETRY"),
+                            st_cast(geometry,"GEOMETRY"))) %>%
+  st_set_crs(wgs84CRS) %>%
   #cleaning up a few fields into posixct
   mutate(run_start_time_pxct = lubridate::mdy_hms(paste0(run_date," ",run_start_time)),
          gps_reading_time_pxct = lubridate::dmy_hms(gps_reading_time),
@@ -36,17 +44,33 @@ rawnav_interim <-
   #Coudl assume defaults are 0, but a bit cleaner to use NA and show we don't know
   mutate(prev_odo_feet_marginal = odo_feet - lag(odo_feet, default = NA),
          prev_seconds_marginal = time_seconds - lag(time_seconds, default = NA),
+         next_seconds_marginal = lead(prev_seconds_marginal, default = NA),
          prev_mph = (prev_odo_feet_marginal / 5280) / (prev_seconds_marginal / 3600),
          prev_mph = ifelse(is.nan(prev_mph),NA,prev_mph),
          prev_accel =  (prev_mph - lag(prev_mph, default = NA)) / prev_seconds_marginal - lag(prev_seconds_marginal, default = NA),
          prev_accel = ifelse(is.nan(prev_accel),NA,prev_accel),
          next_mph = lead(prev_mph, default = NA), 
-         next_accel = lead(prev_accel, default = NA)
-         ) %>%
+         next_accel = lead(prev_accel, default = NA)) 
+
+#Note, still grouped
+rawnav_interim <-
+  rawnav_interim_1 %>%
+  st_transform(DCCRS) %>%
+  mutate(geometry_lag = lag(geometry, default = empty),
+         prev_measured_feet_marginal = 
+           units::set_units(
+             st_distance(geometry,geometry_lag, by_element = TRUE),
+             "ft")
+  ) %>%
+  replace_na(list(prev_measured_feet_marginal = 0)) %>%
+  mutate(
+    measured_feet = cumsum(prev_measured_feet_marginal)
+  )  %>%
   ungroup() %>%
   mutate_at(vars(door_state,vehicle_state),
             factor) %>%
-  fastDummies::dummy_cols(select_columns = c("door_state","vehicle_state")) %>%
+  mutate(diff_marginal = prev_measured_feet_marginal - prev_odo_feet_marginal,
+         diff_cumulative = measured_feet - odo_feet) %>%
   st_as_sf()
 
 #Grab GTFS data for later
