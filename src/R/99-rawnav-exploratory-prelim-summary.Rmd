@@ -267,7 +267,7 @@ rawnav_mph_stop %>%
   rename(`_` = prev_mph_zero)
 ```
 
-We might expect these cases to arise if the vehicle is still decelerating ahead of a complete stop. Of these 489 observations where the vehicle is moving between the previous and current observation with a rawnav status of stopped, we nevertheless find several descrepancies:
+We might expect these cases to arise if the vehicle is still decelerating ahead of a complete stop. Of these 489 observations where the vehicle is moving between the previous and current observation with a rawnav status of stopped, we nevertheless find several discrepancies:
  
  * 146 records where the vehicle's next status was 'moving' and had positive speed. 
  * 14 records where the vehicle's next status was 'stopped' and had positive speed.
@@ -399,7 +399,7 @@ rawnav_s9_01 %>%
         viewer.suppress = viewersupp)
 ```
 
-The dwell time distribution by stop is shown below. The first and last stop are not shown, and dwell times above the 95th percentil have been removed.
+The dwell time distribution by stop is shown below. The first and last stop are not shown, and dwell times above the 95th percentile have been removed.
 
 ```{r message=FALSE, warning=FALSE}
 out %>%
