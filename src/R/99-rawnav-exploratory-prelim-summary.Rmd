@@ -1,0 +1,23 @@
+---
+title: "WMATA Queue Jump Effectiveness: Preliminary Rawnav Data Findings"
+output: 
+  html_notebook:
+    toc: true
+    toc_depth: 5
+    toc_float: yes
+    df_print: paged
+    number_sections: false
+    theme: simplex
+date: "Updated April 2, 2020"
+---
+
+This document summarizes the results of several detailed explorations of WMATA's fine-grained AVL ('rawnav') data. The preliminary findings here are based on a sample of cleaned data provided by WMATA to the project team. These findings will later be reexamined using rawnav data cleaned using the parser developed for this Queue Jump Effectiveness study. 
+
+Preliminary findings:
+
+* **Stop Window: Stop windows as defined in rawnav data lead up to a stop, but sometimes extend past**. In rawnav source data, a value is present in the stop window field each time the value changes, but is otherwise null. In the data cleaning process, these statuses are propagated to other records. Because of consistency concerns with the stop window field --the window -- the project team may define stop windows based on a buffer around stops or other similar method, rather than relying on the rawnav data itself.
+* **GPS Accuracy and Heading: GPS pings appear to show movement in and out of curb lanes.** For example, at the 16th Street and U St NW intersection in the northbound direction, one bus run's worth of rawnav GPS records appear to show the bus pulling aside to enter the bus zone. GPS headings also help to indicate that a bus has entered and exited a bus zone. Whether these GPS pings are accurate enough to determine whether the curb lane has been used for all or most runs remains to be determined.
+* **GPS and Odometer-based distance traveled: GPS-based distances are broadly consistent with odometer-based distances, with key exceptions**. Urban canyon effects near the Silver Spring Transit Center are a major source of differences, but small differences can also arise in other circumstances. In particular, after a vehicle departs a stop, the odometer may indicate the vehicle is moving while the GPS location remains unchanged. As a result, GPS-based distances can 'lag' behind odometer-based distances before 'catching up'. This phenomenon may be important to consider when evaluating small changes in speed and movement through an intersection. If GPS-based distances and speeds are used, it may be important to aggregate several rawnav records together to obtain more accurate speed and distance values.  
+* **Vehicle State: A status of 'stopped' is generally only seen at bus stops.** Given normal traffic conditions, buses will stop at some signalized intersections or be delayed by queues of traffic. However, a brief examination of rawnav data shows that S9 vehicles are typically only stopped at bus stop locations.
+* **Vehicle State: The vehicle state (moving or stopped) is not entirely consistent with the speed of the vehicle.** As a result, the speed of the vehicle is also not consistent with the door state (open or closed). The rawnav data itself does not provide a speedometer-based instantaneous speed value that the AVL device might "see" to categorize the vehicle state. As a result, the speed must be calculated based on the time and distance between two observations. These speeds over short intervals can therefore be inconsistent with a vehicle state (moving or stopped) recorded at particular points of time. Based on this preliminary finding, the project team will likely categorize the vehicle state as 'stopped' or 'moving' based on odometer or GPS data rather than the rawnav vehicle state field.
+* **Door State: The time a vehicle spends with its door open at stops as recorded in rawnav data is plausible**. Calculations of door open time were tested as both A) the time between a door state of 'open' and the previous observation and B) the time between a door state of 'open' and the next observation. Using the latter method, we find an average of 12 seconds of door open time per stop for S9 Southbound trips in the sampled data. These results have not yet been checked against door open and dwell time in other sources of data.
