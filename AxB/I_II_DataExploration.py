@@ -23,6 +23,7 @@ import numpy as np
 import os 
 import sys
 import datetime as dt
+import pyproj
 sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL\AxB")
 sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL")
 from MapBox_Token import retMapBoxToken
@@ -30,17 +31,17 @@ import folium
 from folium.plugins import MarkerCluster
 from folium import plugins
 # User Defined Functions
-from CommonFunctions_AVL import is_numeric
-from CommonFunctions_AVL import FindFirstTagLine
-from CommonFunctions_AVL import RemoveCAL_APC_Tags
-from CommonFunctions_AVL import GetTagInfo
-from CommonFunctions_AVL import AddTripStartEndTags
-from CommonFunctions_AVL import TripSummaryStartEnd
-from CommonFunctions_AVL import PlotTripStart_End
+from I_III_CommonFunctions_DataExploration import is_numeric
+from I_III_CommonFunctions_DataExploration import FindFirstTagLine
+from I_III_CommonFunctions_DataExploration import RemoveCAL_APC_Tags
+from I_III_CommonFunctions_DataExploration import GetTagInfo
+from I_III_CommonFunctions_DataExploration import AddTripStartEndTags
+from I_III_CommonFunctions_DataExploration import TripSummaryStartEnd
+from I_III_CommonFunctions_DataExploration import PlotTripStart_End
 
 
 
-os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL\AxB')
+os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data')
 Debug = True
     
 # 1 Read Data
@@ -171,17 +172,86 @@ writer.save()
 
 
 
+for key,value in SummaryDataDict.items():
+    value1 = value.copy()
+    value1[['TripDurationFromTags','TripDurationFromRawData']] = \
+    value1[['TripDurationFromTags','TripDurationFromRawData']].applymap(lambda x: x.total_seconds())
+    value1.to_excel(writer,key,index=False)
+writer.save()
+        
+
+
+#Cut Trips using GTFS data
+##############################################################################################################################
+TestDat1 = ProcessedRawDataDict['06431190501']
+TestDat1.columns
+TestDat1.loc[:,"route_id"] = TestDat1.Tag.apply(lambda x: x[0:2])
+TestDat1.loc[:,"direction_id"] = -999
+TestDat1.loc[TestDat1.route_id=="79",'direction_id'] = TestDat1.loc[TestDat1.route_id=="79",'Tag'].apply(lambda x: x[2:4])
+TestDat1.direction_id = TestDat1.direction_id.astype(int)
+sum(TestDat1.route_id=="79")
+def DirectionNm79(x):
+    retDir = ""
+    if(x==1):
+        retDir = "inbound"
+    elif(x==2):
+        retDir = "outbound"
+    else:
+        retDir = ""
+    return(retDir)
+TestDat1.loc[:,"dir_Nm"] = TestDat1.direction_id.apply(DirectionNm79)
+TestDat1.dir_Nm.value_counts()
+os.getcwd()
+stopData = pd.read_csv('StopDetails.csv')
+def Gtfs_DirectionNm79(x):
+    retDir = ""
+    if(x==1):
+        retDir = "inbound"
+    elif(x==0):
+        retDir = "outbound"
+    else:
+        retDir = ""
+    return(retDir)
+stopData.loc[:,"dir_Nm"] = stopData.direction_id.apply(Gtfs_DirectionNm79)
+stopData.route_id =stopData.route_id.astype(str)
+stopData.dir_Nm.value_counts()
+stopData.set_index("dir_Nm",inplace=True) 
+stopDataDict = stopData.to_dict(orient='index')
+sum(stopData.route_id=="79")
+
+# TestDat1 = TestDat1.merge(stopData, on =['route_id',"dir_Nm"],how="left")
+TestDat1[TestDat1.route_id=="79"]
+TestDat1.columns
 
 
 
+def GetDistanceFromStart_Rt79(row,StopDict):
+    distance_meter = -999
+    if row.dir_Nm in(['inbound','outbound']):
+        lat1 = row['Lat']; long1 = row['Long']
+        lat2 = StopDict[row.dir_Nm]['first_sLat']; long2 = StopDict[row.dir_Nm]['first_sLon']
+        geodesic = pyproj.Geod(ellps='WGS84')
+        fwd_azimuth,back_azimuth,distance_meter = geodesic.inv(lat1, long1, lat2, long2)
+    return(distance_meter)
 
+def GetDistanceFromEnd_Rt79(row, StopDict):
+    distance_meter = -999
+    if row.dir_Nm in(['inbound','outbound']):
+        lat1 = row['Lat']; long1 = row['Long']
+        lat2 = StopDict[row.dir_Nm]['last_sLat']; long2 = StopDict[row.dir_Nm]['last_sLon']
+        geodesic = pyproj.Geod(ellps='WGS84')
+        fwd_azimuth,back_azimuth,distance_meter = geodesic.inv(lat1, long1, lat2, long2)
+    return(distance_meter)
+TestDat1.loc[:,"Dist_from_1stStop"] = TestDat1.apply(lambda x: GetDistanceFromStart_Rt79(x,stopDataDict), axis=1) *3.28084
+TestDat1.loc[:,"Dist_from_lastStop"] = TestDat1.apply(lambda x: GetDistanceFromEnd_Rt79(x,stopDataDict), axis=1) * 3.28084
 
+TestDat1.Dist_from_1stStop.describe()
+TestDat1.Dist_from_lastStop.describe()
 
-
-
-
-
-
-
-
-
+CheckDat1 = TestDat1[(TestDat1.Dist_from_1stStop < 2000)&(TestDat1.Dist_from_1stStop > 0)]
+CheckDat1.set_index(['Tag','IndexTripTags','IndexLoc'],inplace=True)
+CheckDat1.columns
+CheckDat1 = CheckDat1[[ 'Lat', 'Long', 'Heading', 'DoorState', 'VehState',
+       'OdomtFt', 'SecPastSt', 'SatCnt', 'StopWindow','dir_Nm', 'Dist_from_1stStop',
+       'Dist_from_lastStop']]
+CheckDat1.to_excel("./ProcessedData/Sample_Route79_Stop_2000ft.xlsx")
