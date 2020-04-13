@@ -6,31 +6,52 @@ Created on Thu Apr  2 12:35:10 2020
 """
 
 #0.0 Housekeeping. Clear variable space
-from IPython import get_ipython  #run magic commands
-ipython = get_ipython()
-ipython.magic("reset -f")
-ipython = get_ipython()
+# from IPython import get_ipython  #run magic commands
+# ipython = get_ipython()
+# ipython.magic("reset -f")
+# ipython = get_ipython()
 
 #1 Import Libraries
-####################################
+########################################################################################
 import pandas as pd, os, numpy as np, pyproj
 
+#2 Read the Data
+########################################################################################
 os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data')
 GTFS_Dir = "./google_transit"
-
-
 StopsDat= pd.read_csv(os.path.join(GTFS_Dir,"stops.txt"))
 StopTimeDat = pd.read_csv(os.path.join(GTFS_Dir,"stop_times.txt"))
 TripsDat =pd.read_csv(os.path.join(GTFS_Dir,"trips.txt"))
-
-
 StopsDat= StopsDat[['stop_id','stop_name','stop_lat','stop_lon']]
 StopTimeDat = StopTimeDat[['trip_id','arrival_time','departure_time','stop_id','stop_sequence','pickup_type','drop_off_type']]
 TripsDat = TripsDat[['route_id','service_id','trip_id','trip_headsign','direction_id']]
-
-
 with pd.option_context('display.max_rows', 5, 'display.max_columns', 10):
     display(StopTimeDat)
+
+#3 Analyze the Trip Start and End
+########################################################################################
+#trip_id is a unique identifier irrespective of the route
+TripsDat.trip_id = TripsDat.trip_id.astype(str)
+StopTimeDat.trip_id = StopTimeDat.trip_id.astype(str)
+# 0: travel in one direction; 1 travel in opposite direction
+TripSumDa = TripsDat.groupby(['route_id','direction_id','trip_headsign']).count().reset_index()
+Merdat = TripsDat.merge(StopTimeDat,on="trip_id",how='inner')
+Merdat = Merdat.merge(StopsDat,on= "stop_id")
+
+FirstStopDat = Merdat.groupby(['route_id','direction_id','trip_headsign']).first()
+
+
+
+LastStopDat = Merdat.groupby('trip_id')['stop_sequence'].max().reset_index()
+
+
+
+
+
+
+
+#4 Subset Data for Route 79
+########################################################################################
 
 TripsDat = TripsDat[TripsDat.route_id=="79"]
 TripsDat.trip_id = TripsDat.trip_id.astype(str)
