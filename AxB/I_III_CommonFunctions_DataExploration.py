@@ -13,9 +13,6 @@ import linecache
 import numpy as np
 import pandas as pd
 import datetime as dt
-sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL")
-from MapBox_Token import retMapBoxToken # Function for getting my Mapbox Token. I didn't save the 
-# token on github repo
 import folium
 from folium.plugins import MarkerCluster
 import io 
@@ -97,6 +94,8 @@ def FindFirstTagLine_ZipFile(ZipFolder, ZipFile1):
     HasCorrectBusID: Bool
         Boolean to check if the Bus ID is correct in the 1st line
     '''
+    #WT: paths are fun: https://bugs.python.org/issue26283
+    # ZipFile1Slash = ZipFile1.replace('\\', '/')
     zf = zipfile.ZipFile(ZipFolder)
     # Get BusID
     pat  = re.compile('rawnav(.*).txt') 
