@@ -34,7 +34,8 @@ from folium import plugins
 if os.getlogin() == "WylieTimmerman":
     path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL\AxB"
     path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
-    path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
+    # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
+    path_source_data = r"C:\Downloads\Vehicles 0-2999\Vehicles 0-2999"
     path_processed_data = os.path.join(path_sp,r"Client Shared Folder\data\02-processed")
     os.chdir(os.path.join(path_working))
 else:

@@ -16,7 +16,25 @@ ipython = get_ipython()
 import pandas as pd, os, numpy as np, pyproj, sys, zipfile, glob
 from geopy.distance import geodesic
 from collections import defaultdict
-sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL\AxB")
+
+if os.getlogin() == "WylieTimmerman":
+    path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL\AxB"
+    path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
+    # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
+    path_source_data = r"C:\Downloads\Vehicles 0-2999\Vehicles 0-2999"
+    path_processed_data = os.path.join(path_sp,r"Client Shared Folder\data\02-processed")
+    os.chdir(os.path.join(path_working))
+    GTFS_Dir = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\wmata-2019-05-18 dl20200205gtfs")
+    ZippedFilesLoc = path_source_data
+else:
+    breakpoint() #I broke your paths, sorry! you'll want to set at least path_processed_data,
+    #and set your working directory to wherever AxB is for you
+    sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL\AxB")
+    os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data')
+    GTFS_Dir = "./google_transit"
+    ZippedFilesLoc = './October 2019 Rawnav/Vehicles 0-2999'
+
+
 from I_III_CommonFunctions_DataExploration import FindFirstTagLine_ZipFile
 from I_III_CommonFunctions_DataExploration import RemoveCAL_APC_Tags
 from I_III_CommonFunctions_DataExploration import GetTagInfo
@@ -27,16 +45,15 @@ from I_III_CommonFunctions_DataExploration import GetDistanceforTripSummaryDat
 from I_III_CommonFunctions_DataExploration import GetDistanceLatLong_ft
 #2 Read the Data
 ########################################################################################
-os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data')
-GTFS_Dir = "./google_transit"
+
 StopsDat= pd.read_csv(os.path.join(GTFS_Dir,"stops.txt"))
 StopTimeDat = pd.read_csv(os.path.join(GTFS_Dir,"stop_times.txt"))
 TripsDat =pd.read_csv(os.path.join(GTFS_Dir,"trips.txt"))
 StopsDat= StopsDat[['stop_id','stop_name','stop_lat','stop_lon']]
 StopTimeDat = StopTimeDat[['trip_id','arrival_time','departure_time','stop_id','stop_sequence','pickup_type','drop_off_type']]
 TripsDat = TripsDat[['route_id','service_id','trip_id','trip_headsign','direction_id']]
-with pd.option_context('display.max_rows', 5, 'display.max_columns', 10):
-    display(StopTimeDat)
+# with pd.option_context('display.max_rows', 5, 'display.max_columns', 10):
+#     display(StopTimeDat)
 
 #3 Analyze the Trip Start and End
 ########################################################################################
@@ -83,7 +100,7 @@ CheckLastStop1 = LastStopDat.groupby(['route_id','direction_id','trip_headsign',
 First_Last_Stop = CheckFirstStop.merge(CheckLastStop,left_index=True,right_index=True,how='left')
 #Check stops Data
 #########################################
-OutFi = './ProcessedData/First_Last_Stop.xlsx'
+OutFi = os.path.join(path_processed_data,'First_Last_Stop.xlsx')
 writer = pd.ExcelWriter(OutFi)
 First_Last_Stop.to_excel(writer,'First_Last_Stop')
 CheckFirstStop1.to_excel(writer,'First_Stop')
@@ -98,18 +115,23 @@ FirstStopDat1 =FirstStopDat.drop(columns=dropCols)
 FirstStopDat1 = FirstStopDat1.groupby(['route_id','first_stopId','first_stopNm']).first()
 LastStopDat1 =LastStopDat.drop(columns=dropCols)        
 LastStopDat1 = LastStopDat1.groupby(['route_id','last_stopId','last_stopNm']).first()
-FirstStopDat1.to_csv('./ProcessedData/FirstStopGTFS.csv')
-LastStopDat1.to_csv('./ProcessedData/LastStopGTFS.csv')
+FirstStopDat1.to_csv(os.path.join(path_processed_data,'FirstStopGTFS.csv'))
+LastStopDat1.to_csv(os.path.join(path_processed_data,'LastStopGTFS.csv'))
 
 #5 Only Read RawNav Files for selected routes
 ########################################################################################
-os.getcwd()
-TripInventory = pd.read_excel('./ProcessedData/TripSummaries_Veh0_2999 V1.xlsx','SummaryData')
+
+
+TripInventory = pd.read_excel(os.path.join(path_processed_data,'TripSummaries_Veh0_2999.xlsx'),'SummaryData')
 TripInventory.loc[:,'route_id'] = TripInventory.Tag.str[0:2].str.upper()
 TripInventory.columns
 AnalysisRoutes = ['79','X2','X9']
 MaskAnalysisRoutes = TripInventory.route_id.isin(AnalysisRoutes)
 TripInventory = TripInventory[MaskAnalysisRoutes]
+
+if len(TripInventory) == 0:
+    raise Exception ("No Analysis Routes found in TripInventory")
+
 TripInventory1 = TripInventory.groupby(['route_id','FileNm'])['BusID'].count().reset_index()
 
 RawNavDataDict= defaultdict(lambda:  {})
@@ -117,21 +139,17 @@ RawNavDataDict= defaultdict(lambda:  {})
 for idx, row in TripInventory1.iterrows():
     RawNavDataDict[row['route_id']][row['FileNm']] = pd.DataFrame()
 
-
-
 FirstTagDict = {}
-ZippedFilesLoc = './October 2019 Rawnav/Vehicles 0-2999'
-os.chdir(ZippedFilesLoc)
-os.getcwd()
+
 for FileNm_int, EmptyDf in RawNavDataDict['79'].items():
-    ZipFolder = glob.glob(f'rawnav*{FileNm_int}.txt.zip')[0]
-    ZipFile1 =  ZipFolder.split('.zip')[0]
+    ZipFolder = os.path.join(path_source_data,"rawnav" + str(FileNm_int).rjust(11,'0') + '.txt.zip')
+    ZipFile1 = os.path.basename(ZipFolder.split('.zip')[0]) 
     FistTagLnNum, FirstTagLine, StartTimeLn,HasData,HasCorrectBusID = FindFirstTagLine_ZipFile(ZipFolder, ZipFile1)
     zf = zipfile.ZipFile(ZipFolder)
     RawNavDataDict['79'][FileNm_int] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
     FirstTagDict[FileNm_int] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
 
-os.chdir('../../')
+
 # os.getcwd()
 # Analyze Route 79
 FirstStopDat1 = FirstStopDat1.reset_index()[['route_id','first_sLat','first_sLon']]
@@ -247,8 +265,8 @@ for key,TestData in RawNavDataDict[rte_id].items():
     
 FinSumDat = pd.concat(ProcessedDataDict[rte_id].values())
 FinSumDat =FinSumDat.merge(TripInventory, on =['FileNm','TripStartTime'],how='left')
-FinSumDat.to_excel('./ProcessedData/Route79_TrimSum.xlsx')
-os.getcwd()
+FinSumDat.to_excel(os.path.join(path_processed_data,'Route79_TrimSum.xlsx'))
+
     
     
 # X---Misc Subset Data for Route 79
@@ -305,6 +323,6 @@ fwd_azimuth,back_azimuth,distance = geodesic.inv(FinStopDat.first_sLat[1], FinSt
 
 
 
-FinStopDat.to_csv("./StopDetails.csv",index=False)
+FinStopDat.to_csv(os.path.join(path_processed_data,"StopDetails.csv"),index=False)
 
 
