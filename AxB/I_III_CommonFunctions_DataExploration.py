@@ -5,6 +5,7 @@ Functions used in the AVL data analysis
 @author: abibeka
 """
 
+import sys
 from itertools import islice
 import zipfile
 import re
@@ -12,7 +13,9 @@ import linecache
 import numpy as np
 import pandas as pd
 import datetime as dt
-from MapBox_Token import retMapBoxToken
+sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL")
+from MapBox_Token import retMapBoxToken # Function for getting my Mapbox Token. I didn't save the 
+# token on github repo
 import folium
 from folium.plugins import MarkerCluster
 import io 
@@ -355,8 +358,13 @@ def PlotTripStart_End(SumDat,StartGrp,EndGrp):
         
         
 #https://github.com/geopy/geopy
+# Make this function Generic ---later
 def GetDistanceforTripSummaryDat(row):
     StartLat, StartLong, EndLat, EndLong = row['StartLat'], row['StartLong'], row['EndLat'], row['EndLong']
     distance_miles = -999
     distance_miles = geodesic((StartLat, StartLong), (EndLat, EndLong)).miles
     return(distance_miles)
+
+def GetDistanceLatLong_ft(Lat1, Long1, Lat2, Long2):
+    distance_ft = geodesic((Lat1, Long1), (Lat2, Long2)).feet
+    return(distance_ft)

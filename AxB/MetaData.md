@@ -1,3 +1,7 @@
+#Metadata
+
+##RawNav File
+
 here's a copy paste from our internal knowledge base:
 The filename uses the standard Clever naming convention
 Rawnav – 5 digits for the bus ID – date string
@@ -30,3 +34,27 @@ The main set of data is located in rows that look like this:
 12th column – Longitude GGA – raw gps (only different in ivn2s)
 In looking at this data, there seems to be a min threshold in both distance difference and or time before it records a position.  This can be every second or every few seconds depending if the bus was in motion or not.  It is a lot of data, but it is probably the largest set of navigation data collected by the vehicle. 
 
+## RawNav identifiers ands direction:
+DH 01 : 01 is inbound (Deadheading: No passenger ---No stop)
+XX 02: 02 is outbound
+ 
+S9
+01 :Inbound Short
+02: Outbound Short
+03: Inbound Long
+04: Outbound Long  
+
+PO: Pull-out of garage at the start of trip
+PI03114,6431,04/30/19,17:32:33,45145,05280
+PI: Pull-in to a garage at the end of trip.
+Some of the information about the data is as follows: 
+- PO stands for “pull-out” 
+- All dates and times are relative to PO 
+- 7901 -> Route 79, Pattern 01 
+- E01 indicates entering stop window 
+- The windows is 1000ft from either side of stop 
+- X-1 is leaving stop window 
+
+## GTFS Data
+- Direction: 0 is likely NB and EB and 1 is likely SB and WB
+------------------------------------------------------------------------------------
