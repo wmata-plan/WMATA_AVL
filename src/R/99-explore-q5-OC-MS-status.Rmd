@@ -1,0 +1,268 @@
+---
+title: "Rawnav Data: Vehicle State Comparison"
+output: 
+  html_notebook:
+    toc: true
+    toc_depth: 5
+    toc_float: yes
+    df_print: paged
+    number_sections: false
+    theme: simplex
+date: "Updated March 24, 2020"
+---
+
+This notebook explores some preliminary questions about rawnav data using rawnav data previously cleaned by WMATA, in particular those questions in group 5 related to the vehicle state (Door Open ("O") vs. Close ("C")) and door state (Stopped ("S") vs. In Motion ("M")) fields.
+
+**Key Takeaways**:
+
+* **The door state (open or closed) and vehicle state (moving or stopped) are broadly consistent.** When the door is open, the vehicle is always stopped. When the door is closed, the vehicle is usually moving, but sometimes stopped.
+* **The vehicle state (moving or stopped) is not entirely consistent with the speed of the vehicle calculated from the rawnav odometer and time values.** As a result, the speed of the vehicle is also not consistent with the door state (open or closed). A lack of clarity here is due in part due to the fact that we do not know how the AVL determines the vehicle is moving or stopped. The rawnav data itself does not provide an speedometer speed value that the AVL device might be "seeing" to categorize the vehicle state. 
+* **An attempt to associate time values to vehicle status (e.g., "stopped") results in implausible lengths of time stopped for some trips**. If we take the time between the a given rawnav record and the previous record for all given records that show "Stopped", some S9 trips show as little as one minute of stopping in a run. This seems implausible.
+
+**Key Items for Further Discussion**
+Additional items are listed at the end of the document.
+
+* How exactly is vehicle status determined by the AVL device?
+* How do we want to associate speed with rawnav records going forward? Speed between the current observation and the previous one (more plausible) or current observation and the next one (used by Michael Eichler in his work)
+* If time and distance data are inconsistent with vehicle and door status, do we trust rawnav data to reliably tell us the length of time the door is open at a stop or how long the vehicle is stopped?  
+* If calculated speeds and vehicle/door status are inevitably going to be inconsistent, what do we do?
+  + Try to clean these cases (e.g., resetting vehicle state)
+  + Drop them out at the trip or stop-segment level, or
+  + Try to think more probabilistically about our results?
+
+
+Settings, data sources, and parameters are included in a chunk below that is not shown in this notebook.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#Load libraries and basic params in separate script
+source("00-master-exploratory.R", local = TRUE)
+source("01-readin-exploratory.R", local = TRUE)
+
+#Additional libraries
+library(extrafont)
+library(scales)
+library(patchwork)
+library(fastDummies)
+library(tibbletime)
+#First run only
+# extrafont::font_import()
+# extrafont::loadfonts(device="win")
+
+#Some parameters 
+#Suppress internal viewer for mapview (TRUE during writing, use FALSE on knitting)
+viewersupp <- FALSE
+
+#Used for replacing geometry
+empty <- st_as_sfc("POINT(EMPTY)")
+
+
+```
+
+### 5. Door Open/Closed and Moving/Stopped Status
+
+#### Are these two correlated (i.e., "S" always tied to "C"), etc.)?
+
+In general, the variables interact as you'd expect. The door is always closed while the vehicle is moving and is sometimes closed while the vehicle is stopped. A count of rawnav observations in these categories are shown below. In further tables, we'll generally show counts as the number of rawnav observations.
+```{r}
+rawnav <-
+  rawnav_interim 
+```
+
+```{r}
+rawnav %>%
+  st_drop_geometry() %>%
+  count(door_state, vehicle_state) %>%
+  mutate(door_state = factor(door_state, 
+                             labels = c("C" = "Closed",
+                                        "O" = "Open")),
+         vehicle_state = factor(vehicle_state,
+                                labels = c("M" = "Moving",
+                                           "S" = "Stopped"))) %>%
+  spread(key = "vehicle_state", value = "n") %>%
+  rename(`_` = door_state)
+```
+
+#### Can a bus stop at a signal with the "Door Close"?
+
+
+#### Are buses stopped when "Stopped"?
+
+We'll check the vehicle state "stopped" value against the speed in MPH at a given record. Speed is not an output of the rawnav data, and must be calculated from odometer (or GPS position) and time data. As a result, speeds are an average over a pair of two rawnav records A and B, e.g., (milesB - milesA) / (hoursB - hoursA). In practice, because the time intervals between two rawnav records are short, we might later decide to consider this speed the instantaneous speed at B. For the first record in a run, we'll leave the speed value missing or NA.
+
+It could be the case that a vehicle was moving between two records but has reached a complete stop by the time the second rawnav record is recorded, leading to non-zero speed and a vehicle state of 'stopped'. We'll check this possibility below. The values in the table represent individual rawnav observations. There are indeed 31 runs in the available data, so the number of records at the start of a run is as expected.
+
+```{r}
+rawnav_mph_stop <-
+  rawnav %>%
+  st_drop_geometry() %>%
+  mutate(prev_mph_zero = ifelse(prev_mph == 0,
+                                "Previously Stopped (0 MPH)", 
+                                "Previously Moving (>0 MPH)"),
+         prev_mph_zero = factor(prev_mph_zero),
+         prev_mph_zero = forcats::fct_explicit_na(prev_mph_zero, 
+                                                  na_level = "Start of Run"),
+         vehicle_state = factor(vehicle_state,
+                                labels = c("M" = "Moving",
+                                           "S" = "Stopped"))) 
+
+rawnav_mph_stop %>%
+  count(prev_mph_zero,vehicle_state) %>%
+  spread(key = "vehicle_state", value = "n") %>%
+  rename(`_` = prev_mph_zero)
+
+```
+
+Indeed, we see there are 489 records where the vehicle had speed above 0 MPH but the vehicle is flagged as stopped. We might expect that to be the case if the vehicle was moving slowly and was just about to stop. In the histogram below, speeds in these 489 cases are rounded to the nearest integer value and then counted. A number of records are well above 0 MPH. 
+```{r}
+issues <- 
+rawnav_mph_stop %>%
+  filter(vehicle_state == "Stopped", 
+         prev_mph_zero %in% c("Previously Moving (>0 MPH)"))
+
+ggplot(issues, aes(x = prev_mph)) +
+  geom_histogram(aes(prev_mph), binwidth = 1) +
+  stat_bin(binwidth = 1, geom="text", colour="blue", size=3.5,
+           aes(label=..count..), position = position_stack()) +
+  FITP_Theme +
+  scale_x_continuous(breaks = pretty_breaks(),
+                     expand = c(0,0)) +
+  labs(title = "Speeds (MPH) between previous and current rawnav observation\n when current rawnav observation is 'Stopped'\n and vehicle was Previously Moving (>0 MPH)")
+```
+
+These high speeds could arise if the time between rawnav observations is long, such that with an average speed of 5 MPH, the vehicle was previously observed at 10 MPH and had an instantaneous speed of 0 MPH at the current observation. This assumes that the ITS device that is determining the vehicle is 'stopped' has access to the speedometer of the vehicle, even though that data is not reported in the rawnav output. 
+
+If the vehicle is still moving between the previous and current observation with a status of stopped (the 489 observations earlier), we might expect the next observation to show a speed of 0 or to also have a status of stopped. Instead, we find there are still a number of unexpected cases when we drill down on the 489 records mentioned earlier (setting aside some 13 observations that occur at the end of the run).
+
+Of records that are "Stopped" and were moving between the prior rawnav record and the current record:
+
+* 316 observations had zero speed by the next observation and continued to have a status of stopped. If all cases fell into this category, this would have indicated that odometer and time data lag behind vehicle status somehow. 
+* A total of 160 records (146 + 14) are also moving between the current record and the next. Of these, 14 records also have an inconsistent speed and vehicle state in the next period. These cases show that odometer and time data are not likely to be completely reconciled with vehicle state data.
+
+```{r}
+rawnav_mph_stop %>%
+  group_by(id) %>%
+  mutate(next_speed_positive = case_when(next_mph > 0 ~ "Next Speed >0 MPH", 
+                                         next_mph == 0 ~ "Next Speed =0 MPH",
+                                         is.na(next_mph) ~ "End of Run"),
+         next_state_stopped = case_when(lead(vehicle_state) == "Stopped" ~ "Next State Stopped",
+                                        lead(vehicle_state) == "Moving" ~ "Next State Moving",
+                                        is.na(lead(vehicle_state)) ~ "End of Run")) %>%
+  ungroup() %>%
+  filter((vehicle_state == "Stopped") & 
+           (prev_mph_zero %in% c("Previously Moving (>0 MPH)"))) %>%
+  filter(next_speed_positive != "End of Run" & next_state_stopped != "End of Run") %>%
+  count(next_speed_positive,
+        next_state_stopped) %>%
+  spread(key = "next_state_stopped", value = "n")
+
+```
+
+As an aside, we see just one case where the vehicle is flagged as moving but has not moved from the previous record to the current record. Because the odometer feet value reported by rawnav data is reported as an integer, it could be the case that the vehicle has indeed moved slightly (thus flagging the vehicle as moving). Again, this assumes that the AVL device is able to categorize the vehicle as moving or stopped based on data not present in the rawnav output.
+
+```{r message=FALSE, warning=FALSE}
+rawnav_mph_stop_flag <-
+  rawnav %>%
+  mutate(flag_case = (vehicle_state == "M" & prev_mph == 0 )) 
+
+preview <-
+  rawnav_mph_stop_flag %>%
+  filter(id == 49002, between(rowno,1260,1270)) %>%
+  mutate(flag = ifelse(rowno == 1265,"this one","")) %>%
+  select(rowno,flag,prev_mph,door_state,vehicle_state,geometry) 
+
+preview %>% st_drop_geometry()
+```
+
+#### Are buses always stopped with the "Door Open"?
+Buses indeed always have vehicle status of 'stopped' with the door status 'open' as shown in an earlier crosstab. However, we also see 307 records where the vehicle is flagged as having an open door but had speed greater than 0 MPH in the last segment.
+
+```{r}
+rawnav_mph_stop %>%
+  mutate(door_state = factor(door_state, 
+                             labels = c("C" = "Closed",
+                                        "O" = "Open"))) %>%
+  count(door_state,prev_mph_zero) %>%
+  spread(key = "door_state", value = "n")
+```
+Cases also exist where the door is open and the vehicle has speed in the next observation, but these are few (3).
+```{r}
+rawnav_mph_stop %>%
+  group_by(id) %>%
+  #yes, i'm getting tired, code is not super well done here
+  mutate(door_state = factor(door_state, 
+                             labels = c("C" = "Closed",
+                                        "O" = "Open"))) %>%
+  mutate(next_speed_positive = case_when(next_mph > 0 ~ "Next Speed >0 MPH", 
+                                         next_mph == 0 ~ "Next Speed =0 MPH",
+                                         is.na(next_mph) ~ "End of Run")) %>%
+  ungroup() %>%
+  count(door_state,next_speed_positive) %>%
+  spread(key = "door_state", value = "n")
+```
+
+This might lead us to wonder if the marginal time increment associated with a rawnav 
+
+#### Are there any latency concerns with these data fields?
+The inconsistency between vehicle state and speed could be a reflection of latency, see earlier discussion. However, it seems more likely that we don't understand how vehicle status is determined relative to odometer and time values.
+
+#### Where do buses have value 'stopped' outside of stop zones? How often does this happened?
+
+Here, for records with "Stopped", we'll consider stopped time to be all of the time between the current record and the previous record. 
+
+Notably, some trips have very few seconds at all in the stop window based on this allocation of time. Trip 49260 has 57 seconds in the stop window stopped and 10 seconds out of the stop window for its entire run -- even without showing the total trip travel time, this seems implausible for a trip departing at 3:37 PM. This also indicates that the association of lagging marginal time values to "Stopped" may be inappropriate.
+
+```{r}
+rawnav_mph_stop %>%
+  filter(vehicle_state == "Stopped") %>%
+  mutate(in_stop_window = ifelse(in_stop_window == 1,
+                                 "In Stop Window",
+                                 "Out of Stop Window")) %>%
+  group_by(id,route,pattern,run_start_time, in_stop_window) %>%
+  summarize(total_seconds = sum(prev_seconds_marginal,na.rm = TRUE)) %>%
+  ungroup() %>%
+  spread(key = "in_stop_window", value = "total_seconds", fill = 0) %>%
+  mutate(`Percent Secs Stopped in Stop Window` = 
+          `In Stop Window` / (`In Stop Window` + `Out of Stop Window`)) %>%
+  arrange(desc(`Percent Secs Stopped in Stop Window`)) %>%
+  mutate(`Percent Secs Stopped in Stop Window` = percent(`Percent Secs Stopped in Stop Window`)) %>%
+  select(id, route, pattern, run_start_time, `Percent Secs Stopped in Stop Window`, everything())
+```
+
+For completeness' sake, we also see some low values when we consider the time stopped to be the time immediately following a 'Stopped' record.
+```{r}
+rawnav_mph_stop %>%
+  mutate(next_seconds_marginal = lead(prev_seconds_marginal)) %>%
+  filter(vehicle_state == "Stopped") %>%
+  mutate(in_stop_window = ifelse(in_stop_window == 1,
+                                 "In Stop Window",
+                                 "Out of Stop Window")) %>%
+  group_by(id,route,pattern,run_start_time, in_stop_window) %>%
+  summarize(total_seconds = sum(next_seconds_marginal,na.rm = TRUE)) %>%
+  ungroup() %>%
+  spread(key = "in_stop_window", value = "total_seconds", fill = 0) %>%
+  mutate(`Percent Secs Stopped in Stop Window` = 
+          `In Stop Window` / (`In Stop Window` + `Out of Stop Window`)) %>%
+  arrange(desc(`Percent Secs Stopped in Stop Window`)) %>%
+  mutate(`Percent Secs Stopped in Stop Window` = percent(`Percent Secs Stopped in Stop Window`)) %>%
+  select(id, route, pattern, run_start_time, `Percent Secs Stopped in Stop Window`, everything())
+```
+
+
+### For Further investigation and consideration
+
+* More aggregation:
+  + How many trips have these issues? 
+  + In how many stop zones do we see these, such that it might affect our results?
+* Identifying where buses are stopping outside of the bus zone -- is this at signals?
+* Check accel/decel -- what do they tell us?
+* Can we find more documenation on the rawnav output to avoid further analysis here on our own?
+* How many of these odd speed and vehicle state results are in the stop zone or out of the stop zone? We might imagine stop-and-go behavior to be more common in traffic and not in a door zone.
+* Re-visualize this using a branching tree showing the decomposition of the status.
+* It seems like calculated speeds and vehicle status are just going to be inconsistent -- do we:
+  + try to clean these cases (e.g., resetting vehicle state)
+  + drop them out at the trip or segment level, or
+  + just try to think more probabilistically about our results?
+* Write some of these checks as tests to apply against our cleaned data. 
+* How associated are these problems with other quirks we've seen in earlier exploratory analysis? Are there just 'bad' runs?
+* Occasionally there are big 'gaps' between rawnav pings (usually 1 second, sometimes over a minute). Should we have any concerns about this? 
+* How do we best associate time to vehicle status and door status?

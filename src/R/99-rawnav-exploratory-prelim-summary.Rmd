@@ -1,0 +1,413 @@
+---
+title: "WMATA Queue Jump Effectiveness: Preliminary Rawnav Data Findings"
+output: 
+  html_notebook:
+    toc: true
+    toc_depth: 5
+    toc_float: yes
+    df_print: paged
+    number_sections: false
+    theme: simplex
+---
+
+#### Summary
+
+This document summarizes the results of several detailed explorations of WMATA's fine-grained AVL ('rawnav') data. The preliminary findings here are based on a sample of cleaned data provided by WMATA to the project team. These findings will later be reexamined using a larger sample of data using rawnav data cleaned with the parser developed for this Queue Jump Effectiveness study. 
+
+Preliminary findings:
+
+1. **GPS Accuracy and Heading: GPS pings appear to show movement in and out of curb lanes.** For example, at the 16th Street and U St NW intersection in the northbound direction, one bus run's worth of rawnav GPS records appear to show the bus pulling aside to enter the bus zone. GPS headings also help to indicate that a bus has entered and exited a bus zone. Whether these GPS pings are accurate enough to determine whether the curb lane has been used for all or most runs remains to be determined.
+2. **GPS and Odometer-based distance traveled: GPS-based distances are broadly consistent with odometer-based distances, with key exceptions**. Urban canyon effects near the Silver Spring Transit Center are a major source of differences, but small differences can also arise in other circumstances. In particular, after a vehicle departs a stop, the odometer may indicate the vehicle is moving while the GPS location remains unchanged. As a result, GPS-based distances can 'lag' behind odometer-based distances before 'catching up'. This phenomenon may be important to consider when evaluating small changes in speed and movement through an intersection. If GPS-based distances and speeds are used, it may be important to aggregate several rawnav records together to obtain more accurate speed and distance values.  
+3. **Vehicle State: A status of 'stopped' is generally only seen at bus stops.** Given normal traffic conditions, buses will stop at some signalized intersections or be delayed by queues of traffic. However, a brief examination of rawnav data shows that S9 vehicles are typically only stopped at bus stop locations.
+4. **Stop Window: Stop windows as defined in rawnav data lead up to a stop, but sometimes extend past**. In rawnav source data, a value is present in the stop window field each time the value changes, but is otherwise null. In the data cleaning process, these statuses are propagated to other records. Because of consistency concerns with the stop window field --the window -- the project team may define stop windows based on a buffer around stops or other similar method, rather than relying on the rawnav data itself.
+5. **Vehicle State: The vehicle state (moving or stopped) is not entirely consistent with the speed of the vehicle.** As a result, the speed of the vehicle is also not consistent with the door state (open or closed). The rawnav data itself does not provide a speedometer-based instantaneous speed value that the AVL device might "see" to categorize the vehicle state. As a result, the speed must be calculated based on the time and distance between two observations. These speeds over short intervals can therefore be inconsistent with a vehicle state (moving or stopped) recorded at particular points of time. Based on this preliminary finding, the project team will likely categorize the vehicle state as 'stopped' or 'moving' based on odometer or GPS data rather than the rawnav vehicle state field.
+6. **Door State: The time a vehicle spends with its door open at stops as recorded in rawnav data is plausible**. Calculations of door open time were tested as both A) the time between a door state of 'open' and the previous observation and B) the time between a door state of 'open' and the next observation. Using the latter method, we find an average of 12 seconds of door open time per stop for S9 Southbound trips in the sampled data. These results have not yet been checked against door open and dwell time in other sources of data.
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#Load libraries and basic params in separate script
+source("00-master-exploratory.R", local = TRUE)
+source("01-readin-exploratory.R", local = TRUE)
+
+#Additional libraries
+library(extrafont)
+library(scales)
+library(patchwork)
+#First run only
+# extrafont::font_import()
+# extrafont::loadfonts(device="win")
+
+#Some parameters 
+#Suppress internal viewer for mapview (TRUE during writing, use FALSE on knitting)
+viewersupp <- FALSE
+
+#Used for replacing geometry
+
+knitr::opts_chunk$set(
+  cache = FALSE,
+  highlight = TRUE,
+  collapse = TRUE
+)
+
+rawnav <-
+  rawnav_interim 
+
+s9_stops <- 
+  get_route_stops(gtfs_obj,stops,"S9") 
+
+s9_nb_ss_stops <-
+  s9_stops %>%
+  filter(trip_headsign == "SILVER SPRING STATION", shape_id == "2928")
+
+s9_nb_ss_stops %>%
+  st_drop_geometry()
+```
+
+
+#### 1. GPS Accuracy and Heading
+GPS pings appear to show movement in and out of curb lanes. For example, at the 16th Street and U St NW intersection in the northbound direction, a one bus run's worth of rawnav GPS records appear to show the bus pulling aside to enter the bus zone. For reference, [Google street view of this location is available here](https://www.google.com/maps/@38.9167036,-77.0365272,3a,75y,49.33h,76.11t/data=!3m6!1e1!3m4!1sYahUtvXy7LQjhGNjKtJkWg!2e0!7i16384!8i8192).
+
+Note that because of map tile layer limitations, you cannot zoom in any further on this map. To see points more clearly, try toggling to a different base map. This stop indeed recorded a door open and close at the point where speeds are lowest in the map below.
+
+```{r}
+{rawnav %>%
+    filter(id == 48942 &
+           (gps_reading_secs_past_midnight >= 26307 |
+             gps_reading_secs_past_midnight < 26365)) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mapview(.,
+          zcol = "mph",
+          map.types = c("Esri.WorldImagery","CartoDB.Positron"))}@map %>%
+  setView( #zoom on 16th and U
+    lng = -77.0363,
+    lat = 38.9169,
+    zoom = 18
+  )
+```
+
+GPS headings also help to indicate that a bus has entered and exited a bus zone. In the case below, it appears the bus is heading north (degrees of around 3 to 5) then veers to the right (headings of 9 to 12). Upon exiting the stop zone, the bus veers to the left (headings of around 355).
+
+```{r}
+{rawnav %>%
+    filter(id == 48942 &
+           (gps_reading_secs_past_midnight >= 26307 |
+             gps_reading_secs_past_midnight < 26365)) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mapview(.,
+          zcol = "heading_deg",
+          map.types = c("Esri.WorldImagery","CartoDB.Positron"))}@map %>%
+  setView( #zoom on 16th and U
+    lng = -77.0363,
+    lat = 38.9169,
+    zoom = 18
+  )
+```
+
+Whether these GPS pings are accurate enough to determine whether the curb lane has been used for all or most runs remains to be determined.
+
+#### 2. GPS and Odometer-based Distance Traveled
+**GPS-based distances are broadly consistent with odometer-based distances, with key exceptions**. Urban canyon effects near the Silver Spring Transit Center (SSTC) are a major source of differences, but small differences can also arise in other circumstances. The charts below compare recorded distance traveled based on GPS and odometer distance at both the marginal and cumulative level for a set of S9 trips, and  exclude a trip that included obvious outliers. If the odometer (odo_feet) and measured distance (measured_feet) were equivalent, one would expect a scatterplot of values to follow the straight blue line. Values above this blue line are cases where GPS distances exceeded odometer distances and vice versa. 
+
+```{r message=FALSE, warning=FALSE}
+plot_rawnav_scatter <- function(data,xvar,yvar){
+
+    ggplot(data, 
+           aes(x = {{xvar}},
+               y = {{yvar}},
+               label1 = route,
+               label2 = pattern,
+               label3 = id,
+               label4 = run_date,
+               label5 = run_start_time)) +
+    geom_point() +
+    geom_abline(aes(intercept = 0, slope = 1),
+                color = "blue") +
+    theme_minimal() +
+    scale_x_continuous(labels = comma) + 
+    scale_y_continuous(labels = comma) +
+    FITP_Theme
+}
+
+plot_rawnav_diff_hist <- function(data,yvar, bins = 10){
+  ggplot(data, aes(x = {{yvar}})) +
+    geom_histogram(bins = bins) + 
+    FITP_Theme
+}
+
+marginal1 <- 
+  rawnav %>%
+  filter(id != 48945) %>%
+  plot_rawnav_scatter(.,prev_odo_feet_marginal,prev_measured_feet_marginal) +
+  scale_x_continuous(limits = c(0,125)) +
+  scale_y_continuous(limits = c(0,125)) +
+  labs(title = "Marginal Distances")
+
+cumulative1 <-
+  rawnav %>%
+  filter(id != 48945) %>%
+  plot_rawnav_scatter(.,odo_feet,measured_feet) +
+  scale_x_continuous(limits = c(0,40000),
+                     labels = comma) +
+  scale_y_continuous(limits = c(0,40000),
+                     labels = comma) +
+  labs(title = "Cumulative Distances")
+
+marginal1 + cumulative1
+```
+
+Detailed examination showed that cases where GPS distances greatly exceeded odometer distances were found near SSTC, but also appeared at other locations. In particular, after a vehicle departs a stop, the odometer may indicate the vehicle is moving while the GPS location remains unchanged. As a result, GPS-based distances can 'lag' behind odometer-based distances before 'catching up'. 
+
+This can be seen in the readings of trip 48945 (a Southbound S9 Trip), which had significant outliers in its differences between odometer and GPS-based readings. The map below highlights records where the difference in marginal distance between the odometer and GPS reading was greater that 15 feet. It appears the biggest differences are around Silver Spring Transit Center, but there are also a number of differences that appear near stops.
+
+```{r message=FALSE, warning=FALSE}
+s9_sb_ss_stops <- 
+  get_route_stops(gtfs_obj,
+                  stops,
+                  "S9") %>%
+  filter(trip_headsign == "FRANKLIN SQUARE", shape_id == "2944")
+
+
+map1 <- rawnav %>%
+  mutate(diff_odo_measure = (diff_marginal > 15)) %>%
+  filter(id == 48945) %>%
+  arrange(diff_odo_measure) %>%
+  st_transform(wgs84CRS) %>%
+  mapview(.,
+          zcol = "diff_odo_measure", 
+          alpha = 1,
+          viewer.suppress = viewersupp
+  ) %>%
+  leafem::addFeatures(s9_sb_ss_stops,
+                      label = ~paste0("stop_id: ",stop_id, 
+                                      "\nName: ",stop_name))
+
+map1
+```
+
+Looking at one stop in particular (ID 7901 at Missouri Avenue in the map below), the vehicle appears to stop moving where several successive purple points overlap, with the top-most point being row number (or rowno) 564. The next odometer reading at rowno 565 is yellow, indicating a measurement difference greater than 15 feet. The odometer difference between these points (odo_feet_marginal) is 25 feet, but the GPS reading indicates this is a difference of 47 feet, a difference of 22 feet (about half a bus length). By the next reading at row number 566, the marginal difference between readings is only about 1 foot. Setting aside some of the noise from the initial bus reading (which created around 2,300 feet of difference in the cumulative total), the cumulative difference in GPS and odometer readings by this point in the trip would be around 200 ft in total.
+
+```{r}
+map1 %>%
+    setView(
+    lng = -77.03645,
+    lat = 38.96168,
+    zoom = 19
+  )
+```
+
+The differences in GPS and odometer readings leaving SSTC indicate that calculations based on cumulative changes in distance based on GPS readings should be handled with care. These differences around SSTC are likely due to urban canyon effects around the structure.
+
+Because many queue jumps are found at intersections with bus stops, even small differences between GPS and odometer readings at these locations could result in different conclusions about the effectiveness of queue jumps. If GPS-based distances and speeds are used, it may be important to aggregate several rawnav records together to obtain more accurate speed and distance values. 
+
+
+#### 3. Vehicle State and Location
+**A status of 'stopped' is generally only seen at bus stops.** Rawnav data records a vehicle status with two states: moving or stopped. Given normal traffic conditions, we expect buses to stop at some signalized intersections or be delayed by queues of traffic. However, a brief examination of rawnav data shows that S9 vehicles are typically only stopped at bus stop locations.
+
+A single S9 Northbound trip during the AM Peak is shown below to illustrate the distribution of the status of 'stopped'. A few of those stop locations coincide with stops for the S2 and S4 (Geranium St NW, along Colesville Road), indicating that there may be some interactions at stops slowing the S9. Because of travel patterns at this time, we would expect the S9 to encounter less traffic delay than a southbound trip at the same time.
+```{r}
+{rawnav %>%
+  filter(id == 48942) %>% #this is an S9 NB
+  arrange(vehicle_state) %>%
+  mapview(.,
+          zcol = "vehicle_state",
+          alpha.regions = 1) %>%
+  leafem::addFeatures(.,s9_nb_ss_stops)} %>%
+  setView(
+    lng = -77.0281,
+    lat = 38.9825,
+    zoom = 15
+  )
+```
+
+A summary of these statuses for several trips is shown below. 
+```{r}
+rawnav_mph_stop <-
+  rawnav %>%
+  st_drop_geometry() %>%
+  mutate(prev_mph_zero = ifelse(prev_mph == 0,
+                                "Previously Stopped (0 MPH)", 
+                                "Previously Moving (>0 MPH)"),
+         prev_mph_zero = factor(prev_mph_zero),
+         prev_mph_zero = forcats::fct_explicit_na(prev_mph_zero, 
+                                                  na_level = "Start of Run"),
+         vehicle_state = factor(vehicle_state,
+                                labels = c("M" = "Moving",
+                                           "S" = "Stopped"))) 
+
+rawnav_mph_stop %>%
+  mutate(next_seconds_marginal = lead(prev_seconds_marginal)) %>%
+  filter(vehicle_state == "Stopped") %>%
+  mutate(in_stop_window = ifelse(in_stop_window == 1,
+                                 "In Stop Window",
+                                 "Out of Stop Window")) %>%
+  group_by(id,route,pattern,run_start_time, in_stop_window) %>%
+  summarize(total_seconds = sum(next_seconds_marginal,na.rm = TRUE)) %>%
+  ungroup() %>%
+  spread(key = "in_stop_window", value = "total_seconds", fill = 0) %>%
+  mutate(`Percent of Stop Time in Stop Window` = 
+          `In Stop Window` / (`In Stop Window` + `Out of Stop Window`)) %>%
+  arrange(desc(`Percent of Stop Time in Stop Window`)) %>%
+  mutate(`Percent of Stop Time in Stop Window` = percent(`Percent of Stop Time in Stop Window`)) %>%
+  select(-id) %>%
+  select(route, pattern, run_start_time, `Percent of Stop Time in Stop Window`, everything())
+```
+
+Further discussion of the vehicle state field continues below.
+
+#### 4. Vehicle State and Speed
+**The vehicle state (moving or stopped) is not entirely consistent with the speed of the vehicle.**  The rawnav data itself does not provide a speedometer-based instantaneous speed value that the AVL device might "see" to categorize the vehicle state. As a result, the speed must be calculated based on the time and distance between two observations. These speeds over short intervals can therefore be inconsistent with a vehicle state (moving or stopped) recorded at particular points of time. 
+
+In the tables below, crosstabs of vehicle speed and vehicle state are shown. While the number of observations with inconsistencies are small, these are most likely to occur near stop locations, a key focus of this study.
+
+Below, we see there are 489 records where the vehicle had speed above 0 MPH but the vehicle is flagged as stopped.
+```{r}
+rawnav_mph_stop %>%
+  count(prev_mph_zero,vehicle_state) %>%
+  spread(key = "vehicle_state", value = "n") %>%
+  rename(`_` = prev_mph_zero)
+```
+
+We might expect these cases to arise if the vehicle is still decelerating ahead of a complete stop. Of these 489 observations where the vehicle is moving between the previous and current observation with a rawnav status of stopped, we nevertheless find several discrepancies:
+ 
+ * 146 records where the vehicle's next status was 'moving' and had positive speed. 
+ * 14 records where the vehicle's next status was 'stopped' and had positive speed.
+ 
+```{r}
+rawnav_mph_stop %>%
+  group_by(id) %>%
+  mutate(next_speed_positive = case_when(next_mph > 0 ~ "Next Speed >0 MPH", 
+                                         next_mph == 0 ~ "Next Speed =0 MPH",
+                                         is.na(next_mph) ~ "End of Run"),
+         next_state_stopped = case_when(lead(vehicle_state) == "Stopped" ~ "Next State Stopped",
+                                        lead(vehicle_state) == "Moving" ~ "Next State Moving",
+                                        is.na(lead(vehicle_state)) ~ "End of Run")) %>%
+  ungroup() %>%
+  filter((vehicle_state == "Stopped") & 
+           (prev_mph_zero %in% c("Previously Moving (>0 MPH)"))) %>%
+  filter(next_speed_positive != "End of Run" & next_state_stopped != "End of Run") %>%
+  count(next_speed_positive,
+        next_state_stopped) %>%
+  spread(key = "next_state_stopped", value = "n")
+
+```
+
+Though these discrepancies are small relative to the total number of observations, they appear more frequently near bus stop locations. In fact, as a result of these cases, the speed of the vehicle can at times be positive while the door state is 'open'. Based on this preliminary finding, the project team will likely categorize the vehicle state as 'stopped' or 'moving' based on odometer or GPS data rather than the rawnav vehicle state field.
+
+#### 5. Stop Window Locations
+**Stop windows as defined in rawnav data lead up to a stop, but sometimes extend past**. In rawnav source data, a value is present in the stop window field each time the value changes, but is otherwise null. In the data cleaning process, these statuses are propagated to other records. 
+
+In the map below, S9 northbound stops are the larger blue shaded circles, with each rawnav observation's stop window status visualized on the point. Generally, stop windows lead up to the the GPS location of the stop (sourced from a WMATA GTFS feed), but sometimes extend past. This may be due to accuracy issues either with the rawnav stop window field or with the location of WMATA bus stops as shown in GTFS tables. 
+
+```{r}
+{rawnav %>%
+  filter(id == 48942) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mapview(.,
+          zcol = "in_stop_window",
+          viewer.suppress = viewersupp) %>%
+  leafem::addFeatures(.,s9_nb_ss_stops)} %>%
+  setView( #zoom on 16th and U
+    lng = -77.0363,
+    lat = 38.9169,
+    zoom = 18
+  )
+```
+
+The project team may ultimately define stop windows based on a buffer around stops or other similar method, rather than relying on this status in the rawnav data. 
+
+#### 6. Door Open State
+**The time a vehicle spends with its door open at stops as recorded in rawnav data is plausible**. Calculations of door open time were tested as both A) the time between a door state of 'open' and the previous observation and B) the time between a door state of 'open' and the next observation. The former method produced implausibly short door open times, so door open times will be calculated based on the latter method.
+
+We find an average of 12 seconds of door open time per stop for S9 Southbound trips departing from SSTC in the sampled data. This average excludes door open times at the first and last stop as well as observations past the 95th percentile in duration.
+
+```{r}
+make_hist <- function(data, yvar, bins = 10, facet = TRUE, titletext = NULL){
+  
+  if ("sf" %in% class(data)){
+    data <- st_drop_geometry(data)
+  }
+  
+  p <-
+    data %>%
+    filter(stop_window != "X-1") %>%
+    ggplot(., aes(x = {{yvar}})) +
+    geom_density() +
+    ggtitle(titletext) +
+    FITP_Theme
+  
+  if (facet){
+  p <- p +
+    facet_wrap(vars(stop_window))
+  }
+  p
+}
+
+use_secs_val <- rlang::quo(next_seconds_marginal)
+
+rawnav_s9_01 <-
+  rawnav %>%
+  filter(route == "S9", pattern == "01")
+
+rawnav_s9_01_stops_fil <-
+  rawnav_s9_01 %>%
+  st_drop_geometry() %>%
+  filter(stop_window != "X-1") %>%
+  group_by(stop_window,door_state,id) %>%
+  summarize(tot_secs = sum(!!use_secs_val, na.rm = TRUE),
+            max_secs = max(!!use_secs_val, na.rm = TRUE)) %>%
+  mutate_at(
+    vars(tot_secs,max_secs),
+    ~ if_else(is.infinite(.),0,.)) %>%
+  arrange(desc(tot_secs)) %>%
+  filter(!(stop_window %in% c("E01","E18")))
+
+```
+
+
+```{r}
+out <-
+  rawnav_s9_01_stops_fil %>%
+  filter(door_state == "O") 
+
+out %>% 
+  ungroup() %>%
+  select(tot_secs) %>%
+  summary()
+```
+
+
+```{r}
+the95th <- quantile(out$tot_secs,.95) %>% as.vector() %>% ceiling()
+
+out %>%
+  filter(tot_secs < the95th) %>%
+  make_hist(yvar = tot_secs,
+            facet = FALSE,
+            titletext = "Distribution of Time (Seconds) at Stops Over All Stops and Runs")
+```
+
+Rawnav data includes an indicator of stop sequence that can be used to compare dwell times at stops across several runs. The stop sequence indicator for S9 Southbound trips from SSTC are mapped below:
+
+```{r}
+rawnav_s9_01 <-
+  rawnav %>%
+  filter(route == "S9", pattern == "01")
+
+rawnav_s9_01 %>%
+  filter(stop_window != "X-1") %>%
+  mapview(zcol = "stop_window",
+        viewer.suppress = viewersupp)
+```
+
+The dwell time distribution by stop is shown below. The first and last stop are not shown, and dwell times above the 95th percentile have been removed.
+
+```{r message=FALSE, warning=FALSE}
+out %>%
+  filter(tot_secs < the95th) %>%
+  make_hist(yvar = tot_secs,
+            facet = TRUE,
+            titletext = "Distribution of Time (Seconds) Over All Runs, by Stop")
+```
+E04 data is not shown because there are few observations of an open door state at that stop.
+
+These results have not yet been checked against door open and dwell time in other sources of data.

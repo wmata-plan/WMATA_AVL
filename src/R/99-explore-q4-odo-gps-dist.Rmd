@@ -1,0 +1,378 @@
+---
+title: "Rawnav Data: Odometer and GPS Reading Comparison"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 5
+    toc_float: yes
+    df_print: paged
+    number_sections: false
+    theme: simplex
+date: "Updated March 17, 2020"
+---
+
+This notebook explores some preliminary questions about rawnav data using rawnav data previously cleaned by WMATA, in particular:
+
+4. What to use: GPS distance or Odometer Distance?	
+4.1 Look at distance results from both (distribution of trip distances) and assess if there are any major differences
+4.2 Assess speeds from GPS and Odometer
+
+Settings, data sources, and parameters are included in a chunk below that is not shown in this notebook.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#Load libraries and basic params in separate script
+source("00-master-exploratory.R", local = TRUE)
+source("01-readin-exploratory.R", local = TRUE)
+
+#Additional libraries
+library(extrafont)
+library(scales)
+library(patchwork)
+#First run only
+# extrafont::font_import()
+# extrafont::loadfonts(device="win")
+
+#Some parameters 
+#Suppress internal viewer for mapview (TRUE during writing, use FALSE on knitting)
+viewersupp <- FALSE
+
+#Used for replacing geometry
+empty <- st_as_sfc("POINT(EMPTY)")
+
+```
+
+### 4. What to use; GPS distance or Odometer Distance?
+
+#### Completeness of the GPS and odometer data
+
+Before looking into the GPS and odometer distances, we'll take a quick look at the completeness of this data. There are no missing records in the fields we're looking at, but some longitude values were 0. We'll drop these before proceeding.
+
+```{r}
+pt1 <-
+  rawnav_interim %>%
+  st_drop_geometry() %>%
+  summarize_at(vars(odo_feet,lon_fixed,lat_fixed),
+               ~ sum(is.na(.))) %>%
+  rename_all(~paste0(.,"_missing"))
+
+pt2 <-
+  rawnav_interim %>%
+  st_drop_geometry() %>%
+  summarize(lon_fixed_zero = sum(lon_fixed == 0),
+            lat_fixed_zero = sum(lat_fixed == 0))
+
+cbind(pt1,pt2)
+
+```
+These cases come from trips 48947 and 48945 -- we'll keep this in mind during further analysis
+```{r}
+rawnav_interim %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  summarize(lon_fixed_zero = sum(lon_fixed == 0)) %>%
+  arrange(desc(lon_fixed_zero))
+```
+
+
+
+```{r}
+rawnav <-
+  rawnav_interim %>%
+  mutate(geometry = if_else(lon_fixed == 0,
+                            st_cast(empty,"GEOMETRY"),
+                            st_cast(geometry,"GEOMETRY"))) %>%
+  st_set_crs(wgs84CRS)
+```
+
+#### 4.1 Distance Results from Odometer and GPS Reading
+
+##### General Relationship Between the Values
+
+In the processed rawnav data, cumulative distance traveled is reported as 'odo_feet'. We'll calculate the marginal distance between one record and the previous record as 'odo_feet_marginal'.
+
+We'll compare these values to measured distances between the GPS readings of rawnav points. 'measured_feet' will represent the spatially-measured cumulative distance traveled (similar to 'odo_feet') and 'measured_feet_marginal' will represent the distance between one record and the previous record (similar to 'odo_feet_marginal'). We'll project the rawnav lat long coordinates into a local coordinate reference system for measurement.
+```{r message=FALSE, warning=FALSE}
+#hacking around null geometry issues
+empty <- st_as_sfc("POINT(EMPTY)")
+
+rawnav_geom_lag <-
+  rawnav %>%
+  st_transform(DCCRS) %>%
+  group_by(id) %>%
+  mutate(
+    odo_feet_marginal = odo_feet - lag(odo_feet, default = 0),
+    geometry_lag = lag(geometry, default = empty),
+    measured_feet_marginal = 
+      units::set_units(
+        st_distance(geometry,geometry_lag, by_element = TRUE),
+        "ft")
+  ) %>%
+  replace_na(list(measured_feet_marginal = 0)) %>%
+  mutate(
+    measured_feet = cumsum(measured_feet_marginal)
+  ) %>%
+  ungroup() %>%
+  mutate(diff_marginal = measured_feet_marginal - odo_feet_marginal,
+         diff_cumulative = measured_feet - odo_feet)
+```
+
+A set of records is shown below for trip ID 48942 (an S9 trip). Differences shown are positive where measured distance is greater than odometer distance.
+```{r}
+rawnav_geom_lag %>%
+  st_drop_geometry() %>%
+  select(
+    rowno,
+    odo_feet_marginal,
+    measured_feet_marginal,
+    diff_marginal,
+    odo_feet,
+    measured_feet,
+    diff_cumulative
+  ) %>% 
+  head(n = 100)
+```
+
+Notably, odo_feet is shown as integer values. These values were not rounded by WMATA, but rather appear this way in the rawnav data itself.
+
+If the odometer (odo_feet) and measured distance (measured_feet) are telling the same story, we'd expect a simple scatterplot of values to show a straight line. The blue line in the image below shows where we would expect points to fall if each value was equivalent (note that scale of y- and x-axes are different). 
+
+In the chart below, you can hover over points to see details, but zooming and panning may be inconsistent depending on your computer.
+```{r}
+
+plot_rawnav_scatter <- function(data,xvar,yvar){
+
+    ggplot(data, 
+           aes(x = {{xvar}},
+               y = {{yvar}},
+               label1 = route,
+               label2 = pattern,
+               label3 = id,
+               label4 = run_date,
+               label5 = run_start_time)) +
+    geom_point() +
+    geom_abline(aes(intercept = 0, slope = 1),
+                color = "blue") +
+    theme_minimal() +
+    scale_x_continuous(labels = comma) + 
+    scale_y_continuous(labels = comma) +
+    FITP_Theme
+}
+
+plot_rawnav_diff_hist <- function(data,yvar, bins = 10){
+  ggplot(data, aes(x = {{yvar}})) +
+    geom_histogram(bins = bins)
+}
+```
+
+```{r}
+marg <- plot_rawnav_scatter(rawnav_geom_lag,odo_feet_marginal,measured_feet_marginal)
+
+marg %>% ggplotly()
+```
+
+
+A few things pop-out:
+
+* a number of cases show no measured change in distance (measured_feet_marginal) even as odo_feet_marginal is non-zero (the string of dots near the bottom along the x-axis)
+* Similarly, measured_feet_marginal can change without any change in odo_feet_marginal (points along the y-axis near the origin)
+* There are a number of large outliers in terms of measured_feet_marginal (points between roughly 100 feet and 600 feet in measured_feet_marginal). These largely appear to be from one trip (ID 48945). This trip also had 6 points with missing longitude data that were removed from the analysis, which could contribute to these issues.
+
+Removing cases where the difference in measurement exceeds 50 feet and trip ID 48945, we see the following distribution of differences
+```{r}
+rawnav_geom_lag %>%
+  filter(id != 48945) %>%
+  filter(abs(diff_marginal) < 50) %>%
+  plot_rawnav_diff_hist(diff_marginal, bins = 100)
+```
+
+This is a similar chart of the cumulative distance (note that the trip 48945 is included below).
+```{r}
+cumulative <- plot_rawnav_scatter(rawnav_geom_lag,odo_feet,measured_feet)
+
+cumulative %>% ggplotly()
+```
+Even as marginal differences are more starkly different, the cumulative differences appear small. Trip 48945 accounts for the points that appear 'above' the other points.
+
+Removing trip 48945, we see the following distribution of differences. The distribution is skewed negative, such that total odometer distance is generally less than measured distance from GPS readings at any given point.
+```{r}
+rawnav_geom_lag %>%
+  filter(id != 48945) %>%
+  filter(abs(diff_cumulative) < 500) %>%
+  plot_rawnav_diff_hist(.,diff_cumulative, bins = 100)
+```
+
+Filtering out 48945, we see the following results for marginal and cumulative results (scaling x and y axes to be consistent).
+```{r message=FALSE, warning=FALSE}
+marginal1 <- 
+  rawnav_geom_lag %>%
+  filter(id != 48945) %>%
+  plot_rawnav_scatter(.,odo_feet_marginal,measured_feet_marginal) +
+  scale_x_continuous(limits = c(0,125)) +
+  scale_y_continuous(limits = c(0,125)) +
+  labs(title = "Marginal Distances")
+
+cumulative1 <-
+  rawnav_geom_lag %>%
+  filter(id != 48945) %>%
+  plot_rawnav_scatter(.,odo_feet,measured_feet) +
+  scale_x_continuous(limits = c(0,40000),
+                     labels = comma) +
+  scale_y_continuous(limits = c(0,40000),
+                     labels = comma) +
+  labs(title = "Cumulative Distances")
+
+marginal1 + cumulative1
+```
+
+In the marginal distances chart, we still see consistent groupings that have large differences between odometer and GPS-based readings. 
+
+##### Large Differences between GPS and Odometer Readings
+
+To begin, we'll look at the readings of trip 48945 (a Southbound S9 Trip), which had significant outliers in its differences between odometer and GPS-based readings. The map below highlights records where the difference in marginal distance between the odometer and GPS reading was greater that 15 feet. It appears the biggest differences are around Silver Spring Transit Center, but there are also a number of differences that appear some stops.
+```{r message=FALSE, warning=FALSE}
+s9_sb_ss_stops <- 
+  get_route_stops(gtfs_obj,
+                  stops,
+                  "S9") %>%
+  filter(trip_headsign == "FRANKLIN SQUARE", shape_id == "2944")
+
+
+map1 <- rawnav_geom_lag %>%
+  mutate(diff_odo_measure = (diff_marginal > 15)) %>%
+  filter(id == 48945) %>%
+  arrange(diff_odo_measure) %>%
+  st_transform(wgs84CRS) %>%
+  mapview(.,
+          zcol = "diff_odo_measure", 
+          alpha = 1,
+          viewer.suppress = viewersupp
+  ) %>%
+  leafem::addFeatures(s9_sb_ss_stops,
+                      label = ~paste0("stop_id: ",stop_id, 
+                                      "\nName: ",stop_name))
+
+map1
+```
+
+Looking at one stop in particular (ID 7901 at Missouri Avenue in the map below), the vehicle appears to stop moving where several successive purple points overlap, with the topmost point being row number (or rowno) 564. The next odometer reading at rowno 565 is yellow, indicating a measurement difference greater than 15 feet. The odometer difference between these points (odo_feet_marginal) is 25 feet, but the GPS reading indicates this is a difference of 47 feet, a difference of 22 feet (about half a bus length). By the next reading at row number 566, the marginal difference between readings is only about 1 foot. Setting aside some of the noise from the initial bus reading (which created around 2,300 feet of difference in the cumulative total), the cumulative difference in GPS and odometer readings by this point in the trip would be around 200 ft in total. 
+
+```{r}
+map1 %>%
+    setView(
+    lng = -77.03645,
+    lat = 38.96168,
+    zoom = 19
+  )
+```
+
+The differences in GPS and odometer readings leaving SSTC indicate that calculations based on cumulative changes in distance based on GPS readings should be handled with care (as shown by the chart of cumulative distances that showed trip ID 48945 GPS distances consistently above odometer distances). These differences around SSTC are likely due to urban canyon effects around the structure.
+
+Because many queue jumps are found at intersections with bus stops, even small differences between GPS and odometer readings at these locations could result in different conclusions about the effectiveness of queue jumps.
+
+##### Odometer marginal distance is non-zero but GPS reading is near zero
+
+Next, we'll look at some sample cases where the odometer indicates the vehicle is moving but the GPS distance shows little change. These cases are relatively infrequent. While a trip may have almost 1,500 rawnav records, the number of records with this kind of difference is never more than 25. Trip 48947 had missing longitude values for some points, so we'll look at the trip with the next highest number of cases like this.
+
+```{r}
+cases_to_check <- 
+  rawnav_geom_lag %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  mutate(little_gps_movement = (odo_feet_marginal > 10 & measured_feet_marginal < 1)) %>%
+  summarize(cases = sum(little_gps_movement,na.rm=TRUE)) %>%
+  arrange(desc(cases))
+
+cases_to_check
+```
+
+The northbound S9 48942 trip shows visual 'gaps' between rawnav points in certain places. Each yellow point is an indication that the GPS reading has shown virtually the same location while the odometer reading has nevertheless increased. The GPS reading may then be catching up when the next reading appears further along the route after a short gap.
+
+However, other gaps between rawnav GPS readings do not necessarily result in differences between GPS and odometer readings (found in other trips, not necessarily shown here). 
+
+```{r message=FALSE, warning=FALSE}
+
+
+{rawnav_geom_lag %>%
+  filter(id == cases_to_check$id[2]) %>%
+  mutate(little_gps_movement = (odo_feet_marginal > 10 & measured_feet_marginal < 1)) %>%
+  arrange(little_gps_movement) %>%
+  mapview(.,
+          zcol = "little_gps_movement",
+          viewer.suppress = viewersupp) %>%
+  leafem::addFeatures(s9_sb_ss_stops,
+                      label = ~paste0("stop_id: ",stop_id, 
+                                      "\nName: ",stop_name))} %>%
+  setView(
+    lng = -77.03666,
+    lat = 38.93744,
+    zoom = 17
+  )
+  
+```
+
+
+##### Odometer reading is near zero but GPS distance is not
+
+These cases are far fewer.
+```{r}
+cases_to_check <- 
+  rawnav_geom_lag %>%
+  st_drop_geometry() %>%
+  group_by(id) %>%
+  mutate(little_odo_movement = (odo_feet_marginal < 1 & measured_feet_marginal > 10)) %>%
+  summarize(cases = sum(little_odo_movement,na.rm=TRUE)) %>%
+  arrange(desc(cases))
+
+cases_to_check
+```
+
+The first case is found at Silver Spring Transit Center:
+```{r}
+{rawnav_geom_lag %>%
+  filter(id == cases_to_check$id[1]) %>%
+  mutate(little_odo_movement = (odo_feet_marginal < 1 & measured_feet_marginal > 10)) %>%
+  arrange(little_odo_movement) %>%
+  mapview(.,
+          zcol = "little_odo_movement",
+          viewer.suppress = viewersupp) %>%
+  leafem::addFeatures(s9_sb_ss_stops,
+                      label = ~paste0("stop_id: ",stop_id, 
+                                      "\nName: ",stop_name))} %>%
+  setView(
+    lng = -77.03030,
+    lat = 38.99329,
+    zoom = 18
+  )
+```
+
+
+##### Generalizing Size, Extent, and Geographic Locations of Differences
+To be continued. 
+
+* Can we generalize the findings from trip 48945 (that GPS reading differs significantly from odometer readings after a vehicle departs a stop) to other cases
+* What is the typical size of this difference? 
+* Does either case indicate that one measure is more reliable or useful than the other?
+
+#### 4.2 Calculation of Speed Based on Odometer and GPS Readings
+
+To be continued.
+
+### Preliminary Conclusions and Implications
+
+In general, the odometer and GPS readings of distance are fairly consistent. However, for fine-grained analysis of behavior around queue jumps, small distinctions are likely to be important. Setting aside the Silver Spring Transit Center, differences between odometer and GPS-measured travel distances appear largest after a vehicle departs a stop. This may affect follow-on analyses on how vehicles use queue jumps after departing from a stop. 
+
+At this time, use of the odometer distance reading for speed and distance calculations appears most desirable:
+
+* The odometer avoids certain challenges with the quality of GPS accuracy (especially near the Silver Spring Transit Center)
+* The GPS readings occasionally repeat themselves, such that there is zero marginal distance between rawnav readings on this measure. This appears to result in 'catch up' behavior that may result in inaccurate speed calculations over small distances (to be confirmed).
+
+#### For possible further research
+
+* What are the other sources of variation for differences between odometer and GPS reading distancecs? Door closed/open, at stop or not, etc?
+* Explore other cases where GPS and odometer readings vary: where is odometer marginal difference much greater than GPS marginal distance, and vice versa?
+* Why do differences seem to arise between GPS and odometer readings after vehicles depart bus stops? We don't yet see these differences arise when a bus accelerates from a signal controlled intersection (or midblock locations where traffic delays the vehicle).
+* Which cumulative value best matches GTFS-based travel distances?
+* Consider a ride-a-long observation on selected trips -- could help to validate traffic conditions for a particular vehicle, including whether the vehicle stopped.
+* Where does the literature indicate that GPS signal quality is compromised? Is acceleration difficult for
+* Are results any different based on the non-'fixed' GPS coordinates (note that the rawnav data produces two sets of coordinates, one of which WMATA has identified as 'fixed'. Anecdotally, the two don't appear to differ at all in many cases)
+* Further examination of the 2nd order changes to differences in marginal and cumulative differences (change in difference in marginal distance, etc.)

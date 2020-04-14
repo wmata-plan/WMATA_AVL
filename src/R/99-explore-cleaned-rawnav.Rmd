@@ -1,0 +1,267 @@
+---
+title: "Exploring cleaned rawnav data"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: yes
+    df_print: paged
+    theme: simplex
+date: "Updated March 5, 2020"
+
+---
+
+This notebook explores some preliminary questions about rawnav data using rawnav data previously cleaned by WMATA. WMATA describes this as "-	An Excel file called “Rawnav sample data 2019 05 01.xlsx”. This is the data for those same three buses on the same day, after ingestion into our database via the script written by a member of our team. The selected team is welcome to use this script and the data in this format, or to propose modifications or an entirely new format."
+
+Settings, data sources, and parameters are included in a chunk below that is not shown in this notebook.
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Load libraries, basic params, and other data in separate script
+source("00-master-exploratory.R", local = TRUE)
+source("01-readin-exploratory.R", local = TRUE)
+
+#Read and briefly clean
+rawnav_raw <- 
+  readxl::read_excel(
+    path = file.path(datadir,
+                     "Rawnav project sample data",
+                     "Rawnav sample data 2019 05 01.xlsx"),
+    sheet = 1
+  ) %>%
+  janitor::clean_names()
+
+
+rawnav <- 
+  rawnav_raw %>%
+  st_as_sf(., 
+           coords = c("lon_fixed", "lat_fixed"),
+           crs = 4326L, #WGS84
+           agr = "constant",
+           remove = FALSE) %>%
+  #cleaning up a few fields into posixct
+  mutate(run_start_time_pxct = lubridate::mdy_hms(paste0(run_date," ",run_start_time)),
+         gps_reading_time_pxct = lubridate::dmy_hms(gps_reading_time),
+         gps_reading_dtm_pxct = lubridate::dmy_hms(gps_reading_dtm) #what is this field, exactly?
+  ) %>%
+  group_by(id,bus_id) %>%
+  arrange(gps_reading_secs_past_midnight,.by_group = TRUE) %>% #hope this is reasonable!
+  mutate(rowno = row_number()) %>%
+  ungroup()
+```
+
+### What's in this file?
+
+#### What variables do we have?
+
+A preview of records is shown below. Note that table can be paged to the right.
+```{r}
+rawnav %>%
+  st_drop_geometry() %>%
+  head()
+```
+
+
+
+See list of variables below, their class, and several values. No APC data, notably.
+```{r}
+str(rawnav)
+```
+Note that we've added some new variables on the end.
+
+#### How many trips do we have?
+Looks like rawnav coordinates for three buses, as described in accompanying memo. However, each of these buses is making several trips, identified in column "id" in the source data. Note that the table can be paged.
+```{r}
+rawnav_raw %>%
+  count(route, pattern, bus_id, id, run_date, run_start_time, name = "rawnav_points")
+```
+
+### What does it look like?
+#### What do the rawnav points look like?
+From preliminary look on map, at least one coordinate was way off. We'll drop the geometry for this point but leave the record in the dataset. 
+```{r}
+{rawnav %>% 
+  filter(id == 48947 &
+           bus_id == 6431 & 
+           gps_reading_secs_past_midnight == 40797) %>%
+  mapview(.)}@map %>%
+  setView(.,
+          lng = 0,
+          lat = 38.99,
+          zoom = 6)
+```
+
+```{r}
+#setting geometry to null here
+st_geometry(rawnav)[rawnav$id==48947 & rawnav$bus_id == 6431 & rawnav$gps_reading_secs_past_midnight == 40797] = NULL
+```
+
+Let's look at one trip. Colors/legend represents order of points. Note that basemap can be toggled in layer options box.
+```{r}
+rawnav %>%
+  filter(id == first(id)) %>%
+  mapview(., zcol = "rowno") 
+```
+
+#### How well do repeated trips overlap? 
+Let's look at the S9 over several trips in the same direction (02 presumed to be northbound based on order of points). Note that visualized variable is odometer feet, so these colors should track similarly across trips.
+```{r}
+{rawnav %>% 
+  filter(route == "S9", pattern == "02") %>%
+  mapview(zcol = "odo_feet")}@map %>%
+  setView(
+    lng = -77.0365,
+    lat = 38.9022,
+    zoom = 18
+  )
+```
+So far, results seem similar to what we saw in WMATA's demo.
+
+#### What do these trips look like as line strings?
+Are the visual conclusions any different? Jitters might be more apparent.
+
+```{r}
+rawnav_trip <- 
+  rawnav %>%
+  group_by(id,bus_id,route,pattern,run_date,run_start_time) %>%
+  summarize(do_union = FALSE) %>%
+  st_cast("LINESTRING")
+```
+Again, back to looking at that first trip.
+```{r}
+rawnav_trip %>%
+  filter(id == 48942) %>%
+  mapview()
+```
+Seems pretty reasonable, at least here.
+
+### How well does the rawnav stop data match up with stop locations?
+
+We'll compare to an S9 NB trip departing around 7:00pm (ID 48942). Note that the 16th & U queue jump is only in the Northbound direction. In this case, we'd expect the trip to encounter less traffic and passengers than if it were traveling southbound, such that the operator may not choose to use the queue jump. Later, we'll examine a NB trip in the PM peak (ID 49281)
+
+#### Bus Stop Locations vs. "In Stop Window"
+Let's plot rawnav points with in_stop_window = 1 against stop locations for S9 NB.
+
+These are the stops (note that you can page to the right to see more columns)
+```{r}
+#Picked direction by trial and error! - this is NB
+s9_stops <- 
+  get_route_stops(gtfs_obj,stops,"S9") 
+
+s9_nb_ss_stops <-
+  s9_stops %>%
+  filter(trip_headsign == "SILVER SPRING STATION", shape_id == "2928")
+
+s9_nb_ss_stops %>%
+  st_drop_geometry()
+```
+
+Here's our map. S9 northbound stops are the larger blue shaded circles (currently no pop-up info added to these points)
+```{r}
+{rawnav %>%
+  filter(id == 48942) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mapview(.,zcol = "in_stop_window") %>%
+  leafem::addFeatures(.,s9_nb_ss_stops)} %>%
+  setView( #zoom on 16th and U
+    lng = -77.0363,
+    lat = 38.9169,
+    zoom = 18
+  )
+```
+For the most part, it looks like the stop zone is considered whatever is leading up to the stop (see U Street), but sometimes it extends past the intersection (see P Street) Will have to review Eichler's method more. In general though, this seems to match what we might expect.
+
+#### Bus Stop Locations vs. Door Open
+Interestingly, looks like door state does not show 'open' at some stop locations. This could be because this is a northbound morning trip, so it's possible these stops were simply skipped for lack of passengers waiting to board or alight. If that is not the case, this could be a problem for follow-on analyses. Notably, some of these 'open' points appear to overlap exactly with a 'closed' point, though this cannot be seen in the map below. Door open points are sorted to always draw on top.
+
+C = closed, O = open.
+```{r}
+rawnav %>%
+  filter(id == 48942) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mapview(.,
+          zcol = "door_state",
+          alpha.regions = 1) %>%
+  leafem::addFeatures(.,s9_nb_ss_stops)
+```
+Additionally, the door open point for 16th Street and U appears somewhat south of the stop itself, indicating that there may be some resolution challenges with this data or perhaps some other circumstance regarding this trip.
+
+
+#### Bus Stop Locations vs. Moving and Stopped
+We would expect the vehicle to be stopped at both intersections and at stops, and potentially at other places if there is traffic. However, it seems like stopped points (S) mostly appear only at stops, with a few additional points in the northern part of the corridor. A few of those stop locations coincide with stops for the S2 and S4 (Geranium St NW, along Colesville Road), indicating that there may be some interactions at stops slowing the S9.
+
+M = moving, S = stopped
+```{r}
+{rawnav %>%
+  filter(id == 48942) %>% #this is an S9 NB
+  arrange(vehicle_state) %>%
+  mapview(.,
+          zcol = "vehicle_state",
+          alpha.regions = 1) %>%
+  leafem::addFeatures(.,s9_nb_ss_stops)} %>%
+  setView(
+    lng = -77.0281,
+    lat = 38.9825,
+    zoom = 15
+  )
+```
+
+### How much resolution do we think we'll get on QJ locations?
+
+The map below shows speeds by rawnav point for the 7 AM northbound trip near the 16th Street and U queue jump.
+
+While the points for this trip seems to track along the road's centerline, at the  16th Street and U Street intersection (our Queue Jump location), it does appear as though the bus is pulling to the side to access the stop (and thus potentially using the queue jump). For reference, [Google street view of this location is available here](https://www.google.com/maps/@38.9167036,-77.0365272,3a,75y,49.33h,76.11t/data=!3m6!1e1!3m4!1sYahUtvXy7LQjhGNjKtJkWg!2e0!7i16384!8i8192).
+
+Note that because of map tile layer limitations, you cannot zoom in any further on this map. To see labels better, try toggling to a different base map. This stop did record a door open and close where speeds hit their lowest point in the points shown.
+
+```{r}
+{rawnav %>%
+    filter(id == 48942 &
+           (gps_reading_secs_past_midnight >= 26307 |
+             gps_reading_secs_past_midnight < 26365)) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mapview(.,
+          zcol = "mph",
+          map.types = c("Esri.WorldImagery","CartoDB.Positron"))}@map %>%
+  setView( #zoom on 16th and U
+    lng = -77.0363,
+    lat = 38.9169,
+    zoom = 18
+  )
+```
+
+
+### What do headings tell us about lane use?
+
+Can the heading field indicate whether a bus is pulling in to a queue jump lane? In this case, it looks like the bus is heading north (degrees of around 3 to 5) then turns to the right (headings of 9 to 12) and then upon exiting the stop zone veers to the left (headings of 355 or so).
+
+```{r}
+{rawnav %>%
+    filter(id == 48942 &
+           (gps_reading_secs_past_midnight >= 26307 |
+             gps_reading_secs_past_midnight < 26365)) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mapview(.,
+          zcol = "heading_deg",
+          map.types = c("Esri.WorldImagery","CartoDB.Positron"))}@map %>%
+  setView( #zoom on 16th and U
+    lng = -77.0363,
+    lat = 38.9169,
+    zoom = 18
+  )
+```
+
+
+### Future Questions for Reviewing Rawnav Data
+
+* How is what we see here consistent (or not) with trace model bus state data? On aggregate speed, distance, runtime, etc.? On boardings (once we get that rawnav data)?
+* How consistent are the odometer, lat/long, and speed data points?
+* How should the gps_reading_time field be interpreted relative to gps_reading_dtm?
+* How do other trips behave around the 16th Street & U Street Queue Jump?
+* Can we reconstruct where the bus is stopping using the odometer values instead of relying on the lat/long of the rawnav point? Some stop locations seem slightly off relative to actual bus stop locations.
+
+### Other reflections
+
+* Does seem as though looking at traffic signal conditions could become important here when using rawnav data at scale (and not only at times when we have video footage) if we want to determine whether QJ was actually used.
+* Otherwise, data seems like it's of sufficiently high resolution to do some sort of travel time decomposition. 
+* Could we calibrate our readings of each bus' lane by having a WMATA bus drive through each QJ intersection in different lanes? Setting aside feasibility, might that help?
