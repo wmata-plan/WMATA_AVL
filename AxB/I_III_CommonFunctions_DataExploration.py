@@ -13,9 +13,6 @@ import linecache
 import numpy as np
 import pandas as pd
 import datetime as dt
-sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL")
-from MapBox_Token import retMapBoxToken # Function for getting my Mapbox Token. I didn't save the 
-# token on github repo
 import folium
 from folium.plugins import MarkerCluster
 import io 
@@ -80,9 +77,11 @@ def FindFirstTagLine_ZipFile(ZipFolder, ZipFile1):
     Parameters
     ----------
     ZipFolder: str
-        Zipped folder with the text file
+        Zipped folder with the text file. For absolute paths, use forward slashes.
+        i.e., rawnav02164191003.txt.zip
     ZipFile1 : str
-        Read the 1st 100 lines to find when the csv format starts.
+        Read the 1st 100 lines of this file to find when the csv format starts, 
+        e.g.rawnav02164191003.txt
 
     Returns
     -------

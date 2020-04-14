@@ -27,13 +27,24 @@ import datetime as dt
 from geopy.distance import geodesic
 import zipfile
 import shutil
-sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL\AxB")
-sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL")
-from MapBox_Token import retMapBoxToken # Function for getting my Mapbox Token. I didn't save the 
-# token on github repo
 import folium
 from folium.plugins import MarkerCluster
 from folium import plugins
+
+if os.getlogin() == "WylieTimmerman":
+    path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL\AxB"
+    path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
+    # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
+    path_source_data = r"C:\Downloads\Vehicles 0-2999\Vehicles 0-2999"
+    path_processed_data = os.path.join(path_sp,r"Client Shared Folder\data\02-processed")
+    os.chdir(os.path.join(path_working))
+else:
+    breakpoint() #I broke your paths, sorry! you'll want to set at least path_processed_data,
+    #and set your working directory to wherever AxB is for you
+    sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL\AxB")
+    sys.path.append(r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL")
+    os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data')
+
 # User Defined Functions
 from I_III_CommonFunctions_DataExploration import is_numeric
 from I_III_CommonFunctions_DataExploration import FindFirstTagLine
@@ -56,12 +67,14 @@ if not sys.warnoptions:
 #     os.environ["PYTHONWARNINGS"] = "default" # Also affect subprocesses
 
 Debug = True
-os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data\October 2019 Rawnav\Vehicles 0-2999')    
 # zf = zipfile.ZipFile('./rawnav00001191015.txt.zip') 
 # df = pd.read_csv(zf.open('rawnav00001191015.txt'),skiprows=5)
-ZipFiles = glob.glob('*.zip')
-ZipFileDict = dict((x,x.split('.zip')[0]) for x in ZipFiles)
-ZipFolder, ZipFile1 = 'rawnav02840191009.txt.zip', 'rawnav02840191009.txt'
+ZipFiles = glob.glob(os.path.join(path_source_data,'*.zip'))
+#WT: paths for zipfiles are fun: https://bugs.python.org/issue26283
+ZipFileDict = dict((x.replace('\\', '/'),os.path.basename(x.split('.zip')[0])) for x in ZipFiles)
+
+if len(ZipFiles) == 0:
+    raise Exception ("No Zip Files found at {}".format(path_source_data))
 # 1 Read Data
 #****************************************************************************************************************
 RawDataDict = {}
@@ -73,7 +86,6 @@ NoData_da= pd.DataFrame()
 WrongBusID_da = pd.DataFrame()
 ColumnNmMap = {0:'Lat',1:'Long',2:'Heading',3:'DoorState',4:'VehState',5:'OdomtFt',6:'SecPastSt',7:'SatCnt',
                    8:'StopWindow',9:'Blank',10:'LatRaw',11:'LongRaw'}
-
 
 for ZipFolder, ZipFile1 in ZipFileDict.items():
     pat  = re.compile('rawnav(.*).txt') 
@@ -100,11 +112,13 @@ for ZipFolder, ZipFile1 in ZipFileDict.items():
    
 # Copy empty files to another directory for checking.
 try:
-    os.makedirs('../Veh0_2999_NoData')
+    if not os.path.exists(os.path.join(path_processed_data,'Veh0_2999_NoData')):
+        os.makedirs(os.path.join(path_processed_data,'Veh0_2999_NoData'))
 except:
     print('Error Dir creation')
 for key in NoDataDict.keys():
-    shutil.copy('rawnav'+key+'.txt.zip','../Veh0_2999_NoData')
+    shutil.copy(os.path.join(path_source_data,'rawnav'+key+'.txt.zip'),\
+                os.path.join(path_processed_data,'Veh0_2999_NoData'))
     
     
 # os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data')
@@ -197,8 +211,8 @@ for key,TestData in RawDataDict.items():
 #4 Write Summary to File
 #****************************************************************************************************************
 os.getcwd()
-OutFi = "../../ProcessedData/TripSummaries_Veh0_2999.xlsx"
-OutFi2 = "../../ProcessedData/OctProcessedDataVeh0_2999.xlsx"
+OutFi = os.path.join(path_processed_data,"TripSummaries_Veh0_2999.xlsx")
+OutFi2 = os.path.join(path_processed_data,"OctProcessedDataVeh0_2999.xlsx")
 
 writer = pd.ExcelWriter(OutFi,
                         engine='xlsxwriter',
@@ -221,8 +235,11 @@ for key,value in SummaryDataDict.items():
 FinDat2 = FinDat.copy()
 FinDat2.set_index(['FileNm','TripStartTime'],inplace=True)
 FinRemoveData.set_index('FileNm',inplace=True)
-NoData_da.set_index('FileNm',inplace=True)
-WrongBusID_da.set_index('FileNm',inplace=True)
+#WT: if no records without data or wrong bus ID present, these two lines will error
+if len(NoData_da) > 0:
+    NoData_da.set_index('FileNm',inplace=True)
+if len(WrongBusID_da) > 0:
+    WrongBusID_da.set_index('FileNm',inplace=True)
 
 FinDat.to_excel(writer,"SummaryData",index=False)
 FinDat2.to_excel(writer,"DebugSummaryData",index=True)
@@ -233,12 +250,8 @@ writer.save()
         
 #5 Plot the Start and End Points
 #****************************************************************************************************************
-mapboxAccessToken = retMapBoxToken()
-mapboxTilesetId = 'mapbox.satellite'
 this_map = folium.Map(zoom_start=16,
     tiles='Stamen Terrain')
-folium.TileLayer(tiles='https://api.tiles.mapbox.com/v4/' + mapboxTilesetId + '/{z}/{x}/{y}.png?access_token=' + mapboxAccessToken,
-    attr='mapbox.com',name="Mapbox").add_to(this_map)
 folium.TileLayer('openstreetmap').add_to(this_map)
 folium.TileLayer('cartodbpositron').add_to(this_map)
 folium.TileLayer('cartodbdark_matter').add_to(this_map) 
@@ -257,5 +270,5 @@ SumDat = pd.concat(SummaryDataDict.values())
 LatLongs = [[x,y] for x,y in zip(SumDat.StartLat,SumDat.StartLong)]
 this_map.fit_bounds(LatLongs)
 folium.LayerControl(collapsed=False).add_to(this_map)
-this_map.save("./ProcessedData/TripSummary.html")
+this_map.save(os.path.join(path_processed_data,"TripSummary.html"))
 
