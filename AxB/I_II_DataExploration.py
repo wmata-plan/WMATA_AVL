@@ -68,14 +68,12 @@ if not sys.warnoptions:
 Debug = True
 # zf = zipfile.ZipFile('./rawnav00001191015.txt.zip') 
 # df = pd.read_csv(zf.open('rawnav00001191015.txt'),skiprows=5)
-# ZipFiles = glob.glob(os.path.join(path_source_data,'*.zip').encode('latin1').decode('UTF-8'))
-# ZipFiles2 = glob.glob(os.path.join(path_source_data,'*.zip'))
-ZipFiles = [os.path.basename(x) for x in glob.glob(os.path.join(path_source_data,'*.zip'))]
-ZipFileDict = dict((x,x.split('.zip')[0]) for x in ZipFiles)
+ZipFiles = glob.glob(os.path.join(path_source_data,'*.zip'))
+#WT: paths for zipfiles are fun: https://bugs.python.org/issue26283
+ZipFileDict = dict((x.replace('\\', '/'),os.path.basename(x.split('.zip')[0])) for x in ZipFiles)
 
 if len(ZipFiles) == 0:
     raise Exception ("No Zip Files found at {}".format(path_source_data))
-# ZipFolder, ZipFile1 = 'rawnav02840191009.txt.zip', 'rawnav02840191009.txt'
 # 1 Read Data
 #****************************************************************************************************************
 RawDataDict = {}
@@ -96,11 +94,9 @@ for ZipFolder, ZipFile1 in ZipFileDict.items():
     zf = zipfile.ZipFile(ZipFolder)
     if HasData:
         if(HasCorrectBusID):
-            print(ZipFolder + ' hascorrect')
             RawDataDict[FileNm] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
             FirstTagDict[FileNm] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
         else:
-            print(ZipFolder + ' not correct')
             RawDataDict_WrongBusID[FileNm] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
             FirstTagDict_WrongBusID[FileNm] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
             tempDa1 = pd.DataFrame(columns=['FileNm','FirstTagLineNo','FirstTagLine'])
@@ -108,7 +104,6 @@ for ZipFolder, ZipFile1 in ZipFileDict.items():
             NoData_da = pd.concat([NoData_da,tempDa1])
         
     else:
-        print(ZipFolder + ' nodata')
         NoDataDict[FileNm] = {'EndLineNo':FistTagLnNum,'EndLine':StartTimeLn}
         tempDa = pd.DataFrame(columns=['FileNm','EndLineNo','EndLine'])
         tempDa.loc[0,['FileNm','EndLineNo','EndLine']] = [FileNm,FistTagLnNum,StartTimeLn]
@@ -116,13 +111,13 @@ for ZipFolder, ZipFile1 in ZipFileDict.items():
    
 # Copy empty files to another directory for checking.
 try:
-    #why is this hardcoded?
-    print('pause here')
-    os.makedirs(os.path.join(path_processed_data,'Veh0_2999_NoData'))
+    if not os.path.exists(os.path.join(path_processed_data,'Veh0_2999_NoData')):
+        os.makedirs(os.path.join(path_processed_data,'Veh0_2999_NoData'))
 except:
     print('Error Dir creation')
 for key in NoDataDict.keys():
-    shutil.copy('rawnav'+key+'.txt.zip',os.path.join(path_processed_data,'Veh0_2999_NoData'))
+    shutil.copy(os.path.join(path_source_data,'rawnav'+key+'.txt.zip'),\
+                os.path.join(path_processed_data,'Veh0_2999_NoData'))
     
     
 # os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data')

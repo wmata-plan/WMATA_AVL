@@ -77,9 +77,11 @@ def FindFirstTagLine_ZipFile(ZipFolder, ZipFile1):
     Parameters
     ----------
     ZipFolder: str
-        Zipped folder with the text file
+        Zipped folder with the text file. For absolute paths, use forward slashes.
+        i.e., rawnav02164191003.txt.zip
     ZipFile1 : str
-        Read the 1st 100 lines to find when the csv format starts.
+        Read the 1st 100 lines of this file to find when the csv format starts, 
+        e.g.rawnav02164191003.txt
 
     Returns
     -------
@@ -94,8 +96,6 @@ def FindFirstTagLine_ZipFile(ZipFolder, ZipFile1):
     HasCorrectBusID: Bool
         Boolean to check if the Bus ID is correct in the 1st line
     '''
-    #WT: paths are fun: https://bugs.python.org/issue26283
-    # ZipFile1Slash = ZipFile1.replace('\\', '/')
     zf = zipfile.ZipFile(ZipFolder)
     # Get BusID
     pat  = re.compile('rawnav(.*).txt') 
