@@ -110,3 +110,26 @@ get_route_stops <- function(gtfs_obj,
     ungroup() %>%
     st_sf() 
 }
+
+shapes <- 
+  gtfs_obj$shapes %>%
+  st_as_sf(., 
+           coords = c("shape_pt_lon", "shape_pt_lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") %>%
+  group_by(shape_id) %>%
+  summarize(do_union = FALSE) %>%
+  st_cast("LINESTRING")
+
+shape_info <-
+  gtfs_obj$routes %>%
+  left_join(gtfs_obj$trips, by = "route_id") %>%
+  #assuming this gets to one shape_id
+  distinct(route_id,shape_id,route_short_name,direction_id,trip_headsign,shape_id)
+
+#
+stopifnot(!anyDuplicated(shape_info$shape_id))
+
+wmata_shapes <- 
+  shapes %>%
+  left_join(shape_info, by = "shape_id")

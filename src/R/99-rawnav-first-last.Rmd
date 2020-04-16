@@ -1,0 +1,333 @@
+---
+title: "Understanding Start and End Locations in Rawnav data"
+output: 
+  html_notebook:
+    code_folding: hide
+    toc: true
+    toc_depth: 4
+    toc_float: yes
+    df_print: paged
+    theme: simplex
+date: "Updated April 16, 2020"
+
+---
+
+How to handle cases that fail to begin and end near the first and last stop of a route, respectively, could have a significant effect on the amount of data available to analyze. Filtering only to rawnav run records that begin with 500 feet of the first stop and end within 500 feet of the last stop keeps only about 60 percent of run records. This rate could potentially be increased with some additional logic added to the in-development rawnav parser.
+
+### About the Source Data
+This notebook builds upon rawnav data parsed for Route 79 using an in-development version of the rawnav parser.
+
+```{r message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  cache = FALSE,
+  highlight = TRUE,
+  collapse = TRUE
+)
+
+#Load libraries, basic params, and other data in separate script
+source("00-master-exploratory.R", local = TRUE)
+source("01-readin-exploratory.R", local = TRUE)
+
+path_processed <- file.path(sharepointpath,
+                            "Client Shared Folder",
+                            "data",
+                            "02-processed")
+
+#Prep work on trip summaries
+summary79raw <- 
+  readxl::read_excel(path = file.path(path_processed,
+                                      "Route79_TrimSumv1.xlsx"))
+
+summary79 <-
+  summary79raw %>%
+  mutate(trip_start_time = lubridate::ymd_hms(paste0("1970-01-01 ",TripStartTime), tz = "EST"),
+         trip_end_time = lubridate::ymd_hms(paste0("1970-01-01 ",TripEndTime), tz = "EST"),
+         trip_start_time_hr = lubridate::hour(trip_start_time),
+         dirno = str_sub(Tag, start = 3),
+         dirint = if_else(dirno == "01",
+                          1,
+                          0),
+         dirname = if_else(dirno == "01",
+                           "Southbound",
+                           "Northbound"),
+         time_period = cut(trip_start_time_hr,
+                           breaks = c(0,4,6,9,15,19,23,99),
+                           labels = c("Late_Night", "AM_Early", "AM_Peak", "Midday", "PM_Peak", "Evening", "Late_Night"),
+                           ordered = TRUE,
+                           include.lowest = TRUE,
+                           right = FALSE),
+         refid = glue::glue("{Date} - {TripStartTime} - {dirname} - {FileNm}")) %>%
+  make_extra_geom(StartLong, StartLat,geom_start,4326) %>%
+  make_extra_geom(EndLong, EndLat, geom_end, 4326)
+
+
+#Prep work on GTFS
+#Note 79-0 is northbound in GTFS, 79-1 is southbound-- same as rawnav as it happens
+route79_nb_shapes <- 
+  wmata_shapes %>%
+  filter(route_short_name == "79", direction_id == 0) %>%
+  summarize()
+
+route79_sb_shapes <- 
+  wmata_shapes %>%
+  filter(route_short_name == "79", direction_id == 1) %>%
+  summarize()
+
+ route79_stops <- 
+    gtfs_obj$routes %>%
+    filter(route_short_name == "79") %>%
+    left_join(gtfs_obj$trips, by = "route_id") %>%
+    left_join(gtfs_obj$stop_times, by = "trip_id") %>%
+    group_by(route_short_name,direction_id,trip_headsign,shape_id,stop_id) %>%
+    summarize(trips = length(unique(trip_id)),
+              #not a great assumption, but this is a quickie
+              stop_sequence = max(stop_sequence)) %>%
+    left_join(stops, by = "stop_id") %>%
+    arrange(stop_sequence, .by_group = TRUE) %>%
+    ungroup() %>%
+    st_sf() 
+
+#Prep work on distance to a stop
+calc_dist <- function(geom_col,
+                      dir = 0,
+                      stopsfile,
+                      where = "start"){
+  #this is intentionally a bit thrown together, quickly recalculating to 
+  #get notebook out the door
+  stopifnot(dir %in% c(0,1))
+  stopifnot("sf" %in% class(stopsfile))
+  stopifnot(where %in% c("start","end"))
+  if (where == "start"){
+    check_stop <- 
+      stopsfile %>%
+      filter(direction_id == dir) %>%
+      #intentionally a little sloppy here since patterns on 79 are simple
+      filter(stop_sequence == min(stop_sequence)) %>%
+      filter(row_number() ==1)
+  } else {
+    check_stop <- 
+      stopsfile %>%
+      filter(direction_id == dir) %>%
+      filter(stop_sequence == max(stop_sequence)) %>%
+      filter(row_number() ==1)
+  }
+
+  stopifnot(nrow(check_stop)==1)
+  
+  st_distance(st_set_crs(st_sfc(geom_col),4326),
+              check_stop) %>%
+    units::set_units(.,value = "ft")
+  
+}
+ 
+ 
+summary79_2 <-
+  summary79 %>%
+  mutate(dist_to_first = pmap(list(geom_start,dirint),
+                              calc_dist,
+                              route79_stops,
+                              where = "start"),
+         dist_to_last = pmap(list(geom_end,dirint),
+                             calc_dist,
+                             route79_stops,
+                             where = "end"))
+
+summary79_3 <-
+  summary79_2 %>%
+  mutate(dist_to_first = unlist(dist_to_first),
+         dist_to_last = unlist(dist_to_last))
+ 
+```
+
+The data here includes 411 bus runs. This is a small subset of the data available for Route 79 for the month of October 2019.
+
+The runs themselves span the entire month, with most files including several runs of Route 79.
+
+```{r}
+summary79_3 %>%
+  count(Date,FileNm) %>%
+  arrange(Date,FileNm)
+```
+
+The runs are present across multiple directions and time periods. 
+
+```{r}
+summary79_3 %>%
+  count(time_period, dirname) %>%
+  spread(time_period,n)
+  
+```
+### Trip Geometry
+
+#### Start Points
+Notably, not all of the trips begin where one might expect. First, northbound rawnav origin points and the underlying route. The GTFS first and last stops in the northbound direction are shown with markers. 
+
+**79 Northbound Rawnav Trip Start Points**
+```{r message=FALSE, warning=FALSE}
+summary79_3 %>%
+  st_set_geometry("geom_start") %>%
+  filter(dirname == "Northbound") %>%
+  mapview(zcol = "dist_to_first", 
+          layer.name = "Dist. From First Stop",
+          homebutton = TRUE) +
+  mapview(route79_nb_shapes, legend = FALSE) +
+  mapview({
+    route79_stops %>%
+      filter(direction_id == 0) %>%
+      filter(stop_sequence == min(stop_sequence))
+  },
+  color = "red",
+  col.regions = "red",
+  alpha.regions = 1,
+  legend = TRUE,
+  layer.name = "Route 79 NB First GTFS Stop")
+```
+
+**79 Southbound Rawnav Trip Start Points**
+```{r}
+summary79_3 %>%
+  st_set_geometry("geom_start") %>%
+  filter(dirname == "Southbound") %>%
+  mapview(zcol = "dist_to_first", 
+          layer.name = "Dist. From First Stop",
+          homebutton = TRUE) +
+  mapview(route79_sb_shapes, legend = FALSE) +
+  mapview({
+    route79_stops %>%
+      filter(direction_id == 1) %>%
+      filter(stop_sequence == min(stop_sequence))
+  },
+  color = "red",
+  col.regions = "red",
+  alpha.regions = 1,
+  legend = TRUE,
+  layer.name = "Route 79 SB First GTFS Stop")
+```
+#### End Points
+In the Northbound direction, it appears some routes never quite start, or start late.
+
+**79 Northbound Rawnav Trip End Points**
+```{r}
+summary79_3 %>%
+  st_set_geometry("geom_end") %>%
+  filter(dirname == "Northbound") %>%
+  mapview(zcol = "dist_to_last", 
+          layer.name = "Dist. From Last Stop",
+          homebutton = TRUE) +
+  mapview(route79_nb_shapes, legend = FALSE) +
+  mapview({
+    route79_stops %>%
+      filter(direction_id == 0) %>%
+      filter(stop_sequence == max(stop_sequence))
+  },
+  color = "red",
+  col.regions = "red",
+  alpha.regions = 1,
+  legend = TRUE,
+  layer.name = "Route 79 NB Last GTFS Stop")
+```
+
+Southbound, it appears other runs never fully depart, and some may not close out appropriately. It's possible some additional logic to close off the trip when it arrives at the final stop could make these cases usable.
+
+**79 Southbound Rawnav Trip End Points**
+```{r}
+summary79_3 %>%
+  st_set_geometry("geom_end") %>%
+  filter(dirname == "Southbound") %>%
+  mapview(zcol = "dist_to_last", 
+          layer.name = "Dist. From Last Stop",
+          homebutton = TRUE) +
+  mapview(route79_nb_shapes, legend = FALSE) +
+  mapview({
+    route79_stops %>%
+      filter(direction_id == 1) %>%
+      filter(stop_sequence == max(stop_sequence))
+  },
+  color = "red",
+  col.regions = "red",
+  alpha.regions = 1,
+  legend = TRUE,
+  layer.name = "Route 79 SB Last GTFS Stop")
+```
+#### Cases with Issues
+```{r message=FALSE, warning=FALSE, include=FALSE}
+usefil <- 500
+```
+
+What of the cases that fall further than `r usefil` feet away from a start or end point? Because rawnav pings are not loaded in this dataset, only the straightlines from the start to the end are shown. Many of these trips are making the journey - and some are making a much different trip! Here we look just at the Northbound trips, which had fewer close out issues previously. 
+
+**79 Northbound Trips With First/Last Stop Issues** 
+```{r}
+summary79_4 <-
+  summary79_3 %>%
+  select(StartLong,StartLat,EndLong,EndLat) %>%
+  stplanr::od_coords2line(remove_duplicates = FALSE) %>%
+  select(geometry) %>%
+  {bind_cols(summary79_3,.)} %>%
+  st_set_geometry("geometry") %>%
+  mutate(length = st_length(geometry)) %>%
+  mutate(refid = as.character(refid)) 
+
+
+summary79_4 %>%
+  filter(dirname == "Northbound") %>%
+  filter(dist_to_first > usefil | dist_to_last > usefil) %>%
+  mapview(.,
+          zcol = "refid", 
+          layer.name = "Run Info",
+          legend = FALSE,
+          homebutton = TRUE)
+```
+Below, we filter to the shorter of these segments -- a handful of these shorter runs start but never quite get going, while others make it past Columbia Heights before terminating early. 
+
+**79 Northbound Trips With First/Last Stop Issues, Short Trips** 
+```{r}
+summary79_4 %>%
+  filter(dirname == "Northbound") %>%
+  filter(dist_to_first > usefil | dist_to_last > usefil) %>%
+  filter(length < units::set_units(5000,"m")) %>%
+  mapview(.,
+          zcol = "refid", 
+          layer.name = "Run Info",
+          legend = FALSE,
+          homebutton = TRUE) 
+```
+
+
+### Run Times
+If we filter to stops that start and end within a set distance from the expected first and last stop, how many records do we get?
+```{r}
+
+summary79_fil <-
+  summary79_3 %>%
+  filter(dist_to_first <= usefil, dist_to_last <= usefil) %>%
+  mutate(runtime = as.numeric(trip_end_time - trip_start_time, units = "mins")) 
+
+```
+Using `r usefil` feet, we keep `r nrow(summary79_fil)` records, or `r scales::percent(nrow(summary79_fil) / nrow(summary79))` of the sample we started with.
+
+By time period, we see the following counts:
+```{r}
+summary79_fil %>%
+  count(time_period,dirname) %>%
+  spread(time_period,n)
+```
+
+What's the distribution of runtimes? Below are averages by period, in minutes
+```{r}
+summary79_fil %>%
+  group_by(time_period,dirname) %>%
+  summarize(runtime = round(mean(runtime, na.rm = TRUE),2)) %>%
+  spread(time_period,runtime)
+```
+
+There are a handful of outliers for runtime, but none especially egregious. Outliers for runtime on the high end could be the consequence of operators failing to close out a trip after arriving at the final stop, such that the runtime is artificially extended.
+```{r}
+summary79_fil %>%
+  ggplot(aes(x = runtime)) +
+  ggtitle("Distribution of Runtimes for Filtered Route 79 Trips") +
+  geom_histogram() +
+  FITP_Theme
+```
+
+

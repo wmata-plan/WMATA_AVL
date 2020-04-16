@@ -17,6 +17,10 @@ suppressPackageStartupMessages({
   library(janitor)
   library(tidytransit) #need 0.5 or higher i think
   library(plotly)
+  library(extrafont)
+  library(scales)
+  library(patchwork)
+  library(stplanr)
 })
 
 
@@ -63,3 +67,40 @@ FITP_Theme <- theme(plot.title = element_text(family = "Calibri",
 # Other Params ------------------------------------------------------------
 options("scipen" = 100, "digits" = 4)
 
+
+# Helpers -----------------------------------------------------------------
+
+#conveninene function
+make_extra_geom <- 
+  function(df,lon,lat,name,crs){
+    
+    #not teh best way, oh well
+    lon <- rlang::enquo(lon)
+    lat <- rlang::enquo(lat)
+    name <- rlang::enquo(name)
+    
+    lon_name <- rlang::as_label(lon)
+    lat_name <- rlang::as_label(lat)
+    # browser()
+    
+    extra <-
+      df %>%
+      #all this extra overhead because distinct doesn't play well when you
+      #try to pass strings to it
+      distinct(!!lon,!!lat) %>%
+      drop_na() %>%
+      st_as_sf(., 
+               coords = c(lon_name, lat_name),
+               crs = 4326L, #WGS84
+               agr = "constant",
+               remove = FALSE) %>%
+      st_transform(crs = crs) %>%
+      rename(!!name := geometry)
+    
+    #rejoin geoemtry to the original data frame and return that df for further 
+    #piping
+    df2 <-
+      df %>%
+      left_join(extra,
+                by = purrr::set_names(c(lon_name,lat_name)))
+  }
