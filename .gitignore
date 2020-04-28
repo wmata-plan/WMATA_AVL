@@ -128,3 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .Rproj.user
+
+# Re-added files
+!data/readme.txt
+!docs/readme.txt
