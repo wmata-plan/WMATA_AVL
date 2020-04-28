@@ -12,7 +12,7 @@ date: "Updated April 16, 2020"
 
 ---
 
-How to handle cases that fail to begin and end near the first and last stop of a route, respectively, could have a significant effect on the amount of data available to analyze. Filtering only to rawnav run records that begin with 500 feet of the first stop and end within 500 feet of the last stop keeps only about 60 percent of run records. This rate could potentially be increased with some additional logic added to the in-development rawnav parser.
+How to handle cases that fail to begin and end near the first and last stop of a route, respectively, could have a significant effect on the amount of data available to analyze. For each run, the rawnav parser identifies the location of the rawnav GPS pings closest to the first and last stops of the route's pattern in GTFS, using these pings to identify the beginning and end of a rawnav route. 
 
 ### About the Source Data
 This notebook builds upon rawnav data parsed for Route 79 using an in-development version of the rawnav parser.
@@ -57,8 +57,8 @@ summary79 <-
                            include.lowest = TRUE,
                            right = FALSE),
          refid = glue::glue("{Date} - {TripStartTime} - {dirname} - {FileNm}")) %>%
-  make_extra_geom(StartLong, StartLat,geom_start,4326) %>%
-  make_extra_geom(EndLong, EndLat, geom_end, 4326)
+  make_extra_geom(Long_start_GTFS, Lat_start_GTFS,geom_start,4326) %>%
+  make_extra_geom(Long_end_GTFS, Lat_end_GTFS, geom_end, 4326)
 
 
 #Prep work on GTFS
@@ -157,6 +157,17 @@ summary79_3 %>%
   spread(time_period,n)
   
 ```
+
+Not all of the runs appear to run the full length of the alignment. A handful of runs have zero distance, and others are noticeably short.
+```{r}
+summary79_3 %>%
+  ggplot(aes(x = Trip_Dist_Mi_GTFS)) +
+  ggtitle("Distribution of Running Distances for Route 79 Runs") +
+  geom_histogram() +
+  FITP_Theme
+```
+In the examination of Route 79 below, runs of less than 3 miles (slightly less than half the length of the alignment) are excluded from the analysis. This results in `r summary79 %>% filter(Trip_Dist_Mi_GTFS >= 3) %>% nrow()` remaining records out of `r nrow(summary79)`.
+
 ### Trip Geometry
 
 #### Start Points
@@ -167,7 +178,8 @@ Notably, not all of the trips begin where one might expect. First, northbound ra
 summary79_3 %>%
   st_set_geometry("geom_start") %>%
   filter(dirname == "Northbound") %>%
-  mapview(zcol = "dist_to_first", 
+  filter(Trip_Dist_Mi_GTFS >= 3) %>%
+  mapview(zcol = "Dist_from_GTFS1stStop_start_ft", 
           layer.name = "Dist. From First Stop",
           homebutton = TRUE) +
   mapview(route79_nb_shapes, legend = FALSE) +
@@ -182,13 +194,14 @@ summary79_3 %>%
   legend = TRUE,
   layer.name = "Route 79 NB First GTFS Stop")
 ```
-
+Notably, in the southbound direction, there are a number of runs that do not 'begin' until near the end of the 79 SB alignment. These runs are filtered out in the map below based on the minimum running distance criteria of 3 miles.
 **79 Southbound Rawnav Trip Start Points**
 ```{r}
 summary79_3 %>%
   st_set_geometry("geom_start") %>%
   filter(dirname == "Southbound") %>%
-  mapview(zcol = "dist_to_first", 
+  filter(Trip_Dist_Mi_GTFS >= 3) %>%
+  mapview(zcol = "Dist_from_GTFS1stStop_start_ft", 
           layer.name = "Dist. From First Stop",
           homebutton = TRUE) +
   mapview(route79_sb_shapes, legend = FALSE) +
@@ -211,7 +224,8 @@ In the Northbound direction, it appears some routes never quite start, or start 
 summary79_3 %>%
   st_set_geometry("geom_end") %>%
   filter(dirname == "Northbound") %>%
-  mapview(zcol = "dist_to_last", 
+  filter(Trip_Dist_Mi_GTFS >= 3) %>%
+  mapview(zcol = "Dist_from_GTFSlastStop_end_ft", 
           layer.name = "Dist. From Last Stop",
           homebutton = TRUE) +
   mapview(route79_nb_shapes, legend = FALSE) +
@@ -227,14 +241,15 @@ summary79_3 %>%
   layer.name = "Route 79 NB Last GTFS Stop")
 ```
 
-Southbound, it appears other runs never fully depart, and some may not close out appropriately. It's possible some additional logic to close off the trip when it arrives at the final stop could make these cases usable.
+Southbound, it appears other runs never fully depart, and some may not close out appropriately. 
 
 **79 Southbound Rawnav Trip End Points**
 ```{r}
 summary79_3 %>%
   st_set_geometry("geom_end") %>%
   filter(dirname == "Southbound") %>%
-  mapview(zcol = "dist_to_last", 
+  filter(Trip_Dist_Mi_GTFS >= 3) %>%
+  mapview(zcol = "Dist_from_GTFSlastStop_end_ft", 
           layer.name = "Dist. From Last Stop",
           homebutton = TRUE) +
   mapview(route79_nb_shapes, legend = FALSE) +
@@ -254,13 +269,13 @@ summary79_3 %>%
 usefil <- 500
 ```
 
-What of the cases that fall further than `r usefil` feet away from a start or end point? Because rawnav pings are not loaded in this dataset, only the straightlines from the start to the end are shown. Many of these trips are making the journey - and some are making a much different trip! Here we look just at the Northbound trips, which had fewer close out issues previously. 
+What of the cases that fall further than `r usefil` feet away from a start or end point? Because rawnav pings are not loaded in this dataset, only the straightlines from the start to the end are shown. Many of these trips are making the journey. Here we look just at the Northbound trips, which had fewer close out issues previously. 
 
 **79 Northbound Trips With First/Last Stop Issues** 
 ```{r}
 summary79_4 <-
   summary79_3 %>%
-  select(StartLong,StartLat,EndLong,EndLat) %>%
+  select(Long_start_GTFS,Lat_start_GTFS,Long_end_GTFS,Lat_end_GTFS) %>%
   stplanr::od_coords2line(remove_duplicates = FALSE) %>%
   select(geometry) %>%
   {bind_cols(summary79_3,.)} %>%
@@ -276,32 +291,22 @@ summary79_4 %>%
           zcol = "refid", 
           layer.name = "Run Info",
           legend = FALSE,
-          homebutton = TRUE)
-```
-Below, we filter to the shorter of these segments -- a handful of these shorter runs start but never quite get going, while others make it past Columbia Heights before terminating early. 
-
-**79 Northbound Trips With First/Last Stop Issues, Short Trips** 
-```{r}
-summary79_4 %>%
-  filter(dirname == "Northbound") %>%
-  filter(dist_to_first > usefil | dist_to_last > usefil) %>%
-  filter(length < units::set_units(5000,"m")) %>%
-  mapview(.,
-          zcol = "refid", 
-          layer.name = "Run Info",
-          legend = FALSE,
+          alpha = .4,
+          highlight = highlightOptions(bringToFront = TRUE,
+                                       weight = 5,
+                                       fillOpacity= 1,
+                                       color="red"),
           homebutton = TRUE) 
 ```
 
-
 ### Run Times
-If we filter to stops that start and end within a set distance from the expected first and last stop, how many records do we get?
+If we filter to runs with rawnav pings that fall within a set distance from the first *and* last stop, how many records do we get?
 ```{r}
-
 summary79_fil <-
   summary79_3 %>%
-  filter(dist_to_first <= usefil, dist_to_last <= usefil) %>%
-  mutate(runtime = as.numeric(trip_end_time - trip_start_time, units = "mins")) 
+  filter(dist_to_first <= usefil & dist_to_last <= usefil) %>%
+  filter(Trip_Dist_Mi_GTFS >= 3) %>%
+  mutate(runtime = Trip_Dur_Sec_GTFS / 60) 
 
 ```
 Using `r usefil` feet, we keep `r nrow(summary79_fil)` records, or `r scales::percent(nrow(summary79_fil) / nrow(summary79))` of the sample we started with.
@@ -313,7 +318,7 @@ summary79_fil %>%
   spread(time_period,n)
 ```
 
-What's the distribution of runtimes? Below are averages by period, in minutes
+What's the distribution of runtimes? Below are averages by period, in minutes. These are calculated based on time intervals between the pings closest to the first and last stops.
 ```{r}
 summary79_fil %>%
   group_by(time_period,dirname) %>%
@@ -321,7 +326,7 @@ summary79_fil %>%
   spread(time_period,runtime)
 ```
 
-There are a handful of outliers for runtime, but none especially egregious. Outliers for runtime on the high end could be the consequence of operators failing to close out a trip after arriving at the final stop, such that the runtime is artificially extended.
+There are some outliers for runtime.
 ```{r}
 summary79_fil %>%
   ggplot(aes(x = runtime)) +

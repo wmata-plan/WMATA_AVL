@@ -367,3 +367,4 @@ def GetDistanceforTripSummaryDat(row):
 def GetDistanceLatLong_ft(Lat1, Long1, Lat2, Long2):
     distance_ft = geodesic((Lat1, Long1), (Lat2, Long2)).feet
     return(distance_ft)
+
