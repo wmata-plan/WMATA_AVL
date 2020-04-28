@@ -132,7 +132,7 @@ LastStopDat1.to_csv(os.path.join(path_processed_data,'LastStopGTFS.csv'))
 ########################################################################################
 
 
-TripInventory = pd.read_excel(os.path.join(path_processed_data,'TripSummaries_Veh0_2999_100rows.xlsx'),\
+TripInventory = pd.read_excel(os.path.join(path_processed_data,'TripSummaries_Veh0_2999.xlsx'),\
                               'SummaryData', \
                               converters = {'Tag':str})
 TripInventory.loc[:,'route_id'] = TripInventory.Tag.str[0:2].str.upper()
