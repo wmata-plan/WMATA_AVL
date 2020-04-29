@@ -26,15 +26,9 @@ if os.getlogin() == "WylieTimmerman":
     
     # Source Data
     # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
-    path_source_data = r"C:\Downloads\Vehicles 0-2999\Vehicles 0-2999"
+    path_source_data = r"C:\Downloads"
     GTFS_Dir = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\wmata-2019-05-18 dl20200205gtfs")
-    #ZippedFilesLoc = path_source_data
-    breakpoint()
-    #Wylie: using glob to get data for all vehicles: 0-8000+. You might need to change the folder
-    #Reference
-    ZippedFilesDirParent = os.path.join(path_source_data, "October 2019 Rawnav")
-    ZippedFilesDirs = glob.glob(os.path.join(path_source_data,'October 2019 Rawnav/Vehicles *.zip'))
-    UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,'October 2019 Rawnav/Vehicles*[0-9]'))    
+
     # Processed Data
     path_processed_data = os.path.join(path_sp,r"Client Shared Folder\data\02-processed")
     
@@ -47,9 +41,7 @@ elif os.getlogin()=="abibeka":
     # Source Data
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
     GTFS_Dir = os.path.join(path_source_data, "google_transit")   
-    ZippedFilesDirParent = os.path.join(path_source_data, "October 2019 Rawnav")
-    ZippedFilesDirs = glob.glob(os.path.join(path_source_data,'October 2019 Rawnav/Vehicles *.zip'))
-    UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,'October 2019 Rawnav/Vehicles*[0-9]'))
+
     # Processed Data
     path_processed_data = os.path.join(path_source_data,"ProcessedData")
 else:
@@ -59,10 +51,23 @@ else:
 # User-Defined Package
 import rawnavparser as rp
 
+# Globals
+AnalysisRoutes = ['79','X2','X9']
+ZipParentFolderName = "October 2019 Rawnav"
+# Assumes directory structure:
+# ZipParentFolderName (e.g, October 2019 Rawnav)
+#  -- ZippedFilesDirs (e.g., Vehicles 0-2999.zip)
+#     -- FileUniverse (items in various ZippedFilesDirs ala rawnav##########.txt.zip
+#
+
 #2 Indentify Relevant Files for a Particular Route
 ########################################################################################
 
 #Extract parent zipped folder and get the zipped files path
+ZippedFilesDirParent = os.path.join(path_source_data, ZipParentFolderName)
+ZippedFilesDirs = glob.glob(os.path.join(path_source_data,ZipParentFolderName,'Vehicles *.zip'))
+UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,ZippedFilesDirParent,'Vehicles*[0-9]'))
+    
 FileUniverse = rp.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
 #Directly get the zipped files path
 # WT: i'm a little confused by this; we're calling this function twice with a 
@@ -91,7 +96,6 @@ for FileNm_int, EmptyDf in RawNavDataDict['79'].items():
     FirstTagDict[FileNm_int] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
 
 
-
 #2.1 Only Read RawNav Files for selected routes
 
 
@@ -101,7 +105,7 @@ TripInventory = pd.read_excel(os.path.join(path_processed_data,'TripSummaries_Ve
                               converters = {'Tag':str})
 TripInventory.loc[:,'route_id'] = TripInventory.Tag.str[0:2].str.upper()
 TripInventory.columns
-AnalysisRoutes = ['79','X2','X9']
+
 MaskAnalysisRoutes = TripInventory.route_id.isin(AnalysisRoutes)
 TripInventory = TripInventory[MaskAnalysisRoutes]
 
