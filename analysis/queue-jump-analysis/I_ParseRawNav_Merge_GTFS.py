@@ -125,30 +125,30 @@ breakpoint()
 ZipDirList=ZippedFilesDirs
 
 
-for FileNm_int, EmptyDf in RawNavDataDict['79'].items():
-    ZipFolder = os.path.join(path_source_data,"rawnav" + str(FileNm_int).rjust(11,'0') + '.txt.zip')
-    ZipFile1 = os.path.basename(ZipFolder.split('.zip')[0]) 
-    FistTagLnNum, FirstTagLine, StartTimeLn,HasData,HasCorrectBusID = rp.FindFirstTagLine_ZipFile(ZipFolder, ZipFile1)
-    zf = zipfile.ZipFile(ZipFolder)
-    RawNavDataDict['79'][FileNm_int] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
-    FirstTagDict[FileNm_int] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
+# for FileNm_int, EmptyDf in RawNavDataDict['79'].items():
+#     ZipFolder = os.path.join(path_source_data,"rawnav" + str(FileNm_int).rjust(11,'0') + '.txt.zip')
+#     ZipFile1 = os.path.basename(ZipFolder.split('.zip')[0]) 
+#     FistTagLnNum, FirstTagLine, StartTimeLn,HasData,HasCorrectBusID = rp.FindFirstTagLine_ZipFile(ZipFolder, ZipFile1)
+#     zf = zipfile.ZipFile(ZipFolder)
+#     RawNavDataDict['79'][FileNm_int] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
+#     FirstTagDict[FileNm_int] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
 
 
-#2.1 Only Read RawNav Files for selected routes
+# #2.1 Only Read RawNav Files for selected routes
 
 
 
-TripInventory = pd.read_excel(os.path.join(path_processed_data,'TripSummaries_Veh0_2999.xlsx'),\
-                              'SummaryData', \
-                              converters = {'Tag':str})
-TripInventory.loc[:,'route_id'] = TripInventory.Tag.str[0:2].str.upper()
-TripInventory.columns
+# TripInventory = pd.read_excel(os.path.join(path_processed_data,'TripSummaries_Veh0_2999.xlsx'),\
+#                               'SummaryData', \
+#                               converters = {'Tag':str})
+# TripInventory.loc[:,'route_id'] = TripInventory.Tag.str[0:2].str.upper()
+# TripInventory.columns
 
-MaskAnalysisRoutes = TripInventory.route_id.isin(AnalysisRoutes)
-TripInventory = TripInventory[MaskAnalysisRoutes]
+# MaskAnalysisRoutes = TripInventory.route_id.isin(AnalysisRoutes)
+# TripInventory = TripInventory[MaskAnalysisRoutes]
 
-if len(TripInventory) == 0:
-    raise Exception ("No Analysis Routes found in TripInventory")
+# if len(TripInventory) == 0:
+#     raise Exception ("No Analysis Routes found in TripInventory")
 
 TripInventory1 = TripInventory.groupby(['route_id','FileNm'])['BusID'].count().reset_index()
 
@@ -177,6 +177,7 @@ ProcessedDataDict= defaultdict(lambda:  {})
 Debug= False
 ColumnNmMap = {0:'Lat',1:'Long',2:'Heading',3:'DoorState',4:'VehState',5:'OdomtFt',6:'SecPastSt',7:'SatCnt',
                    8:'StopWindow',9:'Blank',10:'LatRaw',11:'LongRaw'}
+
 
 rte_id = '79'
 for key,TestData in RawNavDataDict[rte_id].items():

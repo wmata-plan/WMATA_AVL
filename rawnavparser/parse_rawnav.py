@@ -134,8 +134,51 @@ def clean_rawnav_data(file_id,rawnavdata,FirstTag):
 
 #Nested Functions
 #################################################################################################################
+def FindAllTags(ZipFolderPath, quiet = True):
+    '''
+    Parameters
+    ----------
+    ZipFolderPath: str
+        Path to zipped folder with rawnav text file. 
+        i.e., rawnav02164191003.txt.zip
+        Assumes that included text file has the same name as the zipped file,
+        minus the '.zip' extension.
+        Note: For absolute paths, use forward slashes.
 
-
+    Returns
+    -------
+    TagLineElements
+        List of Character strings including line number, pattern, vehicle,
+        date, and time
+    '''
+    if quiet != True: 
+        print("Searching for tags in: " + ZipFolderPath)
+ 
+    zf = zipfile.ZipFile(ZipFolderPath)
+    # Get Filename
+    namepat = re.compile('(rawnav\d+\.txt)') 
+    ZipFileName = namepat.search(ZipFolderPath).group(1) 
+    # Get Info
+    infopat ='^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
+    TagLineElements = []
+    TagLineNum = 1
+    with io.TextIOWrapper(zf.open(ZipFileName, 'r'),encoding="utf-8") as input_file:
+        for current_line in input_file:
+            for match in re.finditer(infopat, current_line, re.S):
+                # Turns out we don't really need capture groups
+                # with string split approach, but leaving in for possible
+                # future changes
+                returnvals = str(TagLineNum) + "," + match.group()
+                TagLineElements.append(returnvals)
+            TagLineNum = TagLineNum + 1
+            
+    # WT: Not sure if necessary, may help with separating later
+    # Python unnesting not as friendly as desired
+    if len(TagLineElements) == 0:
+         TagLineElements.append(',,,,,,')
+                
+    return(TagLineElements)
+        
 def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
     '''
     
@@ -181,49 +224,6 @@ def is_numeric(s):
     except(ValueError, TypeError):
         return False
     
-    
-    
-def FindFirstTagLine(filename):
-    '''
-    Parameters
-    ----------
-    filename : str
-        Read the 1st 100 lines to find when the csv format starts.
-
-    Returns
-    -------
-    FirstTagLineNum: int
-        Line number with the 1st useful info 
-    FirstTagLineElements: list
-        First Line with Bus ID, Time etc..
-    StartTimeLine: Also contains the start time
-    '''
-    # Get BusID
-    pat  = re.compile('rawnav(.*).txt') 
-    BusID = pat.search(filename).group(1)[1:5]
-    number_of_lines = 100 # # lines to search 
-    dateFormat = re.compile('^\d{1,2}\/\d{1,2}\/\d{2}$') 
-    timeFormat = re.compile('^\d{1,2}:\d{1,2}:\d{2}$')
-    FirstTagLineNum = 1
-    FirstTagLineElements = []
-    with open(filename, 'r') as input_file:
-        lines_cache = islice(input_file, number_of_lines)
-        for current_line in lines_cache:
-            tempList = current_line.split(',')
-            #Check for this pattern ['PO03408', '6431', '04/30/19', '07:12:00', '45145', '05280\n']
-            if(len(tempList)>=4): 
-                if(
-                 (tempList[1]==BusID) &
-                 bool(re.match(dateFormat,tempList[2]))&
-                 bool(re.match(timeFormat,tempList[3]))
-                  ): 
-                    FirstTagLineElements = tempList
-                    break
-            FirstTagLineNum = FirstTagLineNum+1
-    StartTimeLine = linecache.getline(filename, FirstTagLineNum-1)
-    return([FirstTagLineNum,FirstTagLineElements,StartTimeLine])
-
-
 def FindFirstTagLine_ZipFile(ZipFolder, ZipFile1):
     '''
     Parameters
