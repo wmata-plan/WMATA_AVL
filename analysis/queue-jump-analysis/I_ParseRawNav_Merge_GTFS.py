@@ -72,7 +72,8 @@ FileUniverse = parse_rawnav.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFiles
 FileUniverse = parse_rawnav.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
 #Get the zipped files path
 len(FileUniverse)
-
+InitialResDict = {}
+InitialResDict =  find_rawnav_routes(FileUniverse,path_source_data,True)
 
 
 
