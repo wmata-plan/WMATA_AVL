@@ -15,6 +15,24 @@ from zipfile import BadZipfile
 #Parent Functions
 #################################################################################################################
 def find_rawnav_routes(FileUniverse, path_source_data, debug=True): 
+    '''
+    
+
+    Parameters
+    ----------
+    FileUniverse : TYPE
+        DESCRIPTION.
+    path_source_data : TYPE
+        DESCRIPTION.
+    debug : TYPE, optional
+        DESCRIPTION. The default is True.
+
+    Returns
+    -------
+    ReturnDict.
+
+    '''
+    RouteInventory = pd.DataFrame() # need to write code for this 
     FirstTagDict = {}
     RawDataDict_WrongBusID = {}
     FirstTagDict_WrongBusID  = {}
@@ -22,6 +40,7 @@ def find_rawnav_routes(FileUniverse, path_source_data, debug=True):
     NoData_da= pd.DataFrame()
     WrongBusID_da = pd.DataFrame()
     CompressionErrorFiles =[]
+    KeyErrorFiles = []
     for ZipFolder in FileUniverse:
         try:
             if debug: print(ZipFolder)
@@ -41,7 +60,7 @@ def find_rawnav_routes(FileUniverse, path_source_data, debug=True):
                     FirstTagDict_WrongBusID[ZipFile1] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
                     tempDa1 = pd.DataFrame(columns=['FileNm','FirstTagLineNo','FirstTagLine'])
                     tempDa1.loc[0,['FileNm','FirstTagLineNo','FirstTagLine']] = [ZipFile1,FistTagLnNum,StartTimeLn]
-                    NoData_da = pd.concat([NoData_da,tempDa1])
+                    WrongBusID_da = pd.concat([WrongBusID_da,tempDa1])
             else:
                 MoveEmptyIncorrectLabelFiles(ZipFolder,path_source_data,"EmptyFiles")        
                 NoDataDict[ZipFile1] = {'EndLineNo':FistTagLnNum,'EndLine':StartTimeLn}
@@ -49,9 +68,13 @@ def find_rawnav_routes(FileUniverse, path_source_data, debug=True):
                 tempDa.loc[0,['ZipFile1','EndLineNo','EndLine']] = [ZipFile1,FistTagLnNum,StartTimeLn]
                 NoData_da = pd.concat([NoData_da,tempDa])
         except BadZipfile :
-            CompressionErrorFiles.extend(ZipFolder)
-            continue
-    return(None)
+            CompressionErrorFiles.append(ZipFolder)
+        except KeyError:
+            KeyErrorFiles.append(ZipFolder)
+    ReturnDict ={'FirstTagDict':FirstTagDict,'RouteSummaryDa':'RouteInventory','NoData_da':NoData_da,
+                 'WrongBusID_da':WrongBusID_da,'CompressionErrorFiles':CompressionErrorFiles,
+                 'KeyErrorFiles':KeyErrorFiles}
+    return(ReturnDict)
    
         
         
