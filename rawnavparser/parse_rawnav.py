@@ -85,7 +85,7 @@ def find_rawnav_routes(FileUniverse, path_source_data, debug=True):
     
 def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent):
     '''
-    Get the list of files to read from Zipped folder. Also Uzip the parent folder.
+    Get the list of files to read from Zipped folder. Also Unzip the parent folder.
     Will Unzip only once. 
     Parameters
     ----------

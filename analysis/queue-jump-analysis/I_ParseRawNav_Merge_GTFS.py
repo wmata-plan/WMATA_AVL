@@ -56,24 +56,26 @@ else:
     raise FileNotFoundError("Define the path_working, path_source_data, GTFS_Dir, \
                             ZippedFilesloc, and path_processed_data in a new elif block")
         
-    
-#User-Defined Package
-# import wmatalib
-# import wmatalib.parser
-from wmatalib.parser.parse_rawnav import * #Need to figure out how to handle nested functions.
-# Nested functions are not loaded if we don't use *. Might have to import them in __init__.py
+# User-Defined Package
+import rawnavparser as rp
 
 #2 Indentify Relevant Files for a Particular Route
 ########################################################################################
-parse_rawnav.find_rawnav_routes()
+
 #Extract parent zipped folder and get the zipped files path
-FileUniverse = parse_rawnav.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
+FileUniverse = rp.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
 #Directly get the zipped files path
-FileUniverse = parse_rawnav.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
+# WT: i'm a little confused by this; we're calling this function twice with a 
+#    different argument and reassigning file universe?
+FileUniverse = rp.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
 #Get the zipped files path
 len(FileUniverse)
+
+
+
+
 InitialResDict = {}
-InitialResDict =  find_rawnav_routes(FileUniverse,path_source_data,True)
+InitialResDict =  rp.find_rawnav_routes(FileUniverse,path_source_data,True)
 
 
 
