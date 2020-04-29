@@ -10,11 +10,51 @@ import zipfile,re,linecache,numpy as np, pandas as pd, datetime as dt\
 from itertools import islice
 #from folium.plugins import MarkerCluster
 from geopy.distance import geodesic
-
+from zipfile import BadZipfile
 
 #Parent Functions
 #################################################################################################################
-# def find_rawnav_routes(): 
+def find_rawnav_routes(FileUniverse, path_source_data, debug=True): 
+    FirstTagDict = {}
+    RawDataDict_WrongBusID = {}
+    FirstTagDict_WrongBusID  = {}
+    NoDataDict = {}
+    NoData_da= pd.DataFrame()
+    WrongBusID_da = pd.DataFrame()
+    CompressionErrorFiles =[]
+    for ZipFolder in FileUniverse:
+        try:
+            if debug: print(ZipFolder)
+            pat= re.compile('.*(rawnav[0-9]*.txt).zip')
+            ZipFile1 = pat.search(ZipFolder).group(1) 
+            if(ZipFile1 in FirstTagDict.keys()):
+                continue
+            FistTagLnNum, FirstTagLine, StartTimeLn,HasData,HasCorrectBusID = FindFirstTagLine_ZipFile(ZipFolder, ZipFile1)
+            zf = zipfile.ZipFile(ZipFolder)
+            if HasData:
+                if(HasCorrectBusID):
+                    # RawDataDict[ZipFile1] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
+                    FirstTagDict[ZipFile1] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
+                else:
+                    MoveEmptyIncorrectLabelFiles(ZipFolder,path_source_data,"InCorrectBusID")     
+                    RawDataDict_WrongBusID[ZipFile1] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
+                    FirstTagDict_WrongBusID[ZipFile1] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
+                    tempDa1 = pd.DataFrame(columns=['FileNm','FirstTagLineNo','FirstTagLine'])
+                    tempDa1.loc[0,['FileNm','FirstTagLineNo','FirstTagLine']] = [ZipFile1,FistTagLnNum,StartTimeLn]
+                    NoData_da = pd.concat([NoData_da,tempDa1])
+            else:
+                MoveEmptyIncorrectLabelFiles(ZipFolder,path_source_data,"EmptyFiles")        
+                NoDataDict[ZipFile1] = {'EndLineNo':FistTagLnNum,'EndLine':StartTimeLn}
+                tempDa = pd.DataFrame(columns=['ZipFile1','EndLineNo','EndLine'])
+                tempDa.loc[0,['ZipFile1','EndLineNo','EndLine']] = [ZipFile1,FistTagLnNum,StartTimeLn]
+                NoData_da = pd.concat([NoData_da,tempDa])
+        except BadZipfile :
+            CompressionErrorFiles.extend(ZipFolder)
+            continue
+    return(None)
+   
+        
+        
 # def load_rawnav_data(): 
 # def clean_rawnav_data(): 
 # def summarize_rawnav_trip(): 
@@ -55,7 +95,31 @@ def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent):
         FileUniverse.extend(listFiles)
     return(FileUniverse)
         
+
+    
+#     zf.write(MoveFile)
+#Nested Functions
+#################################################################################################################
+
+
 def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
+    '''
+    
+
+    Parameters
+    ----------
+    File : str
+        Rawnav files with empty or incorrect BusID
+    path_source_data : str
+        Sending the file "File" to a directory in path_source_data.
+    Issue : str, optional
+        Type of issue with the file: missing/Empty. The default is 'EmptyFiles'.
+
+    Returns
+    -------
+    None.
+
+    '''
     # Copy empty files to another directory for checking.
     pat  = re.compile('.*(Vehicles\s*[0-9]*-[0-9]*)') 
     VehNos =pat.search(File).group(1)
@@ -69,11 +133,6 @@ def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
         print('Error Dir creation')
     shutil.copy(File,MoveDir)  #Will change it to "move" later
     return(None)
-    
-#     zf.write(MoveFile)
-#Nested Functions
-#################################################################################################################
-
 
 
 

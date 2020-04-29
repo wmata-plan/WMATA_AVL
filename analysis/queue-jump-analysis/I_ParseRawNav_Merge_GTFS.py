@@ -32,10 +32,9 @@ if os.getlogin() == "WylieTimmerman":
     breakpoint()
     #Wylie: using glob to get data for all vehicles: 0-8000+. You might need to change the folder
     #Reference
+    ZippedFilesDirParent = os.path.join(path_source_data, "October 2019 Rawnav")
     ZippedFilesDirs = glob.glob(os.path.join(path_source_data,'October 2019 Rawnav/Vehicles *.zip'))
-
-    # Processed Data
-    
+    UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,'October 2019 Rawnav/Vehicles*[0-9]'))    
     # Processed Data
     path_processed_data = os.path.join(path_sp,r"Client Shared Folder\data\02-processed")
     
@@ -51,7 +50,6 @@ elif os.getlogin()=="abibeka":
     ZippedFilesDirParent = os.path.join(path_source_data, "October 2019 Rawnav")
     ZippedFilesDirs = glob.glob(os.path.join(path_source_data,'October 2019 Rawnav/Vehicles *.zip'))
     UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,'October 2019 Rawnav/Vehicles*[0-9]'))
-    os.path.join(path_source_data,'October 2019 Rawnav/Vehicles 0-2999')    
     # Processed Data
     path_processed_data = os.path.join(path_source_data,"ProcessedData")
 else:
@@ -62,13 +60,19 @@ else:
 #User-Defined Package
 # import wmatalib
 # import wmatalib.parser
-from wmatalib.parser import parse_rawnav
+from wmatalib.parser.parse_rawnav import * #Need to figure out how to handle nested functions.
+# Nested functions are not loaded if we don't use *. Might have to import them in __init__.py
 
 #2 Indentify Relevant Files for a Particular Route
 ########################################################################################
 parse_rawnav.find_rawnav_routes()
-FileUniverse = parse_rawnav.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) #Get the zipped files path
-FileUniverse = parse_rawnav.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) #Get the zipped files path
+#Extract parent zipped folder and get the zipped files path
+FileUniverse = parse_rawnav.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
+#Directly get the zipped files path
+FileUniverse = parse_rawnav.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
+#Get the zipped files path
+len(FileUniverse)
+
 
 
 
