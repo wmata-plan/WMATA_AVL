@@ -49,7 +49,7 @@ else:
                             ZippedFilesloc, and path_processed_data in a new elif block")
         
 # User-Defined Package
-import rawnavparser as rp
+import wmatarawnav as wr
 
 # Globals
 # Restrict number of zip files to parse to this number for testing.
@@ -74,14 +74,14 @@ ZippedFilesDirParent = os.path.join(path_source_data, ZipParentFolderName)
 ZippedFilesDirs = glob.glob(os.path.join(path_source_data,ZipParentFolderName,'Vehicles *.zip'))
 UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,ZippedFilesDirParent,'Vehicles*[0-9]'))
     
-FileUniverse = rp.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
+FileUniverse = wr.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
 #Directly get the zipped files path
 # WT: i'm a little confused by this; we're calling this function twice with a 
 #    different argument and reassigning file universe?
-FileUniverse = rp.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
+FileUniverse = wr.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
 
 # Return a dataframe of routes and details
-rawnav_inventory = rp.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = False)
+rawnav_inventory = wr.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = False)
 
 # Filter to our set of analysis routes and any other conditions
 rawnav_inventory_filtered = rawnav_inventory.loc[(rawnav_inventory['route'].isin(AnalysisRoutes))]
@@ -101,7 +101,7 @@ FileUniverse_filtered = list(set(rawnav_inv_filt_first['fullpath'].values.tolist
 RawNavDataDict = {}
 
 for index, row in rawnav_inv_filt_first.iterrows():
-     RawNavDataDict[row['file_id']] = rp.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))
+     RawNavDataDict[row['file_id']] = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))
 
 # 4 Clean RawNav Data
 ########################################################################################
@@ -117,7 +117,7 @@ for key, data in RawNavDataDict.items():
     firsttag = rawnav_inv_filt_first.loc[rawnav_inv_filt_first['file_id'] == key,'taglist'].values[0].split(',')
     # WT: Apoorb, I think I'll need your help on GetTagInfo
     # I think the way I'm trying to pass tag isn't quite working there
-    CleanDataDict[key] = rp.clean_rawnav_data(file_id = key, rawnavdata = data, FirstTag = firsttag)
+    CleanDataDict[key] = wr.clean_rawnav_data(file_id = key, rawnavdata = data, FirstTag = firsttag)
 
 
 # WT: stopped here working on code
@@ -128,7 +128,7 @@ ZipDirList=ZippedFilesDirs
 # for FileNm_int, EmptyDf in RawNavDataDict['79'].items():
 #     ZipFolder = os.path.join(path_source_data,"rawnav" + str(FileNm_int).rjust(11,'0') + '.txt.zip')
 #     ZipFile1 = os.path.basename(ZipFolder.split('.zip')[0]) 
-#     FistTagLnNum, FirstTagLine, StartTimeLn,HasData,HasCorrectBusID = rp.FindFirstTagLine_ZipFile(ZipFolder, ZipFile1)
+#     FistTagLnNum, FirstTagLine, StartTimeLn,HasData,HasCorrectBusID = wr.FindFirstTagLine_ZipFile(ZipFolder, ZipFile1)
 #     zf = zipfile.ZipFile(ZipFolder)
 #     RawNavDataDict['79'][FileNm_int] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
 #     FirstTagDict[FileNm_int] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
@@ -162,7 +162,7 @@ FirstTagDict = {}
 for FileNm_int, EmptyDf in RawNavDataDict['79'].items():
     ZipFolder = os.path.join(path_source_data,"rawnav" + str(FileNm_int).rjust(11,'0') + '.txt.zip')
     ZipFile1 = os.path.basename(ZipFolder.split('.zip')[0]) 
-    FistTagLnNum, FirstTagLine, StartTimeLn,HasData,HasCorrectBusID = rp.FindFirstTagLine_ZipFile(ZipFolder, ZipFile1)
+    FistTagLnNum, FirstTagLine, StartTimeLn,HasData,HasCorrectBusID = wr.FindFirstTagLine_ZipFile(ZipFolder, ZipFile1)
     zf = zipfile.ZipFile(ZipFolder)
     RawNavDataDict['79'][FileNm_int] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
     FirstTagDict[FileNm_int] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
@@ -189,19 +189,19 @@ for key,TestData in RawNavDataDict[rte_id].items():
     #3.1 Remove "APC" and "CAL" Labels
     #****************************************************************************************************************
     Data = TestData if Debug else ""
-    TestData = rp.RemoveCAL_APC_Tags(TestData)
+    TestData = wr.RemoveCAL_APC_Tags(TestData)
     #3.2 Get the Rows with Tags
     #****************************************************************************************************************
     TestData.reset_index(inplace=True); TestData.rename(columns = {"index":"IndexLoc"},inplace=True)
-    TagsData = TestData[~TestData.apply(rp.CheckValidDataEntry,axis=1)]
-    TripTags,EndOfRoute1 = rp.GetTagInfo(TagsData,FirstTag)
+    TagsData = TestData[~TestData.apply(wr.CheckValidDataEntry,axis=1)]
+    TripTags,EndOfRoute1 = wr.GetTagInfo(TagsData,FirstTag)
     #Remove rows with tags and rows that have no value in the 3rd column
     # Might need to look back at the 3rd column
     RemoveRows = np.append(EndOfRoute1.IndexTripEnd.values, TripTags.IndexTripTags.values)
     RemoveRows = np.setdiff1d(RemoveRows,np.array([0])) #1st row should not be deleted. 
     #1st tag would at position 0 but it doesn't affect the data.
     TestData = TestData[~TestData.IndexLoc.isin(RemoveRows)]
-    TestData=  TestData[TestData.apply(rp.CheckValidDataEntry,axis=1)]
+    TestData=  TestData[TestData.apply(wr.CheckValidDataEntry,axis=1)]
     #check if 1st and 2nd column only has lat long 
     try:
         TestData.loc[:,[0,1]] = TestData.loc[:,[0,1]].applymap(lambda x: float(x))#It would not work we All Tags are not removed from the data
@@ -211,7 +211,7 @@ for key,TestData in RawNavDataDict[rte_id].items():
     #****************************************************************************************************************
     Data = TestData if Debug else ""
     # Add start and end info to the data. Get Trip start and end data from tags and raw data. 
-    TestData1, TripSumData,EndTimeFeetDat = rp.AddTripStartEndTags(TestData,TripTags, EndOfRoute1)  
+    TestData1, TripSumData,EndTimeFeetDat = wr.AddTripStartEndTags(TestData,TripTags, EndOfRoute1)  
     TripSumData = TripSumData.groupby('IndexTripTags')['TripStartTime'].first().reset_index()
     TestData1.rename(columns=ColumnNmMap,inplace=True)    
     TestData1.loc[:,'route_id'] = TestData1.Tag.str[:2].str.upper()
@@ -233,7 +233,7 @@ for key,TestData in RawNavDataDict[rte_id].items():
     #****************************************************************************************************************
     for idx, row in FirstRawNavRow.iterrows():
         RawNavLat1,RawNavLong1 = row[['Lat','Long']]
-        GTFS_1stStop.loc[:,'Dist_from_1st_RawNav_Pt'] = GTFS_1stStop.apply(lambda row:rp.GetDistanceLatLong_ft(row['first_sLat'],row['first_sLon'],RawNavLat1,RawNavLong1) ,axis=1)
+        GTFS_1stStop.loc[:,'Dist_from_1st_RawNav_Pt'] = GTFS_1stStop.apply(lambda row:wr.GetDistanceLatLong_ft(row['first_sLat'],row['first_sLon'],RawNavLat1,RawNavLong1) ,axis=1)
         MaskClosestStop = GTFS_1stStop.Dist_from_1st_RawNav_Pt== min(GTFS_1stStop.Dist_from_1st_RawNav_Pt )
         TempLat = GTFS_1stStop[MaskClosestStop][['first_sLat','first_sLon']].values[0][0]
         TempLong = GTFS_1stStop[MaskClosestStop][['first_sLat','first_sLon']].values[0][1]
@@ -242,7 +242,7 @@ for key,TestData in RawNavDataDict[rte_id].items():
          
     for idx, row in LastRawNavRow.iterrows():
         RawNavLat1,RawNavLong1 = row[['Lat','Long']]
-        GTFS_lastStop.loc[:,'Dist_from_last_RawNav_Pt'] = GTFS_lastStop.apply(lambda row:rp.GetDistanceLatLong_ft(row['last_sLat'],row['last_sLon'],RawNavLat1,RawNavLong1) ,axis=1)
+        GTFS_lastStop.loc[:,'Dist_from_last_RawNav_Pt'] = GTFS_lastStop.apply(lambda row:wr.GetDistanceLatLong_ft(row['last_sLat'],row['last_sLon'],RawNavLat1,RawNavLong1) ,axis=1)
         MaskClosestStop = GTFS_lastStop.Dist_from_last_RawNav_Pt== min(GTFS_lastStop.Dist_from_last_RawNav_Pt )
         TempLat = GTFS_lastStop[MaskClosestStop][['last_sLat','last_sLon']].values[0][0]
         TempLong = GTFS_lastStop[MaskClosestStop][['last_sLat','last_sLon']].values[0][1]
@@ -250,9 +250,9 @@ for key,TestData in RawNavDataDict[rte_id].items():
         LastStopLatLong_RawNav =pd.concat([LastStopLatLong_RawNav,TempDa2])
     
     TestData2 = TestData2.merge(FirstStopLatLong_RawNav,on='IndexTripTags',how='left')
-    TestData2.loc[:,'Dist_from_GTFS1stStop'] = TestData2.apply(lambda row:rp.GetDistanceLatLong_ft(row['first_sLat'],row['first_sLon'],row['Lat'],row['Long']) ,axis=1)
+    TestData2.loc[:,'Dist_from_GTFS1stStop'] = TestData2.apply(lambda row:wr.GetDistanceLatLong_ft(row['first_sLat'],row['first_sLon'],row['Lat'],row['Long']) ,axis=1)
     TestData2 = TestData2.merge(LastStopLatLong_RawNav,on='IndexTripTags',how='left')
-    TestData2.loc[:,'Dist_from_GTFSlastStop'] = TestData2.apply(lambda row:rp.GetDistanceLatLong_ft(row['last_sLat'],row['last_sLon'],row['Lat'],row['Long']) ,axis=1)
+    TestData2.loc[:,'Dist_from_GTFSlastStop'] = TestData2.apply(lambda row:wr.GetDistanceLatLong_ft(row['last_sLat'],row['last_sLon'],row['Lat'],row['Long']) ,axis=1)
     MinDat = TestData2.groupby(['IndexTripTags'])['Dist_from_GTFS1stStop','Dist_from_GTFSlastStop'].idxmin().reset_index()
     MinDat.rename(columns = {'Dist_from_GTFS1stStop':'LowerBound','Dist_from_GTFSlastStop':"UpperBound"},inplace=True)
     MinDat.loc[:,'LowerBound'] = TestData2.loc[MinDat.loc[:,'LowerBound'],'IndexLoc'].values
