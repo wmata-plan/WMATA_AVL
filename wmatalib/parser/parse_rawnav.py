@@ -55,19 +55,19 @@ def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent):
         FileUniverse.extend(listFiles)
     return(FileUniverse)
         
-def MoveEmptyIncorrectLabelFiles(File, path_source_data):
+def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
     # Copy empty files to another directory for checking.
     pat  = re.compile('.*(Vehicles\s*[0-9]*-[0-9]*)') 
     VehNos =pat.search(File).group(1)
-    MoveFolderName = "EmptyMissClassFiles" + VehNos
-    MoveDir = os.path.join(path_source_data,MoveFolderName,'EmptyFiles')
+    MoveFolderName = "EmptyMissClassFiles//" + VehNos
+    MoveDir = os.path.join(path_source_data,MoveFolderName,Issue)
     pat  = re.compile('(rawnav.*.txt)') 
     try:
         if not os.path.exists(MoveDir):
             os.makedirs(MoveDir)
     except:
         print('Error Dir creation')
-    shutil.copy(File,MoveDir)
+    shutil.copy(File,MoveDir)  #Will change it to "move" later
     return(None)
     
 #     zf.write(MoveFile)
