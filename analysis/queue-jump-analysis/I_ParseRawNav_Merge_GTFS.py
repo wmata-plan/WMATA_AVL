@@ -95,6 +95,14 @@ if (len(rawnav_inventory_filtered) ==0):
 rawnav_inv_filt_first = rawnav_inventory_filtered.groupby('fullpath').first().reset_index()
 FileUniverse_filtered = list(set(rawnav_inv_filt_first['fullpath'].values.tolist()))
 
+# 3 Load Raw RawNav Data
+########################################################################################
+# Data is loaded into a dictionary named by the ID
+RawNavDataDict = {}
+
+for index, row in rawnav_inv_filt_first.iterrows():
+     RawNavDataDict[row['file_id']] = rp.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))
+
 
 
 ZipDirList=ZippedFilesDirs

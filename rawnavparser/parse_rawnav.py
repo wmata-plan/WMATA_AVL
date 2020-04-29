@@ -96,6 +96,16 @@ def find_rawnav_routes(FileUniverse, nmax = None, quiet = True):
     FileUniverseDF['wday'] = FileUniverseDF['tag_date'].dt.day_name()
     
     return(FileUniverseDF)
+
+def load_rawnav_data(ZipFolderPath, skiprows): 
+    # TODO: write documentation
+
+    zf = zipfile.ZipFile(ZipFolderPath)
+    # Get Filename
+    namepat = re.compile('(rawnav\d+\.txt)') 
+    ZipFileName = namepat.search(ZipFolderPath).group(1)     
+    RawData = pd.read_csv(zf.open(ZipFileName),skiprows = skiprows, header =None)
+    return(RawData)
 #Nested Functions
 #################################################################################################################
 
