@@ -14,74 +14,6 @@ from zipfile import BadZipfile
 
 #Parent Functions
 #################################################################################################################
-def find_rawnav_routes(FileUniverse, path_source_data, debug=True): 
-    '''
-    
-
-    Parameters
-    ----------
-    FileUniverse : TYPE
-        DESCRIPTION.
-    path_source_data : TYPE
-        DESCRIPTION.
-    debug : TYPE, optional
-        DESCRIPTION. The default is True.
-
-    Returns
-    -------
-    ReturnDict.
-
-    '''
-    RouteInventory = pd.DataFrame() # need to write code for this 
-    FirstTagDict = {}
-    RawDataDict_WrongBusID = {}
-    FirstTagDict_WrongBusID  = {}
-    NoDataDict = {}
-    NoData_da= pd.DataFrame()
-    WrongBusID_da = pd.DataFrame()
-    CompressionErrorFiles =[]
-    KeyErrorFiles = []
-    for ZipFolder in FileUniverse:
-        try:
-            if debug: print(ZipFolder)
-            pat= re.compile('.*(rawnav[0-9]*.txt).zip')
-            ZipFile1 = pat.search(ZipFolder).group(1) 
-            if(ZipFile1 in FirstTagDict.keys()):
-                continue
-            FistTagLnNum, FirstTagLine, StartTimeLn,HasData,HasCorrectBusID = FindFirstTagLine_ZipFile(ZipFolder, ZipFile1)
-            zf = zipfile.ZipFile(ZipFolder)
-            if HasData:
-                if(HasCorrectBusID):
-                    # RawDataDict[ZipFile1] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
-                    FirstTagDict[ZipFile1] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
-                else:
-                    MoveEmptyIncorrectLabelFiles(ZipFolder,path_source_data,"InCorrectBusID")     
-                    RawDataDict_WrongBusID[ZipFile1] = pd.read_csv(zf.open(ZipFile1),skiprows = FistTagLnNum, header =None)
-                    FirstTagDict_WrongBusID[ZipFile1] = {'FistTagLnNum':FistTagLnNum,'FirstTagLine':FirstTagLine,'StartTimeLn':StartTimeLn}
-                    tempDa1 = pd.DataFrame(columns=['FileNm','FirstTagLineNo','FirstTagLine'])
-                    tempDa1.loc[0,['FileNm','FirstTagLineNo','FirstTagLine']] = [ZipFile1,FistTagLnNum,StartTimeLn]
-                    WrongBusID_da = pd.concat([WrongBusID_da,tempDa1])
-            else:
-                MoveEmptyIncorrectLabelFiles(ZipFolder,path_source_data,"EmptyFiles")        
-                NoDataDict[ZipFile1] = {'EndLineNo':FistTagLnNum,'EndLine':StartTimeLn}
-                tempDa = pd.DataFrame(columns=['ZipFile1','EndLineNo','EndLine'])
-                tempDa.loc[0,['ZipFile1','EndLineNo','EndLine']] = [ZipFile1,FistTagLnNum,StartTimeLn]
-                NoData_da = pd.concat([NoData_da,tempDa])
-        except BadZipfile :
-            CompressionErrorFiles.append(ZipFolder)
-        except KeyError:
-            KeyErrorFiles.append(ZipFolder)
-    ReturnDict ={'FirstTagDict':FirstTagDict,'RouteSummaryDa':'RouteInventory','NoData_da':NoData_da,
-                 'WrongBusID_da':WrongBusID_da,'CompressionErrorFiles':CompressionErrorFiles,
-                 'KeyErrorFiles':KeyErrorFiles}
-    return(ReturnDict)
-   
-        
-        
-# def load_rawnav_data(): 
-# def clean_rawnav_data(): 
-# def summarize_rawnav_trip(): 
-# def import_GTFS_data(): 
     
 def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent):
     '''
@@ -117,10 +49,53 @@ def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent):
         listFiles = glob.glob(os.path.join(ZipDir1,"*.zip"))
         FileUniverse.extend(listFiles)
     return(FileUniverse)
-        
+           
+def find_rawnav_routes(FileUniverse, nmax = None, quiet = True): 
+    '''   
 
+    Parameters
+    ----------
+    FileUniverse : str
+        Path to zipped folder with rawnav text file. 
+        i.e., rawnav02164191003.txt.zip
+        Assumes that included text file has the same name as the zipped file,
+        minus the '.zip' extension.
+        Note: For absolute paths, use forward slashes.
+    nmax : int, optional
+        limit files to read to this number. If None, all zip files read.
+    quiet : boolean, optional
+        Whether to print status. The default is True.
+
+    Returns
+    -------
+    ReturnDict.
+
+    '''
+    FileUniverseSet = FileUniverse[0:nmax]
+
+    # Setup dataframe for iteration
+    FileUniverseDF = pd.DataFrame({'fullpath' : FileUniverseSet})
+    FileUniverseDF['filename'] = FileUniverseDF['fullpath'].str.extract('(rawnav\d+.txt)')
+    FileUniverseDF['file_busid'] = FileUniverseDF['fullpath'].str.extract('rawnav(\d{5})\S+.txt')
+    FileUniverseDF['file_id'] = FileUniverseDF['fullpath'].str.extract('rawnav(\d+).txt')
+    FileUniverseDF['file_busid'] = pd.to_numeric(FileUniverseDF['file_busid'])
     
-#     zf.write(MoveFile)
+    # Get Tags and Reformat
+    FileUniverseDF['taglist'] = [FindAllTags(path, quiet = quiet) for path in FileUniverseDF['fullpath']]
+    FileUniverseDF = FileUniverseDF.explode('taglist')
+    
+    FileUniverseDF[['line_num','route_pattern','tag_busid','tag_date','tag_time','Unk1','CanBeMiFt']] = FileUniverseDF['taglist'].str.split(',', expand = True)
+    FileUniverseDF[['route','pattern']] = FileUniverseDF['route_pattern'].str.extract('^(?:\s*)(?:(?!PO))(?:(?!PI))(?:(?!DH))(\S+)(\d{2})$')
+    
+    # Convert Column Types and Create new ones
+    # TODO: add more as necessary for datetime, hour, time period, etc.
+    # Changing line_nums type created problems, so leaving as is.
+    # FileUniverseDF['line_num'] = pd.to_numeric(FileUniverseDF['line_num'])
+    FileUniverseDF['tag_busid'] = pd.to_numeric(FileUniverseDF['tag_busid'])
+    FileUniverseDF['tag_date'] = pd.to_datetime(FileUniverseDF['tag_date'], infer_datetime_format=True)
+    FileUniverseDF['wday'] = FileUniverseDF['tag_date'].dt.day_name()
+    
+    return(FileUniverseDF)
 #Nested Functions
 #################################################################################################################
 

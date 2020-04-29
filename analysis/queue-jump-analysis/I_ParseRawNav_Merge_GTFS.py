@@ -52,6 +52,12 @@ else:
 import rawnavparser as rp
 
 # Globals
+# Restrict number of zip files to parse to this number for testing.
+# For all cases, use None 
+# If this isn't the python way, someone tell me.
+restrict_n = 500
+# restrict_n = None
+
 AnalysisRoutes = ['79','X2','X9']
 ZipParentFolderName = "October 2019 Rawnav"
 # Assumes directory structure:
@@ -60,7 +66,7 @@ ZipParentFolderName = "October 2019 Rawnav"
 #     -- FileUniverse (items in various ZippedFilesDirs ala rawnav##########.txt.zip
 #
 
-#2 Indentify Relevant Files for a Particular Route
+#2 Indentify Relevant Files for Analysis Routes
 ########################################################################################
 
 #Extract parent zipped folder and get the zipped files path
@@ -73,14 +79,21 @@ FileUniverse = rp.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent)
 # WT: i'm a little confused by this; we're calling this function twice with a 
 #    different argument and reassigning file universe?
 FileUniverse = rp.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
-#Get the zipped files path
-len(FileUniverse)
 
+# Return a dataframe of routes and details
+rawnav_inventory = rp.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = False)
 
+# Filter to our set of analysis routes and any other conditions
+rawnav_inventory_filtered = rawnav_inventory.loc[(rawnav_inventory['route'].isin(AnalysisRoutes))]
 
+if (len(rawnav_inventory_filtered) ==0):
+    raise Exception ("No Analysis Routes found in FileUniverse")
 
-InitialResDict = {}
-InitialResDict =  rp.find_rawnav_routes(FileUniverse,path_source_data,True)
+# Return filtered list of files to pass to read-in functions
+# WT: Python is weird, any advice on converting column back to character list?
+# Naming is hard
+rawnav_inv_filt_first = rawnav_inventory_filtered.groupby('fullpath').first().reset_index()
+FileUniverse_filtered = list(set(rawnav_inv_filt_first['fullpath'].values.tolist()))
 
 
 
