@@ -103,8 +103,25 @@ RawNavDataDict = {}
 for index, row in rawnav_inv_filt_first.iterrows():
      RawNavDataDict[row['file_id']] = rp.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))
 
+# 4 Clean RawNav Data
+########################################################################################
+
+CleanDataDict = {}
+
+for key, data in RawNavDataDict.items():
+    # WT: Is there a way we can restructure the clean_rawnav_data to not 
+    # require FirstTag to be passed like this? Can we used nested dataframes
+    # in a master dataframe with list comprehensions 
+    # instead of trying to subset a bunch of different objects?
+
+    firsttag = rawnav_inv_filt_first.loc[rawnav_inv_filt_first['file_id'] == key,'taglist'].values[0].split(',')
+    # WT: Apoorb, I think I'll need your help on GetTagInfo
+    # I think the way I'm trying to pass tag isn't quite working there
+    CleanDataDict[key] = rp.clean_rawnav_data(file_id = key, rawnavdata = data, FirstTag = firsttag)
 
 
+# WT: stopped here working on code
+breakpoint() 
 ZipDirList=ZippedFilesDirs
 
 

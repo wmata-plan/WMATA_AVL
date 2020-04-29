@@ -106,6 +106,32 @@ def load_rawnav_data(ZipFolderPath, skiprows):
     ZipFileName = namepat.search(ZipFolderPath).group(1)     
     RawData = pd.read_csv(zf.open(ZipFileName),skiprows = skiprows, header =None)
     return(RawData)
+
+
+def clean_rawnav_data(file_id,rawnavdata,FirstTag): 
+    # TODO: write documentation
+    # TODO: Can we restructure code to drop the FirstTag dependency?
+     
+    # FYI - largely keeping 3.1 and 3.2 code as-is here
+    rawnavdata = RemoveCAL_APC_Tags(rawnavdata)
+
+    rawnavdata.reset_index(inplace=True); rawnavdata.rename(columns = {"index":"IndexLoc"},inplace=True)
+    TagsData = rawnavdata[~rawnavdata.apply(CheckValidDataEntry,axis=1)]
+    TripTags,EndOfRoute1 = GetTagInfo(TagsData,FirstTag)
+    #Remove rows with tags and rows that have no value in the 3rd column
+    # Might need to look back at the 3rd column
+    RemoveRows = np.append(EndOfRoute1.IndexTripEnd.values, TripTags.IndexTripTags.values)
+    RemoveRows = np.setdiff1d(RemoveRows,np.array([0])) #1st row should not be deleted. 
+    #1st tag would at position 0 but it doesn't affect the data.
+    rawnavdata = rawnavdata[~rawnavdata.IndexLoc.isin(RemoveRows)]
+    rawnavdata = rawnavdata[rawnavdata.apply(CheckValidDataEntry,axis=1)]
+    #check if 1st and 2nd column only has lat long 
+    # TODO: add return
+    return(rawnavdata)
+     
+# def summarize_rawnav_trip(): 
+# def import_GTFS_data(): 
+
 #Nested Functions
 #################################################################################################################
 
