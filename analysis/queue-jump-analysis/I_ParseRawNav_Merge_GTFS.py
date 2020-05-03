@@ -56,7 +56,7 @@ import wmatarawnav as wr
 restrict_n = 500
 # restrict_n = None
 
-AnalysisRoutes = ['79','X2','X9']
+AnalysisRoutes = ['79','X2','X9','U6','H4']
 ZipParentFolderName = "October 2019 Rawnav"
 # Assumes directory structure:
 # ZipParentFolderName (e.g, October 2019 Rawnav)
@@ -83,7 +83,6 @@ FileUniverse = wr.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent)
 
 # Return a dataframe of routes and details
 rawnav_inventory = wr.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = True)
-
 # Filter to our set of analysis routes and any other conditions
 rawnav_inventory_filtered = rawnav_inventory.loc[(rawnav_inventory['route'].isin(AnalysisRoutes))]
 
@@ -93,20 +92,26 @@ if (len(rawnav_inventory_filtered) ==0):
 # Return filtered list of files to pass to read-in functions
 # WT: Python is weird, any advice on converting column back to character list?
 # AxB: Do mean like the output of FindAllTags()?. Try something like
-#YourDataFrame.groupby(["CommonKey"])['Column"].list()
+#YourDataFrame.groupby(["CommonKey"])['Column"].apply(list)
 Example = rawnav_inventory_filtered.groupby(['fullpath','filename'])['taglist'].apply(list)
 # Naming is hard
-rawnav_inv_filt_first = rawnav_inventory_filtered.groupby('fullpath').first().reset_index()
+
+# rawnav_inv_filt_first = rawnav_inventory_filtered.groupby('fullpath').first().reset_index()
+# AxB: One file can have different routes. Just the first line for not work. We need to groupby fullpath and route
+# We not seening the issue with routes '79','X2','X9' in the 1st 500 files, but, if you look at route 'U6'and 'H4',
+# you will see this issue.
+rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath','route']).first().reset_index()
 FileUniverse_filtered = list(set(rawnav_inv_filt_first['fullpath'].values.tolist()))
 
 # 3 Load Raw RawNav Data
 ########################################################################################
 # Data is loaded into a dictionary named by the ID
 RawNavDataDict = {}
-
 for index, row in rawnav_inv_filt_first.iterrows():
-     RawNavDataDict[row['file_id']] = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))
-
+    # Two routes can have the same file
+    # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
+    if row['filename'] not in RawNavDataDict.keys():
+        RawNavDataDict[row['filename']] = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))
 # 4 Clean RawNav Data
 ########################################################################################
 
