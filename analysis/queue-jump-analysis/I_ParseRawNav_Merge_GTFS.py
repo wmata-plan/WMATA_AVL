@@ -79,10 +79,10 @@ FileUniverse = wr.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent)
 #AxB: The function GetZippedFilesFromZipDir() extracts the zipped folder and gets the list of files 
 # from the unzipped folder. It does this if the Unzipped folder does not exist. The following function
 # call is just to show that the user can also use the Unzipped folder. 
-FileUniverse = wr.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
+#FileUniverse = wr.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
 
 # Return a dataframe of routes and details
-rawnav_inventory = wr.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = False)
+rawnav_inventory = wr.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = True)
 
 # Filter to our set of analysis routes and any other conditions
 rawnav_inventory_filtered = rawnav_inventory.loc[(rawnav_inventory['route'].isin(AnalysisRoutes))]
