@@ -92,6 +92,9 @@ if (len(rawnav_inventory_filtered) ==0):
 
 # Return filtered list of files to pass to read-in functions
 # WT: Python is weird, any advice on converting column back to character list?
+# AxB: Do mean like the output of FindAllTags()?. Try something like
+#YourDataFrame.groupby(["CommonKey"])['Column"].list()
+Example = rawnav_inventory_filtered.groupby(['fullpath','filename'])['taglist'].apply(list)
 # Naming is hard
 rawnav_inv_filt_first = rawnav_inventory_filtered.groupby('fullpath').first().reset_index()
 FileUniverse_filtered = list(set(rawnav_inv_filt_first['fullpath'].values.tolist()))
