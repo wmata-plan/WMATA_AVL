@@ -2,7 +2,6 @@
 """
 Created on Thu Apr  2 12:35:10 2020
 
-@author: abibeka
 """
 
 #0.0 Housekeeping. Clear variable space
@@ -54,7 +53,6 @@ import wmatarawnav as wr
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
-# If this isn't the python way, someone tell me.
 restrict_n = 500
 # restrict_n = None
 
@@ -78,6 +76,9 @@ FileUniverse = wr.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent)
 #Directly get the zipped files path
 # WT: i'm a little confused by this; we're calling this function twice with a 
 #    different argument and reassigning file universe?
+#AxB: The function GetZippedFilesFromZipDir() extracts the zipped folder and gets the list of files 
+# from the unzipped folder. It does this if the Unzipped folder does not exist. The following function
+# call is just to show that the user can also use the Unzipped folder. 
 FileUniverse = wr.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
 
 # Return a dataframe of routes and details
