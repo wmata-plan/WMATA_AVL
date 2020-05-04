@@ -85,7 +85,9 @@ FileUniverse = wr.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent)
 rawnav_inventory = wr.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = True)
 # Filter to our set of analysis routes and any other conditions
 rawnav_inventory_filtered = rawnav_inventory.loc[(rawnav_inventory['route'].isin(AnalysisRoutes))]
-
+# AxB: Still need tag information at file level. Need tags from other routes to define a trip. 
+# Will subset data by route later
+rawnav_inventory1 = rawnav_inventory[rawnav_inventory.filename.isin(rawnav_inventory_filtered.filename.unique())]
 if (len(rawnav_inventory_filtered) ==0):
     raise Exception ("No Analysis Routes found in FileUniverse")
 
@@ -102,31 +104,33 @@ Example = rawnav_inventory_filtered.groupby(['fullpath','filename'])['taglist'].
 # you will see this issue.
 # I am loosing the route information here to read files with multiple routes togather. Will use the rawnav_inventory_filtered
 # later to get back the mapping. 
-rawnav_inventory_filtered.loc[:,"line_num"] = rawnav_inventory_filtered.line_num.astype(int)
-rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath','filename']).line_num.min().reset_index()
-FileUniverse_filtered = list(set(rawnav_inv_filt_first['fullpath'].values.tolist()))
+rawnav_inventory1.loc[:,"line_num"] = rawnav_inventory1.line_num.astype(int)
+rawnav_inv_filt_first = rawnav_inventory1.groupby(['fullpath','filename']).line_num.min().reset_index()
 
 # 3 Load Raw RawNav Data
 ########################################################################################
 # Data is loaded into a dictionary named by the ID
-RawNavDataDict = {}
 RouteRawTagDict = {}
 for index, row in rawnav_inv_filt_first.iterrows():
-    # Two routes can have the same file
-    # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
-    RawNavDataDict[row['filename']] = temp = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))   
     #Since we already parsed the entire file for tag information. We can reuse the tag infomation here.
-    tagInfo_LineNo = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == row['filename']]
+    #Cannot use rawnav_inventory_filtered. We need all the tag information for defining a trip.
+    #Eg. Say we are analyzing route 79, we see a tag that says route 79 starts. The end tag can 
+    # Deadheading, PI, S9 etc. 
+    tagInfo_LineNo = rawnav_inventory1[rawnav_inventory1['filename'] == row['filename']]
     Refrence = min(tagInfo_LineNo.line_num.astype(int))
     tagInfo_LineNo.loc[:,"NewLineNo"] = tagInfo_LineNo.line_num.astype(int) - Refrence-1
+    # Two routes can have the same file
+    # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
+    temp = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))   
     RouteRawTagDict[row['filename']] = {'RawData':temp,'tagLineInfo':tagInfo_LineNo}
     
 # 4 Clean RawNav Data
 ########################################################################################
 #DEBUG
 RouteRawTagDict.keys()
-rawnavdata = RouteRawTagDict['rawnav00008191007.txt']['RawData']
-taglineData = RouteRawTagDict['rawnav00008191007.txt']['tagLineInfo']
+key = 'rawnav02626191022.txt'
+rawnavdata = RouteRawTagDict[key]['RawData']
+taglineData = RouteRawTagDict[key]['tagLineInfo']
 #AxB: Stopped here. Figured out the logic though. Will implement tomorrow (Mon: 5/3/2020)
 CleanDataDict = {}
 for key, data in RawNavDataDict.items():
@@ -135,16 +139,10 @@ for key, data in RawNavDataDict.items():
     # in a master dataframe with list comprehensions 
     # instead of trying to subset a bunch of different objects?
     # AxB: I changed the above dictionary to include tag information. Wouldn't nested dataframe have 
-    # essentially the same information? 
-
-    
-    firsttag = rawnav_inv_filt_first.loc[rawnav_inv_filt_first['filename'] == key,'taglist'].values[0].split(',')
-    
+    # essentially the same information?     
     # WT: Apoorb, I think I'll need your help on GetTagInfo
-    # I think the way I'm trying to pass tag isn't quite working there
-    CleanDataDict[key] = wr.clean_rawnav_data(file_id = key, rawnavdata = data, FirstTag = firsttag)
-    
-    CleanDataDict[key] = wr.clean_rawnav_data(file_id = key, rawnavdata = data, TagLinesDf = tagInfo_LineNo)
+    # I think the way I'm trying to pass tag isn't quite working there    
+    CleanDataDict[key] = wr.clean_rawnav_data(RouteRawTagDict[key])
 
 
 # WT: stopped here working on code

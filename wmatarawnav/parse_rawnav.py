@@ -6,12 +6,14 @@ Functions used in the AVL data analysis
 """
 
 import zipfile,re,linecache,numpy as np, pandas as pd, datetime as dt\
-    ,folium, io, os, shutil, glob
+    ,folium, io, os, shutil, glob, logging
+import pandasql as ps
 from itertools import islice
 #from folium.plugins import MarkerCluster
-from geopy.distance import geodesic
+from geopy.distance import geodesic # Can't vectorize
 from zipfile import BadZipfile
-
+import geopandas as gpd
+from shapely.geometry import Point
 #Parent Functions
 #################################################################################################################
     
@@ -86,7 +88,6 @@ def find_rawnav_routes(FileUniverse, nmax = None, quiet = True):
     
     FileUniverseDF[['line_num','route_pattern','tag_busid','tag_date','tag_time','Unk1','CanBeMiFt']] = FileUniverseDF['taglist'].str.split(',', expand = True)
     FileUniverseDF[['route','pattern']] = FileUniverseDF['route_pattern'].str.extract('^(?:\s*)(?:(?!PO))(?:(?!PI))(?:(?!DH))(\S+)(\d{2})$')
-    
     # Convert Column Types and Create new ones
     # TODO: add more as necessary for datetime, hour, time period, etc.
     # Changing line_nums type created problems, so leaving as is.
@@ -94,7 +95,6 @@ def find_rawnav_routes(FileUniverse, nmax = None, quiet = True):
     FileUniverseDF['tag_busid'] = pd.to_numeric(FileUniverseDF['tag_busid'])
     FileUniverseDF['tag_date'] = pd.to_datetime(FileUniverseDF['tag_date'], infer_datetime_format=True)
     FileUniverseDF['wday'] = FileUniverseDF['tag_date'].dt.day_name()
-    
     return(FileUniverseDF)
 
 def load_rawnav_data(ZipFolderPath, skiprows): 
@@ -119,40 +119,145 @@ def load_rawnav_data(ZipFolderPath, skiprows):
     return(RawData)
 
 
-def clean_rawnav_data(filename,rawnavdata,FirstTag): 
+def clean_rawnav_data(DataDict): 
     # TODO: write documentation
-    # TODO: Can we restructure code to drop the FirstTag dependency?
-     
-    # FYI - largely keeping 3.1 and 3.2 code as-is here
-    Temp = taglineData.NewLineNo.values.flatten()
-    TagIndices= np.delete(Temp, np.where(Temp==-1))
-    CheckTagLineData = rawnavdata.loc[TagIndices,:]
-    breakpoint()
-    #TODO: Remove code for extracting Tags. Already extracted.
-    #TODO: Write function to extract Busware reported end of route...
-    rawnavdata
-    
-    rawnavdata = RemoveCAL_APC_Tags(rawnavdata)
-
+    rawnavdata = DataDict['RawData']
+    taglineData = DataDict['tagLineInfo']
+    try:
+        Temp = taglineData.NewLineNo.values.flatten()
+        TagIndices= np.delete(Temp, np.where(Temp==-1))
+        CheckTagLineData = rawnavdata.loc[TagIndices,:]
+        CheckTagLineData[[1,4,5]] = CheckTagLineData[[1,4,5]].astype(int)
+        CheckTagLineData.loc[:,'taglist']=(CheckTagLineData[[0,1,2,3,4,5]].astype(str)+',').sum(axis=1).str.rsplit(",",1,expand=True)[0]
+        CheckTagLineData.loc[:,'taglist']= CheckTagLineData.loc[:,'taglist'].str.strip()
+        infopat ='^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
+        assert((~CheckTagLineData.taglist.str.match(infopat, re.S)).sum()==0)
+    except:
+        logging.error("TagLists Did not match")
+    #Keep index references. Will use later
     rawnavdata.reset_index(inplace=True); rawnavdata.rename(columns = {"index":"IndexLoc"},inplace=True)
-    TagsData = rawnavdata[~rawnavdata.apply(CheckValidDataEntry,axis=1)]
-    TripTags,EndOfRoute1 = GetTagInfo(TagsData,FirstTag)
-    #Remove rows with tags and rows that have no value in the 3rd column
-    # Might need to look back at the 3rd column
-    RemoveRows = np.append(EndOfRoute1.IndexTripEnd.values, TripTags.IndexTripTags.values)
-    RemoveRows = np.setdiff1d(RemoveRows,np.array([0])) #1st row should not be deleted. 
-    #1st tag would at position 0 but it doesn't affect the data.
-    rawnavdata = rawnavdata[~rawnavdata.IndexLoc.isin(RemoveRows)]
+    #Get End of route Info
+    taglineData, deleteIndices1 = AddEndRouteInfo(rawnavdata, taglineData)
+    rawnavdata = rawnavdata[~rawnavdata.index.isin(np.append(TagIndices,deleteIndices1))]
+    #Remove APC and CAL labels and keep APC locations. Can merge_asof later.
+    rawnavdata, APCTagLoc = RemoveAPC_CAL_Tags(rawnavdata)
+    CheckDat = rawnavdata[~rawnavdata.apply(CheckValidDataEntry,axis=1)]
+    Pat = re.compile('^\s*/\s*(?P<TripEndTime>\d{2}:\d{2}:\d{2})\s*(?:Buswares.*SHUTDOWN|bwrawnav)',re.S|re.I) 
+    assert(sum(~(CheckDat[0].str.match(Pat)))==0) ,"Did not handle some additional lines in CheckDat"
     rawnavdata = rawnavdata[rawnavdata.apply(CheckValidDataEntry,axis=1)]
-    #check if 1st and 2nd column only has lat long 
-    # TODO: add return
-    return(rawnavdata)
+    #Add the APC tag to the rawnav data to identify stops
+    APClocDat = pd.Series(APCTagLoc,name='APCTagLoc')
+    APClocDat = pd.merge_asof(APClocDat,rawnavdata[["IndexLoc"]],left_on = "APCTagLoc",right_on="IndexLoc") # default direction is backward
+    rawnavdata.loc[:,'RowBeforeAPC'] = False
+    rawnavdata.loc[APClocDat.IndexLoc,'RowBeforeAPC'] = True
+    taglineData.rename(columns={'NewLineNo':"IndexTripStart"},inplace=True)
+    SummaryData = GetTripSummary(data= rawnavdata,taglineData = taglineData)
+    ColumnNmMap = {0:'Lat',1:'Long',2:'Heading',3:'DoorState',4:'VehState',5:'OdomtFt',6:'SecPastSt',7:'SatCnt',
+                   8:'StopWindow',9:'Blank',10:'LatRaw',11:'LongRaw'}
+    rawnavdata.rename(columns =ColumnNmMap,inplace=True )
+    rawnavdata = AddTripDividers(rawnavdata,SummaryData )
+    return(rawnavdata,SummaryData)
      
 # def summarize_rawnav_trip(): 
 # def import_GTFS_data(): 
 
 #Nested Functions
 #################################################################################################################
+def AddTripDividers(data, SummaryData):
+    SummaryData.columns
+    TagsTemp = SummaryData[['route_pattern','route', 'pattern','IndexTripStartInCleanData','IndexTripEndInCleanData']]
+    q1  = '''SELECT data.IndexLoc,data.Lat,data.Long,data.Heading,data.DoorState,data.VehState,data.OdomtFt,data.SecPastSt,
+        data.SatCnt,data.StopWindow,data.Blank,data.LatRaw,data.LongRaw,data.RowBeforeAPC,
+        TagsTemp.route_pattern,TagsTemp.route,TagsTemp.pattern,TagsTemp.IndexTripStartInCleanData,TagsTemp.IndexTripEndInCleanData
+        FROM data LEFT JOIN TagsTemp on data.IndexLoc BETWEEN  TagsTemp.IndexTripStartInCleanData and TagsTemp.IndexTripEndInCleanData
+    '''
+    data = ps.sqldf(q1, locals())
+    return(data)    
+    
+def GetTripSummary(data, taglineData):
+    temp = taglineData[['IndexTripStart','IndexTripEnd']]
+    temp = temp.astype('int32')
+    rawDaCpy = data[['IndexLoc',0,1,5,6]].copy()
+    rawDaCpy[['IndexLoc',5,6]]= rawDaCpy[['IndexLoc',5,6]].astype('int32')
+    rawDaCpy.rename(columns={0:'Lat',1:'Long',5:'OdomtFt',6:'SecPastSt'},inplace=True)
+    temp = pd.merge_asof(temp,rawDaCpy,left_on = "IndexTripStart",right_on ="IndexLoc" , direction='forward')
+    temp.rename(columns = {'Lat':"LatStart",'Long':"LongStart",
+                           'OdomtFt': "OdomFtStart",'SecPastSt':"SecStart","IndexLoc":"IndexTripStartInCleanData"},inplace=True)
+    temp = pd.merge_asof(temp,rawDaCpy,left_on = "IndexTripEnd",right_on ="IndexLoc" , direction='backward')
+    temp.rename(columns = {'Lat':"LatEnd",'Long':"LongEnd",'OdomtFt': "OdomFtEnd",'SecPastSt':"SecEnd",
+                           "IndexLoc":"IndexTripEndInCleanData"},inplace=True)
+    temp.loc[:,"TripDurFromSec"] = temp.SecEnd - temp.SecStart
+    temp.eval("""
+              TripDurFromSec = SecEnd-SecStart
+              DistOdomMi = (OdomFtEnd - OdomFtStart)/ 5280
+              SpeedOdomMPH = (DistOdomMi/ TripDurFromSec) * 3600
+              """,inplace=True)
+      
+    temp[["LatStart","LongStart","LatEnd","LongEnd"]] = temp[["LatStart","LongStart","LatEnd","LongEnd"]].astype(float)
+    # Check what are units---Geopandas would be faster    
+    # geometryStart = [Point(xy) for xy in zip(temp.LongStart, temp.LatStart)]
+    # gdf=gpd.GeoDataFrame(geometry=geometryStart,crs={'init':'epsg:4326'})
+    # geometryEnd = [Point(xy) for xy in zip(temp.LongEnd, temp.LatEnd)]
+    # gdf2=gpd.GeoDataFrame(geometry=geometryEnd,crs={'init':'epsg:4326'})
+    # distances = gdf.geometry.distance(gdf2)
+    temp.loc[:,'CrowFlyDistLatLongMi'] = temp[["LatStart","LongStart","LatEnd","LongEnd"]].apply(lambda x: GetDistanceLatLong_mi(x[0],x[1],x[2],x[3]),axis=1)
+    SummaryDat = taglineData.merge(temp,on= ['IndexTripStart','IndexTripEnd'],how ='left')
+    SummaryDat.tag_date = SummaryDat.tag_date.astype(str)
+    SummaryDat.loc[:,"StartDateTime"] = pd.to_datetime(SummaryDat['tag_date']+" "+SummaryDat['TripStartTime'])
+    SummaryDat.loc[:,"EndDateTime"] = pd.to_datetime(SummaryDat['tag_date']+" "+SummaryDat['TripEndTime'], errors='coerce')
+    SummaryDat.loc[:,"TripDurationFromTags"] = pd.to_timedelta(SummaryDat.loc[:,"EndDateTime"]- SummaryDat.loc[:,"StartDateTime"])
+    SummaryDat.loc[:,"SpeedTripTagMPH"] = round(3600 * SummaryDat.DistOdomMi / SummaryDat.TripDurationFromTags.dt.total_seconds(),2)
+    SummaryDat = SummaryDat[['fullpath', 'filename', 'file_busid', 'file_id', 'taglist','route_pattern', 'tag_busid',
+                             'route', 'pattern', 'wday',
+                             'StartDateTime','EndDateTime','IndexTripStart','IndexTripStartInCleanData','IndexTripEnd','IndexTripEndInCleanData','SecStart',
+                 'OdomFtStart','SecEnd','OdomFtEnd',"TripDurFromSec","TripDurationFromTags",
+                 "DistOdomMi", "SpeedOdomMPH", "SpeedTripTagMPH","CrowFlyDistLatLongMi"
+                 ,"LatStart","LongStart","LatEnd","LongEnd"]]
+    return(SummaryDat)
+def RemoveAPC_CAL_Tags(data):
+    #Remove all rows with "CAL" label
+    MaskCal = data.loc[:,0].str.upper().str.strip() =="CAL"
+    data = data[~MaskCal]
+    #Remove APC tag and store tag location
+    MaskAPC = data.loc[:,0].str.upper().str.strip() =="APC"
+    APCTagLoc = np.array(data[MaskAPC].index)
+    data = data[~MaskAPC]
+    return(data, APCTagLoc)
+    
+def AddEndRouteInfo(data, taglineData):
+    Pat = re.compile('^\s*/\s*(?P<TripEndTime>\d{2}:\d{2}:\d{2})\s*(?:Buswares navigation reported end of route|Buswares is now using route zero)',re.S) 
+    data.loc[:,'TripEndTime']= data[0].str.extract(Pat)
+    EndOfRoute = data[['IndexLoc','TripEndTime']]
+    EndOfRoute = EndOfRoute[~(EndOfRoute.TripEndTime.isna())]
+    deleteIndices = EndOfRoute.IndexLoc.values
+    EndOfRoute.rename(columns={'IndexLoc':'IndexTripEnd'},inplace=True)
+    EndOfRoute.IndexTripEnd = EndOfRoute.IndexTripEnd.astype('int32')
+    EndOfRoute = pd.merge_asof(EndOfRoute,taglineData[['tag_time','NewLineNo']],left_on="IndexTripEnd",right_on='NewLineNo',direction='backward')
+    EndOfRoute = EndOfRoute[~(EndOfRoute.duplicated(subset=['NewLineNo','tag_time'],keep='first'))]
+    taglineData = taglineData.merge(EndOfRoute,on=['NewLineNo','tag_time'],how='left')
+    taglineData.loc[:,'tempLine'] = taglineData['NewLineNo'].shift(-1)
+    taglineData.loc[:,'tempTime'] = taglineData['tag_time'].shift(-1)
+    taglineData.loc[taglineData.TripEndTime.isna(),['IndexTripEnd','TripEndTime']] = taglineData.loc[taglineData.TripEndTime.isna(),['tempLine','tempTime']].values
+    taglineData.rename(columns={'tag_time':"TripStartTime"},inplace=True)
+    return(taglineData, deleteIndices)
+   
+        
+#https://github.com/geopy/geopy
+# Make this function Generic ---later
+def GetDistanceforTripSummaryDat(row):
+    StartLat, StartLong, EndLat, EndLong = row['StartLat'], row['StartLong'], row['EndLat'], row['EndLong']
+    distance_miles = -999
+    distance_miles = geodesic((StartLat, StartLong), (EndLat, EndLong)).miles
+    return(distance_miles)
+
+def GetDistanceLatLong_ft(Lat1, Long1, Lat2, Long2):
+    distance_ft = geodesic((Lat1, Long1), (Lat2, Long2)).feet
+    return(distance_ft)
+
+def GetDistanceLatLong_mi(Lat1, Long1, Lat2, Long2):
+    distance_mi = geodesic((Lat1, Long1), (Lat2, Long2)).miles
+    return(distance_mi)
+
 def FindAllTags(ZipFolderPath, quiet = True):
     '''
     Parameters
@@ -241,72 +346,6 @@ def is_numeric(s):
     except(ValueError, TypeError):
         return False
     
-def FindFirstTagLine_ZipFile(ZipFolder, ZipFile1):
-    '''
-    Parameters
-    ----------
-    ZipFolder: str
-        Zipped folder with the text file. For absolute paths, use forward slashes.
-        i.e., rawnav02164191003.txt.zip
-    ZipFile1 : str
-        Read the 1st 100 lines of this file to find when the csv format starts, 
-        e.g.rawnav02164191003.txt
-
-    Returns
-    -------
-    FirstTagLineNum: int
-        Line number with the 1st useful info 
-    FirstTagLineElements: list
-        First Line with Bus ID, Time etc..
-    StartTimeLine: str
-        Also contains the start time
-    HasData: Bool
-        Boolean to check if file has data
-    HasCorrectBusID: Bool
-        Boolean to check if the Bus ID is correct in the 1st line
-    '''
-    zf = zipfile.ZipFile(ZipFolder)
-    # Get BusID
-    pat  = re.compile('rawnav(.*).txt') 
-    BusID = pat.search(ZipFile1).group(1)[1:5]
-    BusID = int(BusID)
-    number_of_lines = 100 # # lines to search 
-    dateFormat = re.compile('^\d{1,2}\/\d{1,2}\/\d{2}$') 
-    timeFormat = re.compile('^\d{1,2}:\d{1,2}:\d{2}$')
-    FirstTagLineNum = 1
-    FirstTagLineElements = []
-    StartTimeLine = ""
-    HasData= False
-    HasCorrectBusID = False
-    with io.TextIOWrapper(zf.open(ZipFile1, 'r'),encoding="utf-8") as input_file:
-        lines_cache = islice(input_file, number_of_lines)
-        for current_line in lines_cache:
-            StartTimeLine = current_line
-            tempList = current_line.split(',')
-            # print(tempList)
-            #Check for this pattern ['PO03408', '6431', '04/30/19', '07:12:00', '45145', '05280\n']
-            if(len(tempList)>=4): 
-                if(
-                 bool(re.match(dateFormat,tempList[2]))&
-                 bool(re.match(timeFormat,tempList[3]))
-                  ): 
-                    if(int(tempList[1])==BusID):
-                        StartTimeLine = current_line
-                        FirstTagLineElements = tempList
-                        FirstTagLineElements = [x.strip() for x in FirstTagLineElements]
-                        HasData = True
-                        HasCorrectBusID = True
-                        break       
-                    else:
-                        StartTimeLine = current_line
-                        FirstTagLineElements = tempList
-                        FirstTagLineElements = [x.strip() for x in FirstTagLineElements]
-                        HasData = True   
-                        HasCorrectBusID = False
-                        break
-            FirstTagLineNum = FirstTagLineNum+1
-    return([FirstTagLineNum,FirstTagLineElements,StartTimeLine,HasData,HasCorrectBusID])
-
 
 def CheckValidDataEntry(row):
     '''
@@ -330,184 +369,6 @@ def CheckValidDataEntry(row):
     except: ""
     return(IsValidEntry)
 
-def RemoveCAL_APC_Tags(Data):
-    #Remove all rows with "CAL" label
-    MaskCal = Data.iloc[:,0].str.upper().str.strip() =="CAL"
-    Data = Data[~MaskCal]
-    #print(f"Removed {sum(MaskCal)} rows for CAL")
-    #Reset Index for reassigning tags based on "ApC"
-    Data.reset_index(drop="True",inplace=True)     
-    #Add Stop Tag Based on "APC"
-    MaskAPC = Data.iloc[:,0].str.upper().str.strip() =="APC"
-    APCTags = np.array(Data[MaskAPC].index)
-    APCTag_Minus1 = APCTags-1 # Get the row previous to the APC tag
-    #Check if some of the APCTag_Minus1 rows have invalid entries
-    #Replace these invalid entries with valid GPS entries
-    if sum(~Data.loc[APCTag_Minus1].apply(CheckValidDataEntry,axis=1))>0:
-        mask = ~Data.loc[APCTag_Minus1].apply(CheckValidDataEntry,axis=1)
-        #Index that need replacement
-        ReplaceIndices= Data.loc[APCTag_Minus1].loc[mask,:].index
-        ValidIndicesDict = {}
-        for ReplaceIndex in ReplaceIndices:
-            while(not CheckValidDataEntry(Data.loc[ReplaceIndex,:])):
-                ValidIndicesDict[ReplaceIndex] = ReplaceIndex-1
-                ReplaceIndex = ReplaceIndex-1
-        APCTag_Minus1 = [ValidIndicesDict[x] if x in ValidIndicesDict.keys() else x for x in APCTag_Minus1]    
-   #APC tag is not always preceeded by "O". Ignore for now
-    #Is the row above "APC" all open and stopped
-    # CheckAPC = Data.loc[APCTag_Minus1].groupby([3,4])[3].count()
-    # CheckCounts = 0
-    # for indexVal in CheckAPC.index.values:
-    #     if indexVal in [('O', 'M'), ('O', 'S'), ('C',"S")]:
-    #         CheckCounts = CheckCounts + CheckAPC[indexVal]
-    #     print(f"Vehicle State Before APC Tag: {indexVal}")
-    # assert(CheckCounts== sum(MaskAPC)) # An "APC" should mean that the bus was stopped
-    Data.loc[APCTag_Minus1,"RowBeforeAPC"] = False
-    Data.loc[APCTag_Minus1,"RowBeforeAPC"] = True
-    Data = Data[~MaskAPC]
-    #print(f"Removed {sum(MaskAPC)} rows for APC counter")
-    return(Data)
-
-
-
-def GetTagInfo(TagsData,FirstTag):
-    '''
-    Search for 'Buswares navigation reported end of route' Tags and
-    Route info tags like "PO", "PI", "DH" and "7901"...
-    '''
-    BusID = FirstTag[2] #3rd element in FirstTag list
-    if TagsData.shape[0]> 0 :
-        TagsData.loc[:,0] = TagsData.loc[:,0].str.strip()
-        BusEndNav =TagsData.loc[:,0].str.find('Buswares navigation reported end of route')
-        BusEndNav2 =TagsData.loc[:,0].str.find('Buswares is now using route zero')
-        MaskEndRoute = (BusEndNav!=-1)|(BusEndNav2!=-1)
-        TagsData.loc[:,"HasRouteEndTag"] = False
-        TagsData.loc[MaskEndRoute,"HasRouteEndTag"] =  True
-        #---------------------
-        #Analyze Tags with "Busware ...." 
-        EndOfRoute  = TagsData[TagsData.HasRouteEndTag]
-        #Pat = re.compile('/(.*)Buswares navigation reported end of route') 
-        Pat = re.compile('/(.*)((Buswares navigation reported end of route)|(Buswares is now using route zero))') 
-        EndOfRoute.loc[:,0] = EndOfRoute[0].apply(lambda x: Pat.search(x).group(1).strip())
-        EndOfRoute.rename(columns={'IndexLoc':'IndexTripEnd',0:"TripEndTime"},inplace=True); EndOfRoute= EndOfRoute[['IndexTripEnd','TripEndTime']]
-        #---------------------        
-        #Look at tags which do not have "Busware navi...." line"    
-        TripTags = TagsData[~TagsData.HasRouteEndTag]
-        # Assign Nan with -99 Tag and convert the column with BusID to int
-        TripTags.loc[:,1] = TripTags.loc[:,1].apply(lambda x: int(x) if x==x else -99)
-        TripTags = TripTags[TripTags.loc[:,1] == int(BusID)] #Remove Garbage lines: "Busware shutting down...."
-        TripTags.rename(columns = {0:"Tag",1:"BusID",2:"Date",3:"TripStartTime",4:"Unk1",5:"CanBeMiFt"},inplace=True)
-        TripTags = TripTags[['IndexLoc','Tag','BusID','Date','TripStartTime','Unk1','CanBeMiFt']]
-    else:
-        TripTags = pd.DataFrame(columns=['IndexLoc','Tag','BusID','Date','TripStartTime','Unk1','CanBeMiFt'])
-        EndOfRoute = pd.DataFrame(columns=['IndexTripEnd','TripEndTime'])
-    #Need to add the info from the 1st tag that was extracted before.
-    FirstTag = pd.DataFrame(dict(zip(['IndexLoc','Tag','BusID','Date','TripStartTime','Unk1','CanBeMiFt'],FirstTag)),index=[0])
-    TripTags = pd.concat([FirstTag,TripTags])
-    TripTags.rename(columns={'IndexLoc':'IndexTripTags'},inplace=True)
-    TripTags.IndexTripTags = TripTags.IndexTripTags.astype(int)
-    EndOfRoute.loc[:,'IndexTripEnd'] =EndOfRoute.loc[:,'IndexTripEnd'].astype(int)
-    return(TripTags,EndOfRoute)
-
-
-
-def AddTripStartEndTags(Data,TripTags, EndOfRoute1):
-    '''
-    Parameters
-    ----------
-    Data : TYPE
-        Data with all columns.
-    TripTags : TYPE
-        Trip Start tags.
-    EndOfRoute1 : TYPE
-        Trip End Tags.
-    Returns
-    -------
-    Data: Data with Trip start and End tags
-    TripSumData: Just trip Start and End Tags
-    EndTimeFeetDat: End time and odometer reading based on tags like
-    ['PO03408', '6431', '04/30/19', '07:12:00', '45145', '05280\n']; Not using "Busware ...." tags.
-    Will be used later to handle missing "Busware ..." tags
-    '''
-    #Get the closest index in the data above the tag row where the tag info should be added
-    # TripTags indicate trip start so use 'forward'
-    Data.loc[:,'IndexLoc'] =Data.loc[:,'IndexLoc'].astype(int)
-    TripTags = pd.merge_asof(TripTags,Data,left_on="IndexTripTags",right_on="IndexLoc",direction= 'forward')
-    TripTags = TripTags[['IndexLoc','IndexTripTags','Tag','BusID','Date','TripStartTime']]
-    #------------------------------
-    # EndOfRoute1 would use previous row index
-    EndOfRoute1 = pd.merge_asof(EndOfRoute1,Data,left_on="IndexTripEnd",right_on="IndexLoc",direction= 'backward')
-    EndOfRoute1 =EndOfRoute1[['IndexLoc','IndexTripEnd','TripEndTime']]
-    #------------------------------
-    Data = Data.merge(TripTags,on = "IndexLoc",how="left")
-    #Forward Fill the trip tags/ IndexTripTags to identify Unique trips
-    Data.loc[:,['IndexTripTags','Tag']] = Data.loc[:,['IndexTripTags','Tag']].fillna(method='ffill')
-    EndTimeFeetDat = Data.groupby(['IndexTripTags'])[[0,1,5,6]].last().reset_index() 
-    # Get the last index values for trips 
-    #with missing  "Buswares end of route..." notification
-    #Trips with  "Buswares end of route..." notification would not need EndTimeFeetDat data 
-    EndTimeFeetDat.rename(columns = {0:"EndLat",1:"EndLong",5:"EndFt",6:"EndTm"},inplace=True)
-    #------------------------------
-    Data = Data.merge(EndOfRoute1,on = "IndexLoc",how='left')
-    #------------------------------
-    #Find Rows with BusID and TripEnd Times
-    MaskTripDetails = (~Data.BusID.isna()) |(~Data.IndexTripEnd.isna())
-    TripSumData  = Data[MaskTripDetails]
-    return(Data, TripSumData,EndTimeFeetDat)
-
-def TripSummaryStartEnd(TripSumData,EndTimeFeetDat,ColumnNmMap):
-    '''
-    Parameters
-    ----------
-    TripSumData : pd.DataFrame
-        Summary data obtained from AddTripStartEndTags function
-    EndTimeFeetDat : pd.DataFrame
-        Trip End time and feet data. Needed for trips with no trip end tag.
-    ColumnNmMap : dict
-        Dict for renaming columns.
-    Returns
-    -------
-    TripSumData: Trip Summary data. One row per trip
-    TripEndFtDat: Same as TripSumData---subset
-    '''
-    #Get Rows which have end time; Rows with  "Busware..."
-    EndTimeData2 = TripSumData[~TripSumData.IndexTripEnd.isna()]; EndTimeData2.rename(columns={0:"EndLat",1:"EndLong",5:"EndFt",6:"EndTm"},inplace=True)
-    EndTimeData2 = EndTimeData2[['IndexTripTags',"EndTm","EndFt",'EndLat','EndLong']].sort_values(['IndexTripTags','EndTm','EndFt'])
-    EndTimeData2= EndTimeData2.groupby('IndexTripTags').first().reset_index() # Only use the 1st tag for end times
-    # Get rows where "Buswares end of route..." tag is not preesent
-    # Need to use the EndTimeFeetDat to substitute end feet and time
-    IndexWithNoBusWareTags= np.setdiff1d(EndTimeFeetDat.IndexTripTags, EndTimeData2.IndexTripTags) 
-    EndTimeFeetDat = EndTimeFeetDat[EndTimeFeetDat.IndexTripTags.isin(IndexWithNoBusWareTags)]
-    EndTimeDataClean = pd.concat([EndTimeData2,EndTimeFeetDat]).reset_index(drop=True)
-    #-----------------------------------------------------------------------------------------
-    #1st fill the end time within trips based on "Buswares end of route..." notification
-    TripSumData.loc[:,'TripEndTime'] = TripSumData.groupby('IndexTripTags')['TripEndTime'].fillna(method='bfill')
-    # Now use the start time of next trip for trips which do not have "Buswares end of route..." notification
-    TripSumData = TripSumData[~TripSumData.TripStartTime.isna()]
-    #Get end time by using the start time from the next row
-    TripSumData.sort_values('IndexLoc',inplace=True)
-    TripSumData.loc[:,'tempTime'] = TripSumData.TripStartTime.shift(-1)
-    TripSumData.loc[TripSumData.TripEndTime.isna(),'TripEndTime'] =\
-        TripSumData.loc[TripSumData.TripEndTime.isna(),'tempTime']
-    TripSumData.rename(columns=ColumnNmMap,inplace=True)
-    TripSumData.rename(columns = {"Lat":"StartLat","Long":"StartLong"},inplace=True)
-    TripSumData = TripSumData[["Tag",'BusID','Date','TripStartTime','TripEndTime',
-                               'IndexLoc','IndexTripTags','OdomtFt','SecPastSt','StartLat','StartLong']]
-    TripSumData = TripSumData.merge(EndTimeDataClean,on="IndexTripTags",how='left') #Trip Summary with End times
-    TripSumData.loc[:,"StartDateTime"] = TripSumData[['Date','TripStartTime']].apply(lambda x: dt.datetime.strptime(" ".join(x),"%m/%d/%y %H:%M:%S"),axis=1)
-    #Last Row sometimes doesn't have end time; need error handling.
-    #This issue should not be there with StartDateTime
-    def func(x):
-        try:
-            return dt.datetime.strptime(" ".join(x),"%m/%d/%y %H:%M:%S")
-        except:
-            return pd.NaT
-    TripSumData.loc[:,"EndDateTime"] = TripSumData[['Date','TripEndTime']].apply(func ,axis=1)
-    #Get Trip End point
-    TripEndFtDat = TripSumData[['IndexTripTags','EndFt','StartDateTime','EndDateTime']]
-    return(TripSumData,TripEndFtDat)
-
-
 
 def PlotTripStart_End(SumDat,StartGrp,EndGrp):
     # mc_start = MarkerCluster(name='TripStart').add_to(this_map)
@@ -524,16 +385,4 @@ def PlotTripStart_End(SumDat,StartGrp,EndGrp):
             popup=folium.Popup(html = label,parse_html=False,max_width='150'),
             icon=folium.Icon(color='darkred', icon='ok-sign')).add_to(EndGrp)
         
-        
-#https://github.com/geopy/geopy
-# Make this function Generic ---later
-def GetDistanceforTripSummaryDat(row):
-    StartLat, StartLong, EndLat, EndLong = row['StartLat'], row['StartLong'], row['EndLat'], row['EndLong']
-    distance_miles = -999
-    distance_miles = geodesic((StartLat, StartLong), (EndLat, EndLong)).miles
-    return(distance_miles)
-
-def GetDistanceLatLong_ft(Lat1, Long1, Lat2, Long2):
-    distance_ft = geodesic((Lat1, Long1), (Lat2, Long2)).feet
-    return(distance_ft)
 
