@@ -281,30 +281,36 @@ def FindAllTags(ZipFolderPath, quiet = True):
     '''
     if quiet != True: 
         print("Searching for tags in: " + ZipFolderPath)
- 
-    zf = zipfile.ZipFile(ZipFolderPath)
-    # Get Filename
-    namepat = re.compile('(rawnav\d+\.txt)') 
-    ZipFileName = namepat.search(ZipFolderPath).group(1) 
-    # Get Info
-    infopat ='^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
-    TagLineElements = []
-    TagLineNum = 1
-    with io.TextIOWrapper(zf.open(ZipFileName, 'r'),encoding="utf-8") as input_file:
-        for current_line in input_file:
-            for match in re.finditer(infopat, current_line, re.S):
-                # Turns out we don't really need capture groups
-                # with string split approach, but leaving in for possible
-                # future changes
-                returnvals = str(TagLineNum) + "," + match.group()
-                TagLineElements.append(returnvals)
-            TagLineNum = TagLineNum + 1
-            
-    # WT: Not sure if necessary, may help with separating later
-    # Python unnesting not as friendly as desired
-    if len(TagLineElements) == 0:
-         TagLineElements.append(',,,,,,')
-                
+    try:
+        zf = zipfile.ZipFile(ZipFolderPath)
+        # Get Filename
+        namepat = re.compile('(rawnav\d+\.txt)') 
+        ZipFileName = namepat.search(ZipFolderPath).group(1) 
+        # Get Info
+        infopat ='^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
+        TagLineElements = []
+        TagLineNum = 1
+        with io.TextIOWrapper(zf.open(ZipFileName, 'r'),encoding="utf-8") as input_file:
+            for current_line in input_file:
+                for match in re.finditer(infopat, current_line, re.S):
+                    # Turns out we don't really need capture groups
+                    # with string split approach, but leaving in for possible
+                    # future changes
+                    returnvals = str(TagLineNum) + "," + match.group()
+                    TagLineElements.append(returnvals)
+                TagLineNum = TagLineNum + 1
+        # WT: Not sure if necessary, may help with separating later
+        # Python unnesting not as friendly as desired
+        if len(TagLineElements) == 0:
+             TagLineElements.append(',,,,,,')
+    except BadZipfile as BadZipEr:
+        print("*"*15)
+        print(f"Issue with opening zipped file: {ZipFolderPath}. Error: {BadZipEr}")
+        print("*"*15)
+        #TODO: Figure out how to use logger here. Logger not working within Spyder.
+        #Wylie: Any suggestions? I was getting a BadZipFile when I tried processing 10,000 files
+        TagLineElements = []
+        TagLineElements.append(',,,,,,')
     return(TagLineElements)
         
 def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
