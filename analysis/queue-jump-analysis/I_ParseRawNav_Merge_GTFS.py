@@ -100,7 +100,10 @@ Example = rawnav_inventory_filtered.groupby(['fullpath','filename'])['taglist'].
 # AxB: One file can have different routes. Just the first line for not work. We need to groupby fullpath and route
 # We not seening the issue with routes '79','X2','X9' in the 1st 500 files, but, if you look at route 'U6'and 'H4',
 # you will see this issue.
-rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath','route']).first().reset_index()
+# I am loosing the route information here to read files with multiple routes togather. Will use the rawnav_inventory_filtered
+# later to get back the mapping. 
+rawnav_inventory_filtered.loc[:,"line_num"] = rawnav_inventory_filtered.line_num.astype(int)
+rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath','filename']).line_num.min().reset_index()
 FileUniverse_filtered = list(set(rawnav_inv_filt_first['fullpath'].values.tolist()))
 
 # 3 Load Raw RawNav Data
@@ -111,21 +114,20 @@ RouteRawTagDict = {}
 for index, row in rawnav_inv_filt_first.iterrows():
     # Two routes can have the same file
     # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
-    if row['filename'] not in RawNavDataDict.keys():
-        RawNavDataDict[row['filename']] = temp = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))
-   
+    RawNavDataDict[row['filename']] = temp = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))   
     #Since we already parsed the entire file for tag information. We can reuse the tag infomation here.
-    tagInfo_LineNo = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == key]
+    tagInfo_LineNo = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == row['filename']]
     Refrence = min(tagInfo_LineNo.line_num.astype(int))
     tagInfo_LineNo.loc[:,"NewLineNo"] = tagInfo_LineNo.line_num.astype(int) - Refrence-1
     RouteRawTagDict[row['filename']] = {'RawData':temp,'tagLineInfo':tagInfo_LineNo}
     
 # 4 Clean RawNav Data
 ########################################################################################
-
-
-
-
+#DEBUG
+RouteRawTagDict.keys()
+rawnavdata = RouteRawTagDict['rawnav00008191007.txt']['RawData']
+taglineData = RouteRawTagDict['rawnav00008191007.txt']['tagLineInfo']
+#AxB: Stopped here. Figured out the logic though. Will implement tomorrow (Mon: 5/3/2020)
 CleanDataDict = {}
 for key, data in RawNavDataDict.items():
     # WT: Is there a way we can restructure the clean_rawnav_data to not 

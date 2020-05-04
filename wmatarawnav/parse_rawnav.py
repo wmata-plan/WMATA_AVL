@@ -124,6 +124,14 @@ def clean_rawnav_data(filename,rawnavdata,FirstTag):
     # TODO: Can we restructure code to drop the FirstTag dependency?
      
     # FYI - largely keeping 3.1 and 3.2 code as-is here
+    Temp = taglineData.NewLineNo.values.flatten()
+    TagIndices= np.delete(Temp, np.where(Temp==-1))
+    CheckTagLineData = rawnavdata.loc[TagIndices,:]
+    breakpoint()
+    #TODO: Remove code for extracting Tags. Already extracted.
+    #TODO: Write function to extract Busware reported end of route...
+    rawnavdata
+    
     rawnavdata = RemoveCAL_APC_Tags(rawnavdata)
 
     rawnavdata.reset_index(inplace=True); rawnavdata.rename(columns = {"index":"IndexLoc"},inplace=True)
