@@ -98,8 +98,19 @@ def find_rawnav_routes(FileUniverse, nmax = None, quiet = True):
     return(FileUniverseDF)
 
 def load_rawnav_data(ZipFolderPath, skiprows): 
-    # TODO: write documentation
+    '''
+    Parameters
+    ----------
+    ZipFolderPath : str
+        Path to the zipped rawnav.txt file..
+    skiprows : int
+        Number of rows with metadata.
 
+    Returns
+    -------
+    pd.DataFrame with the file info.
+
+    '''
     zf = zipfile.ZipFile(ZipFolderPath)
     # Get Filename
     namepat = re.compile('(rawnav\d+\.txt)') 
@@ -108,7 +119,7 @@ def load_rawnav_data(ZipFolderPath, skiprows):
     return(RawData)
 
 
-def clean_rawnav_data(file_id,rawnavdata,FirstTag): 
+def clean_rawnav_data(filename,rawnavdata,FirstTag): 
     # TODO: write documentation
     # TODO: Can we restructure code to drop the FirstTag dependency?
      
@@ -181,8 +192,6 @@ def FindAllTags(ZipFolderPath, quiet = True):
         
 def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
     '''
-    
-
     Parameters
     ----------
     File : str
