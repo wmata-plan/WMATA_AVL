@@ -107,26 +107,42 @@ FileUniverse_filtered = list(set(rawnav_inv_filt_first['fullpath'].values.tolist
 ########################################################################################
 # Data is loaded into a dictionary named by the ID
 RawNavDataDict = {}
+RouteRawTagDict = {}
 for index, row in rawnav_inv_filt_first.iterrows():
     # Two routes can have the same file
     # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
     if row['filename'] not in RawNavDataDict.keys():
-        RawNavDataDict[row['filename']] = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))
+        RawNavDataDict[row['filename']] = temp = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))
+   
+    #Since we already parsed the entire file for tag information. We can reuse the tag infomation here.
+    tagInfo_LineNo = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == key]
+    Refrence = min(tagInfo_LineNo.line_num.astype(int))
+    tagInfo_LineNo.loc[:,"NewLineNo"] = tagInfo_LineNo.line_num.astype(int) - Refrence-1
+    RouteRawTagDict[row['filename']] = {'RawData':temp,'tagLineInfo':tagInfo_LineNo}
+    
 # 4 Clean RawNav Data
 ########################################################################################
 
-CleanDataDict = {}
 
+
+
+CleanDataDict = {}
 for key, data in RawNavDataDict.items():
     # WT: Is there a way we can restructure the clean_rawnav_data to not 
     # require FirstTag to be passed like this? Can we used nested dataframes
     # in a master dataframe with list comprehensions 
     # instead of trying to subset a bunch of different objects?
+    # AxB: I changed the above dictionary to include tag information. Wouldn't nested dataframe have 
+    # essentially the same information? 
 
-    firsttag = rawnav_inv_filt_first.loc[rawnav_inv_filt_first['file_id'] == key,'taglist'].values[0].split(',')
+    
+    firsttag = rawnav_inv_filt_first.loc[rawnav_inv_filt_first['filename'] == key,'taglist'].values[0].split(',')
+    
     # WT: Apoorb, I think I'll need your help on GetTagInfo
     # I think the way I'm trying to pass tag isn't quite working there
     CleanDataDict[key] = wr.clean_rawnav_data(file_id = key, rawnavdata = data, FirstTag = firsttag)
+    
+    CleanDataDict[key] = wr.clean_rawnav_data(file_id = key, rawnavdata = data, TagLinesDf = tagInfo_LineNo)
 
 
 # WT: stopped here working on code
