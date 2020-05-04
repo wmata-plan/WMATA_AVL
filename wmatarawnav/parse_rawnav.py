@@ -156,7 +156,8 @@ def clean_rawnav_data(DataDict):
                    8:'StopWindow',9:'Blank',10:'LatRaw',11:'LongRaw'}
     rawnavdata.rename(columns =ColumnNmMap,inplace=True )
     rawnavdata = AddTripDividers(rawnavdata,SummaryData )
-    return(rawnavdata,SummaryData)
+    returnDict = {'rawnavdata':rawnavdata,'SummaryData':SummaryData}
+    return(returnDict)
      
 # def summarize_rawnav_trip(): 
 # def import_GTFS_data(): 
@@ -232,12 +233,15 @@ def AddEndRouteInfo(data, taglineData):
     deleteIndices = EndOfRoute.IndexLoc.values
     EndOfRoute.rename(columns={'IndexLoc':'IndexTripEnd'},inplace=True)
     EndOfRoute.IndexTripEnd = EndOfRoute.IndexTripEnd.astype('int32')
+    taglineData.NewLineNo = taglineData.NewLineNo.astype('int32')
     EndOfRoute = pd.merge_asof(EndOfRoute,taglineData[['tag_time','NewLineNo']],left_on="IndexTripEnd",right_on='NewLineNo',direction='backward')
     EndOfRoute = EndOfRoute[~(EndOfRoute.duplicated(subset=['NewLineNo','tag_time'],keep='first'))]
     taglineData = taglineData.merge(EndOfRoute,on=['NewLineNo','tag_time'],how='left')
     taglineData.loc[:,'tempLine'] = taglineData['NewLineNo'].shift(-1)
     taglineData.loc[:,'tempTime'] = taglineData['tag_time'].shift(-1)
     taglineData.loc[taglineData.TripEndTime.isna(),['IndexTripEnd','TripEndTime']] = taglineData.loc[taglineData.TripEndTime.isna(),['tempLine','tempTime']].values
+    if(np.isnan(taglineData.iloc[-1]['IndexTripEnd'])):
+        taglineData.loc[taglineData.index.max(), 'IndexTripEnd'] = max(data.IndexLoc)
     taglineData.rename(columns={'tag_time':"TripStartTime"},inplace=True)
     return(taglineData, deleteIndices)
    

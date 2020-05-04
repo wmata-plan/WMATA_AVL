@@ -53,7 +53,7 @@ import wmatarawnav as wr
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
-restrict_n = 500
+restrict_n = 1000
 # restrict_n = None
 
 AnalysisRoutes = ['79','X2','X9','U6','H4']
@@ -128,12 +128,12 @@ for index, row in rawnav_inv_filt_first.iterrows():
 ########################################################################################
 #DEBUG
 RouteRawTagDict.keys()
-key = 'rawnav02626191022.txt'
-rawnavdata = RouteRawTagDict[key]['RawData']
+key = 'rawnav00008191007.txt'
+rawnavdata =data = RouteRawTagDict[key]['RawData']
 taglineData = RouteRawTagDict[key]['tagLineInfo']
 #AxB: Stopped here. Figured out the logic though. Will implement tomorrow (Mon: 5/3/2020)
 CleanDataDict = {}
-for key, data in RawNavDataDict.items():
+for key, datadict in RouteRawTagDict.items():
     # WT: Is there a way we can restructure the clean_rawnav_data to not 
     # require FirstTag to be passed like this? Can we used nested dataframes
     # in a master dataframe with list comprehensions 
@@ -142,7 +142,7 @@ for key, data in RawNavDataDict.items():
     # essentially the same information?     
     # WT: Apoorb, I think I'll need your help on GetTagInfo
     # I think the way I'm trying to pass tag isn't quite working there    
-    CleanDataDict[key] = wr.clean_rawnav_data(RouteRawTagDict[key])
+    CleanDataDict[key] = wr.clean_rawnav_data(datadict)
 
 
 # WT: stopped here working on code
