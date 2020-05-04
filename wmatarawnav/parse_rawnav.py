@@ -142,7 +142,7 @@ def clean_rawnav_data(DataDict):
     #Remove APC and CAL labels and keep APC locations. Can merge_asof later.
     rawnavdata, APCTagLoc = RemoveAPC_CAL_Tags(rawnavdata)
     CheckDat = rawnavdata[~rawnavdata.apply(CheckValidDataEntry,axis=1)]
-    Pat = re.compile('^\s*/\s*(?P<TripEndTime>\d{2}:\d{2}:\d{2})\s*(?:Buswares.*SHUTDOWN|bwrawnav)',re.S|re.I) 
+    Pat = re.compile('^\s*/\s*((\d{2}:\d{2}:\d{2})\s*(?:Buswares.*SHUTDOWN|bwrawnav)|collection stopped.*)',re.S|re.I) 
     assert(sum(~(CheckDat[0].str.match(Pat)))==0) ,"Did not handle some additional lines in CheckDat"
     rawnavdata = rawnavdata[rawnavdata.apply(CheckValidDataEntry,axis=1)]
     #Add the APC tag to the rawnav data to identify stops
