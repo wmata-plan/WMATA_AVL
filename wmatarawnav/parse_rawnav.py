@@ -195,13 +195,21 @@ def GetTripSummary(data, taglineData):
               """,inplace=True)
       
     temp[["LatStart","LongStart","LatEnd","LongEnd"]] = temp[["LatStart","LongStart","LatEnd","LongEnd"]].astype(float)
-    # Check what are units---Geopandas would be faster    
-    # geometryStart = [Point(xy) for xy in zip(temp.LongStart, temp.LatStart)]
-    # gdf=gpd.GeoDataFrame(geometry=geometryStart,crs={'init':'epsg:4326'})
-    # geometryEnd = [Point(xy) for xy in zip(temp.LongEnd, temp.LatEnd)]
-    # gdf2=gpd.GeoDataFrame(geometry=geometryEnd,crs={'init':'epsg:4326'})
-    # distances = gdf.geometry.distance(gdf2)
-    temp.loc[:,'CrowFlyDistLatLongMi'] = temp[["LatStart","LongStart","LatEnd","LongEnd"]].apply(lambda x: GetDistanceLatLong_mi(x[0],x[1],x[2],x[3]),axis=1)
+
+    geometryStart = [Point(xy) for xy in zip(temp.LongStart, temp.LatStart)]
+    gdf=gpd.GeoDataFrame(geometry=geometryStart,crs={'init':'epsg:4326'})
+    gdf.to_crs(epsg=3310,inplace=True)
+    geometryEnd = [Point(xy) for xy in zip(temp.LongEnd, temp.LatEnd)]
+    gdf2=gpd.GeoDataFrame(geometry=geometryEnd,crs={'init':'epsg:4326'})
+    gdf2.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
+
+    #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
+    distances = gdf.geometry.distance(gdf2) * 0.000621371 # meters to miles
+    temp.loc[:,'CrowFlyDistLatLongMi'] = distances
+    check2 = temp[["LatStart","LongStart","LatEnd","LongEnd"]].apply(lambda x: GetDistanceLatLong_mi(x[0],x[1],x[2],x[3]),axis=1)
+    #TODO: Remove check2 and the following assertion
+    #later, it will slow down processing
+    assert(((check2-temp.loc[:,'CrowFlyDistLatLongMi'])<0.01).all())
     SummaryDat = taglineData.merge(temp,on= ['IndexTripStart','IndexTripEnd'],how ='left')
     SummaryDat.tag_date = SummaryDat.tag_date.astype(str)
     SummaryDat.loc[:,"StartDateTime"] = pd.to_datetime(SummaryDat['tag_date']+" "+SummaryDat['TripStartTime'])
@@ -304,11 +312,11 @@ def FindAllTags(ZipFolderPath, quiet = True):
         if len(TagLineElements) == 0:
              TagLineElements.append(',,,,,,')
     except BadZipfile as BadZipEr:
-        print("*"*15)
+        print("*"*100)
         print(f"Issue with opening zipped file: {ZipFolderPath}. Error: {BadZipEr}")
-        print("*"*15)
+        print("*"*100)
         #TODO: Figure out how to use logger here. Logger not working within Spyder.
-        #Wylie: Any suggestions? I was getting a BadZipFile when I tried processing 10,000 files
+        #AxB: Any suggestions? I was getting a BadZipFile when I tried processing 10,000 files
         TagLineElements = []
         TagLineElements.append(',,,,,,')
     return(TagLineElements)
