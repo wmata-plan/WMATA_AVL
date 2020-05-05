@@ -13,8 +13,14 @@ ipython = get_ipython()
 #1 Import Libraries
 ########################################################################################
 import pandas as pd, os, numpy as np, pyproj, sys, zipfile, glob, logging
+from datetime import datetime
 from geopy.distance import geodesic
 from collections import defaultdict
+from shapely.ops import nearest_points
+from shapely.geometry import Point
+from shapely.geometry import LineString
+
+import geopandas as gpd
 if not sys.warnoptions:
     import warnings
     warnings.simplefilter("ignore") #Too many Pandas warnings
@@ -153,7 +159,6 @@ if DEBUG:
 #AxB: 
 # TODO: Need to write processed data to database, HDF5, Feather, or parquet format.
 # I am not familiar with database set up. Wylie, can we talk a bit about storing the processed data? 
-CleanDataDict.values()['SummaryData']
 
 FinSummaryDat = pd.DataFrame()
 for keys,datadict in CleanDataDict.items():
@@ -187,32 +192,44 @@ if DEBUG:
     assert((CheckData2.CrowFlyDistLatLongMi-CheckData2.Dist_from_LatLong<0.01).all())
 
 
+#Output Summary Files
+now = datetime.now()
+d4 = now.strftime("%b-%d-%Y %H")
 
-CleanDataDict.keys()
-CheckDat = CleanDataDict['rawnav00008191007.txt']['SummaryData']
-CheckDat.columns
-geometry1 = [Point(xy) for xy in zip(CheckDat.LongStart, CheckDat.LatStart)]
-geometry2 = [Point(xy) for xy in zip(CheckDat.LongEnd, CheckDat.LatEnd)]
+OutFiSum = os.path.join(path_processed_data,f'TripSummaries_{d4}.csv')
+FinSummaryDat.to_csv(OutFiSum)
 
-geometry = [LineString(list(xy)) for xy in zip(geometry1,geometry2)]
-gdf2=gpd.GeoDataFrame(CheckDat, geometry=geometry,crs={'init':'epsg:4326'})
-gdf2.to_crs(epsg=3310,inplace=True)
 
-distances = gdf2.geometry.length *0.000621371
-with pd.option_context('display.max_rows', None, 'display.max_columns', 40):  # more options can be specified also
-    print(CheckDat)
-CheckDat['']
-#5 Analyze Route 79
+#5 Analyze Route 79---Subset RawNav Data. 
+# TODO: Extend it to handle multiple routes 
+
+# Didn't get a chance to clean-up the code before
+# I might have to conduct some preliminary analysis-
+# so likely would get to the GTFS function clean-up next 
+# week (Week of May 11th)
 ########################################################################################
-CheckDat[]
-rawnav_inventory1
+rte_id = "79"
+FinDat79 = pd.DataFrame()
+SearchDF = rawnav_inventory1[['route','filename']].set_index('route')
+Route79Files = (SearchDF.loc['79',:].values).flatten()
+for file in Route79Files:
+    tempDf =CleanDataDict[file]['rawnavdata']
+    tempDf.loc[:,"filename"] = file
+    FinDat79 = pd.concat([FinDat79,tempDf])
+FinDat79.reset_index(drop=True,inplace=True)
+FinDat79 = FinDat79.query("route=='79'")
+SumData79 = FinSummaryDat.query("route=='79'")
+SumData79.reset_index(drop=True,inplace=True)
+SumData79.columns
+tempDf = SumData79[['filename','IndexTripStartInCleanData','LatStart', 'LongStart']]
+geometryStart = [Point(xy) for xy in zip(tempDf.LongStart, tempDf.LatStart)]
+SumData79_StartGpd=gpd.GeoDataFrame(tempDf, geometry=geometryStart,crs={'init':'epsg:4326'})
 
-
-
-
-#2 Read the GTFS Data
+tempDf = SumData79[['filename','IndexTripStartInCleanData','LatEnd', 'LongEnd']]
+geometryEnd = [Point(xy) for xy in zip(tempDf.LongEnd, tempDf.LatEnd)]
+SumData79_EndGpd=gpd.GeoDataFrame(tempDf, geometry=geometryEnd,crs={'init':'epsg:4326'})
+#6 Read the GTFS Data
 ########################################################################################
-
 StopsDat= pd.read_csv(os.path.join(GTFS_Dir,"stops.txt"))
 StopTimeDat = pd.read_csv(os.path.join(GTFS_Dir,"stop_times.txt"))
 TripsDat =pd.read_csv(os.path.join(GTFS_Dir,"trips.txt"))
@@ -285,73 +302,118 @@ LastStopDat1 = LastStopDat1.groupby(['route_id','last_stopId','last_stopNm']).fi
 FirstStopDat1.to_csv(os.path.join(path_processed_data,'FirstStopGTFS.csv'))
 LastStopDat1.to_csv(os.path.join(path_processed_data,'LastStopGTFS.csv'))
 
+#TODO: Create a function for this: 
+geometryStart = [Point(xy) for xy in zip(FirstStopDat1.first_sLon, FirstStopDat1.first_sLat)]
+FirstStopDat1=gpd.GeoDataFrame(FirstStopDat1, geometry=geometryStart,crs={'init':'epsg:4326'})
+#TODO: Need a function
+geometryEnd = [Point(xy) for xy in zip(LastStopDat1.last_sLon, LastStopDat1.last_sLat)]
+LastStopDat1=gpd.GeoDataFrame(LastStopDat1, geometry=geometryEnd,crs={'init':'epsg:4326'})
 
-    FirstStopLatLong_RawNav = pd.DataFrame()
-    LastStopLatLong_RawNav = pd.DataFrame()
 
-    #****************************************************************************************************************
-    GTFS_1stStop = FirstStopDat1[FirstStopDat1.route_id==rte_id]
-    GTFS_lastStop = LastStopDat1[LastStopDat1.route_id==rte_id]
+FirstStopLatLong_RawNav = pd.DataFrame()
+LastStopLatLong_RawNav = pd.DataFrame()
+#https://stackoverflow.com/questions/56520780/how-to-use-geopanda-or-shapely-to-find-nearest-point-in-same-geodataframe
+SumData79_StartGpd.insert(3, 'nearest_start', None)
+SumData79_EndGpd.insert(3, 'nearest_end', None)
 
-    #****************************************************************************************************************
-    for idx, row in FirstRawNavRow.iterrows():
-        RawNavLat1,RawNavLong1 = row[['Lat','Long']]
-        GTFS_1stStop.loc[:,'Dist_from_1st_RawNav_Pt'] = GTFS_1stStop.apply(lambda row:wr.GetDistanceLatLong_ft(row['first_sLat'],row['first_sLon'],RawNavLat1,RawNavLong1) ,axis=1)
-        MaskClosestStop = GTFS_1stStop.Dist_from_1st_RawNav_Pt== min(GTFS_1stStop.Dist_from_1st_RawNav_Pt )
-        TempLat = GTFS_1stStop[MaskClosestStop][['first_sLat','first_sLon']].values[0][0]
-        TempLong = GTFS_1stStop[MaskClosestStop][['first_sLat','first_sLon']].values[0][1]
-        TempDa2 = pd.DataFrame({'IndexTripTags':[row['IndexTripTags']],'first_sLat':[TempLat],'first_sLon':[TempLong]})    
-        FirstStopLatLong_RawNav =pd.concat([FirstStopLatLong_RawNav,TempDa2])
+for index, row in SumData79_StartGpd.iterrows():
+    point = row.geometry
+    multipoint = FirstStopDat1.geometry.unary_union
+    queried_geom, nearest_geom = nearest_points(point, multipoint)
+    SumData79_StartGpd.loc[index, 'nearest_start'] = nearest_geom
+    
+for index, row in SumData79_EndGpd.iterrows():
+    point = row.geometry
+    multipoint = LastStopDat1.geometry.unary_union
+    queried_geom, nearest_geom = nearest_points(point, multipoint)
+    SumData79_EndGpd.loc[index, 'nearest_end'] = nearest_geom
+    
+SumData79_StartGpd = SumData79_StartGpd[['filename','IndexTripStartInCleanData','nearest_start']]
+SumData79_EndGpd = SumData79_EndGpd[['filename','IndexTripStartInCleanData','nearest_end']]
+
+
+geometry = [Point(xy) for xy in zip(FinDat79.Long.astype(float), FinDat79.Lat.astype(float))]
+FinDat79gpd=gpd.GeoDataFrame(FinDat79, geometry=geometry,crs={'init':'epsg:4326'})
+FinDat79gpd = FinDat79gpd.merge(SumData79_StartGpd,on =['filename','IndexTripStartInCleanData'],how='left')
+FinDat79gpd = FinDat79gpd.merge(SumData79_EndGpd,on =['filename','IndexTripStartInCleanData'],how='left')
+
+geometry1= [Point(xy) for xy in zip(FinDat79.Long.astype(float), FinDat79.Lat.astype(float))]
+geometry2 =FinDat79gpd.nearest_start
+geometry = [LineString(list(xy)) for xy in zip(geometry1,geometry2)]
+FinDat79gpd.geometry = geometry
+FinDat79gpd.to_crs(epsg=3310,inplace=True) #meters
+FinDat79gpd.loc[:,'distances_start_ft'] = FinDat79gpd.geometry.length *3.28084
+
+geometry2 =FinDat79gpd.nearest_end
+geometry = [LineString(list(xy)) for xy in zip(geometry1,geometry2)]
+FinDat79gpd.geometry = geometry
+FinDat79gpd.to_crs(epsg=3310,inplace=True) #meters
+FinDat79gpd.loc[:,'distances_end_ft'] = FinDat79gpd.geometry.length *3.28084
+
+checkDat =FinDat79gpd.iloc[0:200,:]
+breakpoint()
+#AxB: Something is wrong in above distances. Will check tomorrow.
+#****************************************************************************************************************
+
+
+
+
+# TODO: Delete most of the stuff below:
+
+#     #****************************************************************************************************************
+#     for idx, row in FirstRawNavRow.iterrows():
+#         RawNavLat1,RawNavLong1 = row[['Lat','Long']]
+#         GTFS_1stStop.loc[:,'Dist_from_1st_RawNav_Pt'] = GTFS_1stStop.apply(lambda row:wr.GetDistanceLatLong_ft(row['first_sLat'],row['first_sLon'],RawNavLat1,RawNavLong1) ,axis=1)
+#         MaskClosestStop = GTFS_1stStop.Dist_from_1st_RawNav_Pt== min(GTFS_1stStop.Dist_from_1st_RawNav_Pt )
+#         TempLat = GTFS_1stStop[MaskClosestStop][['first_sLat','first_sLon']].values[0][0]
+#         TempLong = GTFS_1stStop[MaskClosestStop][['first_sLat','first_sLon']].values[0][1]
+#         TempDa2 = pd.DataFrame({'IndexTripTags':[row['IndexTripTags']],'first_sLat':[TempLat],'first_sLon':[TempLong]})    
+#         FirstStopLatLong_RawNav =pd.concat([FirstStopLatLong_RawNav,TempDa2])
          
-    for idx, row in LastRawNavRow.iterrows():
-        RawNavLat1,RawNavLong1 = row[['Lat','Long']]
-        GTFS_lastStop.loc[:,'Dist_from_last_RawNav_Pt'] = GTFS_lastStop.apply(lambda row:wr.GetDistanceLatLong_ft(row['last_sLat'],row['last_sLon'],RawNavLat1,RawNavLong1) ,axis=1)
-        MaskClosestStop = GTFS_lastStop.Dist_from_last_RawNav_Pt== min(GTFS_lastStop.Dist_from_last_RawNav_Pt )
-        TempLat = GTFS_lastStop[MaskClosestStop][['last_sLat','last_sLon']].values[0][0]
-        TempLong = GTFS_lastStop[MaskClosestStop][['last_sLat','last_sLon']].values[0][1]
-        TempDa2 = pd.DataFrame({'IndexTripTags':[row['IndexTripTags']],'last_sLat':[TempLat],'last_sLon':[TempLong]})    
-        LastStopLatLong_RawNav =pd.concat([LastStopLatLong_RawNav,TempDa2])
+#     for idx, row in LastRawNavRow.iterrows():
+#         RawNavLat1,RawNavLong1 = row[['Lat','Long']]
+#         GTFS_lastStop.loc[:,'Dist_from_last_RawNav_Pt'] = GTFS_lastStop.apply(lambda row:wr.GetDistanceLatLong_ft(row['last_sLat'],row['last_sLon'],RawNavLat1,RawNavLong1) ,axis=1)
+#         MaskClosestStop = GTFS_lastStop.Dist_from_last_RawNav_Pt== min(GTFS_lastStop.Dist_from_last_RawNav_Pt )
+#         TempLat = GTFS_lastStop[MaskClosestStop][['last_sLat','last_sLon']].values[0][0]
+#         TempLong = GTFS_lastStop[MaskClosestStop][['last_sLat','last_sLon']].values[0][1]
+#         TempDa2 = pd.DataFrame({'IndexTripTags':[row['IndexTripTags']],'last_sLat':[TempLat],'last_sLon':[TempLong]})    
+#         LastStopLatLong_RawNav =pd.concat([LastStopLatLong_RawNav,TempDa2])
     
-    TestData2 = TestData2.merge(FirstStopLatLong_RawNav,on='IndexTripTags',how='left')
-    TestData2.loc[:,'Dist_from_GTFS1stStop'] = TestData2.apply(lambda row:wr.GetDistanceLatLong_ft(row['first_sLat'],row['first_sLon'],row['Lat'],row['Long']) ,axis=1)
-    TestData2 = TestData2.merge(LastStopLatLong_RawNav,on='IndexTripTags',how='left')
-    TestData2.loc[:,'Dist_from_GTFSlastStop'] = TestData2.apply(lambda row:wr.GetDistanceLatLong_ft(row['last_sLat'],row['last_sLon'],row['Lat'],row['Long']) ,axis=1)
-    MinDat = TestData2.groupby(['IndexTripTags'])['Dist_from_GTFS1stStop','Dist_from_GTFSlastStop'].idxmin().reset_index()
-    MinDat.rename(columns = {'Dist_from_GTFS1stStop':'LowerBound','Dist_from_GTFSlastStop':"UpperBound"},inplace=True)
-    MinDat.loc[:,'LowerBound'] = TestData2.loc[MinDat.loc[:,'LowerBound'],'IndexLoc'].values
-    MinDat.loc[:,'UpperBound'] = TestData2.loc[MinDat.loc[:,'UpperBound'],'IndexLoc'].values
+#     TestData2 = TestData2.merge(FirstStopLatLong_RawNav,on='IndexTripTags',how='left')
+#     TestData2.loc[:,'Dist_from_GTFS1stStop'] = TestData2.apply(lambda row:wr.GetDistanceLatLong_ft(row['first_sLat'],row['first_sLon'],row['Lat'],row['Long']) ,axis=1)
+#     TestData2 = TestData2.merge(LastStopLatLong_RawNav,on='IndexTripTags',how='left')
+#     TestData2.loc[:,'Dist_from_GTFSlastStop'] = TestData2.apply(lambda row:wr.GetDistanceLatLong_ft(row['last_sLat'],row['last_sLon'],row['Lat'],row['Long']) ,axis=1)
+#     MinDat = TestData2.groupby(['IndexTripTags'])['Dist_from_GTFS1stStop','Dist_from_GTFSlastStop'].idxmin().reset_index()
+#     MinDat.rename(columns = {'Dist_from_GTFS1stStop':'LowerBound','Dist_from_GTFSlastStop':"UpperBound"},inplace=True)
+#     MinDat.loc[:,'LowerBound'] = TestData2.loc[MinDat.loc[:,'LowerBound'],'IndexLoc'].values
+#     MinDat.loc[:,'UpperBound'] = TestData2.loc[MinDat.loc[:,'UpperBound'],'IndexLoc'].values
 
-    TestData2 = TestData2.merge(MinDat,on='IndexTripTags',how='left')
-    MaskGTFS_Trimming = (TestData2.IndexLoc>=TestData2.LowerBound) & (TestData2.IndexLoc<=TestData2.UpperBound)
-    TestData2 = TestData2[MaskGTFS_Trimming]
-    TestData2 = TestData2[['Lat','Long','Heading','OdomtFt','SecPastSt',
-                           'IndexTripTags','Tag','Dist_from_GTFS1stStop','Dist_from_GTFSlastStop']]
+#     TestData2 = TestData2.merge(MinDat,on='IndexTripTags',how='left')
+#     MaskGTFS_Trimming = (TestData2.IndexLoc>=TestData2.LowerBound) & (TestData2.IndexLoc<=TestData2.UpperBound)
+#     TestData2 = TestData2[MaskGTFS_Trimming]
+#     TestData2 = TestData2[['Lat','Long','Heading','OdomtFt','SecPastSt',
+#                            'IndexTripTags','Tag','Dist_from_GTFS1stStop','Dist_from_GTFSlastStop']]
     
-    Map1 = lambda x: max(x)-min(x)
-    SumDat1 =TestData2.groupby('IndexTripTags').agg({'OdomtFt':['min','max',Map1],
-                                                     'SecPastSt':['min','max',Map1],
-                                                     'Lat':['first','last'],
-                                                     'Long':['first','last'],
-                                                     'Dist_from_GTFS1stStop':['first','last'],
-                                                     'Dist_from_GTFSlastStop':['last']})
-    SumDat1.columns = ['OdomtFt_start_GTFS','OdomtFt_end_GTFS','Trip_Dist_Mi_GTFS',
-                       'SecPastSt_start_GTFS','SecPastSt_end_GTFS','Trip_Dur_Sec_GTFS',
-                       'Lat_start_GTFS','Lat_end_GTFS','Long_start_GTFS','Long_end_GTFS',
-                       'Dist_from_GTFS1stStop_start_ft','Dist_from_GTFS1stStop_end_mi',
-                       'Dist_from_GTFSlastStop_end_ft']
-    SumDat1.loc[:,['Trip_Dist_Mi_GTFS','Dist_from_GTFS1stStop_end_mi']] =SumDat1.loc[:,['Trip_Dist_Mi_GTFS','Dist_from_GTFS1stStop_end_mi']]/5280
-    SumDat1.loc[:,'Trip_Speed_mph_GTFS'] =round(3600* SumDat1.Trip_Dist_Mi_GTFS/SumDat1.Trip_Dur_Sec_GTFS,2)
-    SumDat1 = SumDat1.merge(TripSumData,on='IndexTripTags',how='left')
-    SumDat1.loc[:,'FileNm'] = key
-    ProcessedDataDict[rte_id][key] =  SumDat1
+#     Map1 = lambda x: max(x)-min(x)
+#     SumDat1 =TestData2.groupby('IndexTripTags').agg({'OdomtFt':['min','max',Map1],
+#                                                      'SecPastSt':['min','max',Map1],
+#                                                      'Lat':['first','last'],
+#                                                      'Long':['first','last'],
+#                                                      'Dist_from_GTFS1stStop':['first','last'],
+#                                                      'Dist_from_GTFSlastStop':['last']})
+#     SumDat1.columns = ['OdomtFt_start_GTFS','OdomtFt_end_GTFS','Trip_Dist_Mi_GTFS',
+#                        'SecPastSt_start_GTFS','SecPastSt_end_GTFS','Trip_Dur_Sec_GTFS',
+#                        'Lat_start_GTFS','Lat_end_GTFS','Long_start_GTFS','Long_end_GTFS',
+#                        'Dist_from_GTFS1stStop_start_ft','Dist_from_GTFS1stStop_end_mi',
+#                        'Dist_from_GTFSlastStop_end_ft']
+#     SumDat1.loc[:,['Trip_Dist_Mi_GTFS','Dist_from_GTFS1stStop_end_mi']] =SumDat1.loc[:,['Trip_Dist_Mi_GTFS','Dist_from_GTFS1stStop_end_mi']]/5280
+#     SumDat1.loc[:,'Trip_Speed_mph_GTFS'] =round(3600* SumDat1.Trip_Dist_Mi_GTFS/SumDat1.Trip_Dur_Sec_GTFS,2)
+#     SumDat1 = SumDat1.merge(TripSumData,on='IndexTripTags',how='left')
+#     SumDat1.loc[:,'FileNm'] = key
+#     ProcessedDataDict[rte_id][key] =  SumDat1
     
-FinSumDat = pd.concat(ProcessedDataDict[rte_id].values())
-FinSumDat =FinSumDat.merge(TripInventory, on =['FileNm','TripStartTime'],how='left')
-FinSumDat.to_excel(os.path.join(path_processed_data,'Route79_TrimSum.xlsx'))
+# FinSumDat = pd.concat(ProcessedDataDict[rte_id].values())
+# FinSumDat =FinSumDat.merge(TripInventory, on =['FileNm','TripStartTime'],how='left')
+# FinSumDat.to_excel(os.path.join(path_processed_data,'Route79_TrimSum.xlsx'))
 
     
-
-
-
-
-
