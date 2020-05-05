@@ -49,7 +49,7 @@ elif os.getlogin()=="abibeka":
     # Source Data
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
     GTFS_Dir = os.path.join(path_source_data, "google_transit")   
-    DEBUG = True
+    DEBUG = False
     # Processed Data
     path_processed_data = os.path.join(path_source_data,"ProcessedData")
 else:
@@ -173,7 +173,7 @@ if DEBUG:
     CheckData.loc[:,"FileNm"] = CheckData.FileNm.astype('int64')
     CheckData.loc[:,'StartDateTime'] = pd.to_datetime(CheckData['Date']+" "+CheckData['TripStartTime'])
 
-    CheckData1 = pd.merge(FinSummaryDat1, CheckData, on =["FileNm",'StartDateTime'],how="left")
+    CheckData1 = pd.merge(FinSummaryDat1, CheckData, on =["FileNm",'StartDateTime'],how="inner")
     CheckData1.columns
     CheckData2 =CheckData1[['file_id','route_pattern','tag_busid','route','Tag','BusID','StartDateTime',
                 'EndDateTime','Date','TripStartTime','TripEndTime','CrowFlyDistLatLongMi',
@@ -185,11 +185,11 @@ if DEBUG:
     assert(((CheckData3.TripDurationFromTags_x.dt.total_seconds()-\
              CheckData3.TripDurationFromTags_y)<0.001).all())
     CheckData3 = CheckData2[~(CheckData2.SpeedOdomMPH.isna())]
-    assert(((CheckData3.SpeedOdomMPH-CheckData3.TripSpeed_RawData)<0.1).all())
+    assert(((CheckData3.SpeedOdomMPH-CheckData3.TripSpeed_RawData)<2).all())
     CheckData3 = CheckData2[~(CheckData2.TripDurFromSec.isna())]
     assert((CheckData3.TripDurFromSec-CheckData3.TripDurationFromRawData<0.0000001).all())
     assert((CheckData2.DistanceMi-CheckData2.DistOdomMi<0.0000001).all())
-    assert((CheckData2.CrowFlyDistLatLongMi-CheckData2.Dist_from_LatLong<0.01).all())
+    assert((CheckData2.CrowFlyDistLatLongMi-CheckData2.Dist_from_LatLong<0.1).all())
 
 
 #Output Summary Files
@@ -211,14 +211,14 @@ FinSummaryDat.to_csv(OutFiSum)
 rte_id = "79"
 FinDat79 = pd.DataFrame()
 SearchDF = rawnav_inventory1[['route','filename']].set_index('route')
-Route79Files = (SearchDF.loc['79',:].values).flatten()
+Route79Files = (SearchDF.loc[rte_id,:].values).flatten()
 for file in Route79Files:
     tempDf =CleanDataDict[file]['rawnavdata']
     tempDf.loc[:,"filename"] = file
     FinDat79 = pd.concat([FinDat79,tempDf])
 FinDat79.reset_index(drop=True,inplace=True)
-FinDat79 = FinDat79.query("route=='79'")
-SumData79 = FinSummaryDat.query("route=='79'")
+FinDat79 = FinDat79.query("route==@rte_id")
+SumData79 = FinSummaryDat.query("route==@rte_id")
 SumData79.reset_index(drop=True,inplace=True)
 SumData79.columns
 tempDf = SumData79[['filename','IndexTripStartInCleanData','LatStart', 'LongStart']]
@@ -303,28 +303,29 @@ FirstStopDat1.to_csv(os.path.join(path_processed_data,'FirstStopGTFS.csv'))
 LastStopDat1.to_csv(os.path.join(path_processed_data,'LastStopGTFS.csv'))
 
 #TODO: Create a function for this: 
-geometryStart = [Point(xy) for xy in zip(FirstStopDat1.first_sLon, FirstStopDat1.first_sLat)]
-FirstStopDat1=gpd.GeoDataFrame(FirstStopDat1, geometry=geometryStart,crs={'init':'epsg:4326'})
+FirstStopDat1.reset_index(inplace=True);LastStopDat1.reset_index(inplace=True)
+FirstStopDat1_rte = FirstStopDat1.query('route_id==@rte_id') 
+LastStopDat1_rte = LastStopDat1.query('route_id==@rte_id') 
+
+geometryStart = [Point(xy) for xy in zip(FirstStopDat1_rte.first_sLon, FirstStopDat1_rte.first_sLat)]
+FirstStopDat1_rte=gpd.GeoDataFrame(FirstStopDat1_rte, geometry=geometryStart,crs={'init':'epsg:4326'})
 #TODO: Need a function
-geometryEnd = [Point(xy) for xy in zip(LastStopDat1.last_sLon, LastStopDat1.last_sLat)]
-LastStopDat1=gpd.GeoDataFrame(LastStopDat1, geometry=geometryEnd,crs={'init':'epsg:4326'})
+geometryEnd = [Point(xy) for xy in zip(LastStopDat1_rte.last_sLon, LastStopDat1_rte.last_sLat)]
+LastStopDat1_rte=gpd.GeoDataFrame(LastStopDat1_rte, geometry=geometryEnd,crs={'init':'epsg:4326'})
 
-
-FirstStopLatLong_RawNav = pd.DataFrame()
-LastStopLatLong_RawNav = pd.DataFrame()
 #https://stackoverflow.com/questions/56520780/how-to-use-geopanda-or-shapely-to-find-nearest-point-in-same-geodataframe
 SumData79_StartGpd.insert(3, 'nearest_start', None)
 SumData79_EndGpd.insert(3, 'nearest_end', None)
 
 for index, row in SumData79_StartGpd.iterrows():
     point = row.geometry
-    multipoint = FirstStopDat1.geometry.unary_union
+    multipoint = FirstStopDat1_rte.geometry.unary_union
     queried_geom, nearest_geom = nearest_points(point, multipoint)
     SumData79_StartGpd.loc[index, 'nearest_start'] = nearest_geom
     
 for index, row in SumData79_EndGpd.iterrows():
     point = row.geometry
-    multipoint = LastStopDat1.geometry.unary_union
+    multipoint = LastStopDat1_rte.geometry.unary_union
     queried_geom, nearest_geom = nearest_points(point, multipoint)
     SumData79_EndGpd.loc[index, 'nearest_end'] = nearest_geom
     
@@ -340,18 +341,23 @@ FinDat79gpd = FinDat79gpd.merge(SumData79_EndGpd,on =['filename','IndexTripStart
 geometry1= [Point(xy) for xy in zip(FinDat79.Long.astype(float), FinDat79.Lat.astype(float))]
 geometry2 =FinDat79gpd.nearest_start
 geometry = [LineString(list(xy)) for xy in zip(geometry1,geometry2)]
+geometry1 = geometry2 = None
 FinDat79gpd.geometry = geometry
 FinDat79gpd.to_crs(epsg=3310,inplace=True) #meters
 FinDat79gpd.loc[:,'distances_start_ft'] = FinDat79gpd.geometry.length *3.28084
 
-geometry2 =FinDat79gpd.nearest_end
-geometry = [LineString(list(xy)) for xy in zip(geometry1,geometry2)]
-FinDat79gpd.geometry = geometry
+geometry3= [Point(xy) for xy in zip(FinDat79.Long.astype(float), FinDat79.Lat.astype(float))]
+geometry4 =FinDat79gpd.nearest_end
+geometry5 = [LineString(list(xy)) for xy in zip(geometry3,geometry4)]
+geometry3 = geometry4 = None
+tempCols = list(FinDat79gpd.columns); tempCols.remove('geometry')
+FinDat79gpd = FinDat79gpd[tempCols]
+FinDat79gpd=gpd.GeoDataFrame(FinDat79gpd, geometry=geometry5,crs={'init':'epsg:4326'})
 FinDat79gpd.to_crs(epsg=3310,inplace=True) #meters
 FinDat79gpd.loc[:,'distances_end_ft'] = FinDat79gpd.geometry.length *3.28084
 
 checkDat =FinDat79gpd.iloc[0:200,:]
-breakpoint()
+# breakpoint()
 #AxB: Something is wrong in above distances. Will check tomorrow.
 #****************************************************************************************************************
 
@@ -359,61 +365,42 @@ breakpoint()
 
 
 # TODO: Delete most of the stuff below:
+MinDat = FinDat79gpd.groupby(['filename','IndexTripStartInCleanData'])['distances_start_ft','distances_end_ft'].idxmin().reset_index()
+MinDat.rename(columns = {'distances_start_ft':'LowerBoundLoc','distances_end_ft':"UpperBoundLoc"},inplace=True)
+MinDat.loc[:,'LowerBound'] = FinDat79gpd.loc[MinDat.loc[:,'LowerBoundLoc'],'IndexLoc'].values
+MinDat.loc[:,'UpperBound'] = FinDat79gpd.loc[MinDat.loc[:,'UpperBoundLoc'],'IndexLoc'].values
+MinDat.drop(columns=['LowerBoundLoc','UpperBoundLoc'],inplace=True)
+MinDat.reset_index(inplace=True)
+CheckDat = None
+FinDat79gpd = FinDat79gpd.merge(MinDat,on=['filename','IndexTripStartInCleanData'],how='left')
+CheckDat = FinDat79gpd.iloc[0:5,:]
+FinDat79gpd1 = FinDat79gpd.query('IndexLoc>=LowerBound & IndexLoc<=UpperBound')
+FinDat79gpd1.rename(columns= {'distances_start_ft':'Dist_from_GTFS1stStop',
+                              'distances_end_ft':'Dist_from_GTFSlastStop'},inplace=True)
+FinDat79gpd1 = FinDat79gpd1[['filename','IndexTripStartInCleanData','Lat','Long','Heading','OdomtFt','SecPastSt'
+                       ,'Dist_from_GTFS1stStop','Dist_from_GTFSlastStop']]
 
-#     #****************************************************************************************************************
-#     for idx, row in FirstRawNavRow.iterrows():
-#         RawNavLat1,RawNavLong1 = row[['Lat','Long']]
-#         GTFS_1stStop.loc[:,'Dist_from_1st_RawNav_Pt'] = GTFS_1stStop.apply(lambda row:wr.GetDistanceLatLong_ft(row['first_sLat'],row['first_sLon'],RawNavLat1,RawNavLong1) ,axis=1)
-#         MaskClosestStop = GTFS_1stStop.Dist_from_1st_RawNav_Pt== min(GTFS_1stStop.Dist_from_1st_RawNav_Pt )
-#         TempLat = GTFS_1stStop[MaskClosestStop][['first_sLat','first_sLon']].values[0][0]
-#         TempLong = GTFS_1stStop[MaskClosestStop][['first_sLat','first_sLon']].values[0][1]
-#         TempDa2 = pd.DataFrame({'IndexTripTags':[row['IndexTripTags']],'first_sLat':[TempLat],'first_sLon':[TempLong]})    
-#         FirstStopLatLong_RawNav =pd.concat([FirstStopLatLong_RawNav,TempDa2])
-         
-#     for idx, row in LastRawNavRow.iterrows():
-#         RawNavLat1,RawNavLong1 = row[['Lat','Long']]
-#         GTFS_lastStop.loc[:,'Dist_from_last_RawNav_Pt'] = GTFS_lastStop.apply(lambda row:wr.GetDistanceLatLong_ft(row['last_sLat'],row['last_sLon'],RawNavLat1,RawNavLong1) ,axis=1)
-#         MaskClosestStop = GTFS_lastStop.Dist_from_last_RawNav_Pt== min(GTFS_lastStop.Dist_from_last_RawNav_Pt )
-#         TempLat = GTFS_lastStop[MaskClosestStop][['last_sLat','last_sLon']].values[0][0]
-#         TempLong = GTFS_lastStop[MaskClosestStop][['last_sLat','last_sLon']].values[0][1]
-#         TempDa2 = pd.DataFrame({'IndexTripTags':[row['IndexTripTags']],'last_sLat':[TempLat],'last_sLon':[TempLong]})    
-#         LastStopLatLong_RawNav =pd.concat([LastStopLatLong_RawNav,TempDa2])
-    
-#     TestData2 = TestData2.merge(FirstStopLatLong_RawNav,on='IndexTripTags',how='left')
-#     TestData2.loc[:,'Dist_from_GTFS1stStop'] = TestData2.apply(lambda row:wr.GetDistanceLatLong_ft(row['first_sLat'],row['first_sLon'],row['Lat'],row['Long']) ,axis=1)
-#     TestData2 = TestData2.merge(LastStopLatLong_RawNav,on='IndexTripTags',how='left')
-#     TestData2.loc[:,'Dist_from_GTFSlastStop'] = TestData2.apply(lambda row:wr.GetDistanceLatLong_ft(row['last_sLat'],row['last_sLon'],row['Lat'],row['Long']) ,axis=1)
-#     MinDat = TestData2.groupby(['IndexTripTags'])['Dist_from_GTFS1stStop','Dist_from_GTFSlastStop'].idxmin().reset_index()
-#     MinDat.rename(columns = {'Dist_from_GTFS1stStop':'LowerBound','Dist_from_GTFSlastStop':"UpperBound"},inplace=True)
-#     MinDat.loc[:,'LowerBound'] = TestData2.loc[MinDat.loc[:,'LowerBound'],'IndexLoc'].values
-#     MinDat.loc[:,'UpperBound'] = TestData2.loc[MinDat.loc[:,'UpperBound'],'IndexLoc'].values
+Map1 = lambda x: max(x)-min(x)
+SumDat1 =FinDat79gpd1.groupby(['filename','IndexTripStartInCleanData']).agg({'OdomtFt':['min','max',Map1],
+                                                 'SecPastSt':['min','max',Map1],
+                                                 'Lat':['first','last'],
+                                                 'Long':['first','last'],
+                                                 'Dist_from_GTFS1stStop':['first','last'],
+                                                 'Dist_from_GTFSlastStop':['last']})
+SumDat1.columns = ['OdomtFt_start_GTFS','OdomtFt_end_GTFS','Trip_Dist_Mi_GTFS',
+                   'SecPastSt_start_GTFS','SecPastSt_end_GTFS','Trip_Dur_Sec_GTFS',
+                   'Lat_start_GTFS','Lat_end_GTFS','Long_start_GTFS','Long_end_GTFS',
+                   'Dist_from_GTFS1stStop_start_ft','Dist_from_GTFS1stStop_end_mi',
+                   'Dist_from_GTFSlastStop_end_ft']
+SumDat1.loc[:,['Trip_Dist_Mi_GTFS','Dist_from_GTFS1stStop_end_mi']] =SumDat1.loc[:,['Trip_Dist_Mi_GTFS','Dist_from_GTFS1stStop_end_mi']]/5280
+SumDat1.loc[:,'Trip_Speed_mph_GTFS'] =round(3600* SumDat1.Trip_Dist_Mi_GTFS/SumDat1.Trip_Dur_Sec_GTFS,2)
+SumDat1 = SumDat1.merge(SumData79,on=['filename','IndexTripStartInCleanData'],how='left')
+#Output Summary Files
+now = datetime.now()
+d4 = now.strftime("%b-%d-%Y %H")
 
-#     TestData2 = TestData2.merge(MinDat,on='IndexTripTags',how='left')
-#     MaskGTFS_Trimming = (TestData2.IndexLoc>=TestData2.LowerBound) & (TestData2.IndexLoc<=TestData2.UpperBound)
-#     TestData2 = TestData2[MaskGTFS_Trimming]
-#     TestData2 = TestData2[['Lat','Long','Heading','OdomtFt','SecPastSt',
-#                            'IndexTripTags','Tag','Dist_from_GTFS1stStop','Dist_from_GTFSlastStop']]
-    
-#     Map1 = lambda x: max(x)-min(x)
-#     SumDat1 =TestData2.groupby('IndexTripTags').agg({'OdomtFt':['min','max',Map1],
-#                                                      'SecPastSt':['min','max',Map1],
-#                                                      'Lat':['first','last'],
-#                                                      'Long':['first','last'],
-#                                                      'Dist_from_GTFS1stStop':['first','last'],
-#                                                      'Dist_from_GTFSlastStop':['last']})
-#     SumDat1.columns = ['OdomtFt_start_GTFS','OdomtFt_end_GTFS','Trip_Dist_Mi_GTFS',
-#                        'SecPastSt_start_GTFS','SecPastSt_end_GTFS','Trip_Dur_Sec_GTFS',
-#                        'Lat_start_GTFS','Lat_end_GTFS','Long_start_GTFS','Long_end_GTFS',
-#                        'Dist_from_GTFS1stStop_start_ft','Dist_from_GTFS1stStop_end_mi',
-#                        'Dist_from_GTFSlastStop_end_ft']
-#     SumDat1.loc[:,['Trip_Dist_Mi_GTFS','Dist_from_GTFS1stStop_end_mi']] =SumDat1.loc[:,['Trip_Dist_Mi_GTFS','Dist_from_GTFS1stStop_end_mi']]/5280
-#     SumDat1.loc[:,'Trip_Speed_mph_GTFS'] =round(3600* SumDat1.Trip_Dist_Mi_GTFS/SumDat1.Trip_Dur_Sec_GTFS,2)
-#     SumDat1 = SumDat1.merge(TripSumData,on='IndexTripTags',how='left')
-#     SumDat1.loc[:,'FileNm'] = key
-#     ProcessedDataDict[rte_id][key] =  SumDat1
-    
-# FinSumDat = pd.concat(ProcessedDataDict[rte_id].values())
-# FinSumDat =FinSumDat.merge(TripInventory, on =['FileNm','TripStartTime'],how='left')
-# FinSumDat.to_excel(os.path.join(path_processed_data,'Route79_TrimSum.xlsx'))
+OutFiSum = os.path.join(path_processed_data,f'TripSummaries_{d4}.xlsx')
+SumDat1.to_excel(OutFiSum)
 
-    
+
+
