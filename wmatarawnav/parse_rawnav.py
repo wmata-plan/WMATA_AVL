@@ -204,12 +204,7 @@ def GetTripSummary(data, taglineData):
     gdf2.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
 
     #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
-    distances = gdf.geometry.distance(gdf2) * 0.000621371 # meters to miles
-    temp.loc[:,'CrowFlyDistLatLongMi'] = distances
-    check2 = temp[["LatStart","LongStart","LatEnd","LongEnd"]].apply(lambda x: GetDistanceLatLong_mi(x[0],x[1],x[2],x[3]),axis=1)
-    #TODO: Remove check2 and the following assertion
-    #later, it will slow down processing
-    assert(((check2-temp.loc[:,'CrowFlyDistLatLongMi'])<0.01).all())
+    temp.loc[:,'CrowFlyDistLatLongMi'] = gdf.geometry.distance(gdf2) * 0.000621371 # meters to miles
     SummaryDat = taglineData.merge(temp,on= ['IndexTripStart','IndexTripEnd'],how ='left')
     SummaryDat.tag_date = SummaryDat.tag_date.astype(str)
     SummaryDat.loc[:,"StartDateTime"] = pd.to_datetime(SummaryDat['tag_date']+" "+SummaryDat['TripStartTime'])
