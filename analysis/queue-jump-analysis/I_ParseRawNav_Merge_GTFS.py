@@ -15,7 +15,10 @@ ipython = get_ipython()
 import pandas as pd, os, numpy as np, pyproj, sys, zipfile, glob, logging
 from geopy.distance import geodesic
 from collections import defaultdict
-
+if not sys.warnoptions:
+    import warnings
+    warnings.simplefilter("ignore") #Too many Pandas warnings
+DEBUG = False
 if os.getlogin() == "WylieTimmerman":
     # Working Paths
     path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL"
@@ -40,7 +43,7 @@ elif os.getlogin()=="abibeka":
     # Source Data
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
     GTFS_Dir = os.path.join(path_source_data, "google_transit")   
-
+    DEBUG = True
     # Processed Data
     path_processed_data = os.path.join(path_source_data,"ProcessedData")
 else:
@@ -53,7 +56,7 @@ import wmatarawnav as wr
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
-restrict_n = 10000
+restrict_n = 500
 # restrict_n = None
 
 AnalysisRoutes = ['79','X2','X9','U6','H4']
@@ -126,12 +129,8 @@ for index, row in rawnav_inv_filt_first.iterrows():
     
 # 4 Clean RawNav Data
 ########################################################################################
-#DEBUG
-RouteRawTagDict.keys()
-key = 'rawnav02683191011.txt'
-rawnavdata =data = RouteRawTagDict[key]['RawData']
-taglineData = RouteRawTagDict[key]['tagLineInfo']
-#AxB: Stopped here. Figured out the logic though. Will implement tomorrow (Mon: 5/3/2020)
+
+
 CleanDataDict = {}
 for key, datadict in RouteRawTagDict.items():
     # WT: Is there a way we can restructure the clean_rawnav_data to not 
@@ -144,15 +143,69 @@ for key, datadict in RouteRawTagDict.items():
     # I think the way I'm trying to pass tag isn't quite working there    
     CleanDataDict[key] = wr.clean_rawnav_data(datadict)
 
+#DEBUG
+if DEBUG:
+    RouteRawTagDict.keys()
+    key = 'rawnav02616191007.txt'
+    rawnavdata =data = RouteRawTagDict[key]['RawData']
+    taglineData = RouteRawTagDict[key]['tagLineInfo']
 
-# WT: stopped here working on code
-breakpoint() 
-ZipDirList=ZippedFilesDirs
+#AxB: 
+# TODO: Need to write processed data to database, HDF5, Feather, or parquet format.
+# I am not familiar with database set up. Wylie, can we talk a bit about storing the processed data? 
+CleanDataDict.values()['SummaryData']
 
+FinSummaryDat = pd.DataFrame()
+for keys,datadict in CleanDataDict.items():
+    FinSummaryDat = pd.concat([FinSummaryDat, datadict['SummaryData']])
+
+if DEBUG:
+    FinSummaryDat1 = FinSummaryDat.copy()
+    FinSummaryDat1.loc[:,"FileNm"] = FinSummaryDat1.file_id.astype('int64')
+    InFile = os.path.join(path_processed_data,'TripSummaries_Veh0_2999 V1.xlsx')
+    x1 = pd.ExcelFile(InFile); x1.sheet_names; CheckData = x1.parse('SummaryData')
+    CheckData.dtypes; FinSummaryDat.dtypes
+    CheckData.loc[:,"FileNm"] = CheckData.FileNm.astype('int64')
+    CheckData.loc[:,'StartDateTime'] = pd.to_datetime(CheckData['Date']+" "+CheckData['TripStartTime'])
+
+    CheckData1 = pd.merge(FinSummaryDat1, CheckData, on =["FileNm",'StartDateTime'],how="left")
+    CheckData1.columns
+    CheckData2 =CheckData1[['file_id','route_pattern','tag_busid','route','Tag','BusID','StartDateTime',
+                'EndDateTime','Date','TripStartTime','TripEndTime','CrowFlyDistLatLongMi',
+                'Dist_from_LatLong','SpeedOdomMPH','TripSpeed_RawData','SpeedTripTagMPH','TripSpeed_Tags',
+                'DistOdomMi','DistanceMi','TripDurFromSec','TripDurationFromRawData',
+                'TripDurationFromTags_x','TripDurationFromTags_y']]
+    assert((CheckData2.route_pattern.str.strip() ==CheckData2.Tag.str.strip()).all())
+    CheckData3 = CheckData2[~(CheckData2.TripDurationFromTags_x.isna())]
+    assert(((CheckData3.TripDurationFromTags_x.dt.total_seconds()-\
+             CheckData3.TripDurationFromTags_y)<0.001).all())
+    CheckData3 = CheckData2[~(CheckData2.SpeedOdomMPH.isna())]
+    assert(((CheckData3.SpeedOdomMPH-CheckData3.TripSpeed_RawData)<0.1).all())
+    CheckData3 = CheckData2[~(CheckData2.TripDurFromSec.isna())]
+    assert((CheckData3.TripDurFromSec-CheckData3.TripDurationFromRawData<0.0000001).all())
+    assert((CheckData2.DistanceMi-CheckData2.DistOdomMi<0.0000001).all())
+    assert((CheckData2.CrowFlyDistLatLongMi-CheckData2.Dist_from_LatLong<0.01).all())
+
+
+
+CleanDataDict.keys()
+CheckDat = CleanDataDict['rawnav00008191007.txt']['SummaryData']
+CheckDat.columns
+geometry1 = [Point(xy) for xy in zip(CheckDat.LongStart, CheckDat.LatStart)]
+geometry2 = [Point(xy) for xy in zip(CheckDat.LongEnd, CheckDat.LatEnd)]
+
+geometry = [LineString(list(xy)) for xy in zip(geometry1,geometry2)]
+gdf2=gpd.GeoDataFrame(CheckDat, geometry=geometry,crs={'init':'epsg:4326'})
+gdf2.to_crs(epsg=3310,inplace=True)
+
+distances = gdf2.geometry.length *0.000621371
+with pd.option_context('display.max_rows', None, 'display.max_columns', 40):  # more options can be specified also
+    print(CheckDat)
+CheckDat['']
 #5 Analyze Route 79
 ########################################################################################
-
-
+CheckDat[]
+rawnav_inventory1
 
 
 
