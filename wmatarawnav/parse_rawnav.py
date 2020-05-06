@@ -314,6 +314,12 @@ def FindAllTags(ZipFolderPath, quiet = True):
         #AxB: Any suggestions? I was getting a BadZipFile when I tried processing 10,000 files
         TagLineElements = []
         TagLineElements.append(',,,,,,')
+    except KeyError as keyerr:
+        print("*"*100)
+        print(f"Text file name doesn't match parent zip folder for': {ZipFolderPath}. Error: {keyerr}")
+        print("*"*100)
+        TagLineElements = []
+        TagLineElements.append(',,,,,,')
     return(TagLineElements)
         
 def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
