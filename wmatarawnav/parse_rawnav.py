@@ -90,10 +90,14 @@ def find_rawnav_routes(FileUniverse, nmax = None, quiet = True):
     FileUniverseDF[['line_num','route_pattern','tag_busid','tag_date','tag_time','Unk1','CanBeMiFt']] = FileUniverseDF['taglist'].str.split(',', expand = True)
     FileUniverseDF[['route','pattern']] = FileUniverseDF['route_pattern'].str.extract('^(?:\s*)(?:(?!PO))(?:(?!PI))(?:(?!DH))(\S+)(\d{2})$')
     # Convert Column Types and Create new ones
-    # TODO: add more as necessary for datetime, hour, time period, etc.
-    # Changing line_nums type created problems, so leaving as is.
-    # FileUniverseDF['line_num'] = pd.to_numeric(FileUniverseDF['line_num'])
+    # TODO: consider time period col; hour is probably fine though
+    # Note that we leave line_num as text, as integer values don't support
+    # NAs in Pandas
     FileUniverseDF['tag_busid'] = pd.to_numeric(FileUniverseDF['tag_busid'])
+    FileUniverseDF['tag_datetime'] = FileUniverseDF['tag_date'] + ' ' + FileUniverseDF['tag_time']
+    FileUniverseDF['tag_datetime'] = pd.to_datetime(FileUniverseDF['tag_datetime'], infer_datetime_format=True, errors = 'coerce')
+    FileUniverseDF['tag_starthour'] = FileUniverseDF['tag_time'].str.extract('^(?:\s*)(\d{2}):')
+    FileUniverseDF['tag_starthour'] = pd.to_numeric(FileUniverseDF['tag_starthour'])
     FileUniverseDF['tag_date'] = pd.to_datetime(FileUniverseDF['tag_date'], infer_datetime_format=True)
     FileUniverseDF['wday'] = FileUniverseDF['tag_date'].dt.day_name()
     return(FileUniverseDF)
