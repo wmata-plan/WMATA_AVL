@@ -62,10 +62,10 @@ import wmatarawnav as wr
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
+# restrict_n = 500
 restrict_n = 500
-# restrict_n = None
 
-AnalysisRoutes = ['79','X2','X9','U6','H4']
+AnalysisRoutes = ['79']
 ZipParentFolderName = "October 2019 Rawnav"
 # Assumes directory structure:
 # ZipParentFolderName (e.g, October 2019 Rawnav)
@@ -80,31 +80,39 @@ ZipParentFolderName = "October 2019 Rawnav"
 ZippedFilesDirParent = os.path.join(path_source_data, ZipParentFolderName)
 ZippedFilesDirs = glob.glob(os.path.join(path_source_data,ZipParentFolderName,'Vehicles *.zip'))
 UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,ZippedFilesDirParent,'Vehicles*[0-9]'))
-    
+
 FileUniverse = wr.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
 
 # Return a dataframe of routes and details
-rawnav_inventory = wr.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = True)
-# Filter to our set of analysis routes and any other conditions
-rawnav_inventory_filtered = rawnav_inventory.loc[(rawnav_inventory['route'].isin(AnalysisRoutes))]
+rawnav_inventory = wr.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = False)
+
+# Filter to any file including at least one of our analysis routes 
+# Note that other non-analysis routes will be included here, but information about these routes
+# is currently necessary to split the rawnav file correctly. 
+rawnav_inventory_filtered = rawnav_inventory[rawnav_inventory.groupby('filename')['route'].transform(lambda x: x.isin(AnalysisRoutes).any())]
+
+# Now that NAs have been removed from files without data, we can convert this to an integer type
+rawnav_inventory_filtered['line_num'] = rawnav_inventory_filtered.line_num.astype('int')
+
+# Having Retrieve tag information at file level. Need tags from other routes to define a trip. 
 # Will subset data by route later
-rawnav_inventory1 = rawnav_inventory[rawnav_inventory.filename.isin(rawnav_inventory_filtered.filename.unique())]
 if (len(rawnav_inventory_filtered) ==0):
     raise Exception ("No Analysis Routes found in FileUniverse")
 
-rawnav_inventory1.loc[:,"line_num"] = rawnav_inventory1.line_num.astype(int)
-rawnav_inv_filt_first = rawnav_inventory1.groupby(['fullpath','filename']).line_num.min().reset_index()
+# Return filtered list of files to pass to read-in functions, starting
+# with first rows
+rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath','filename']).line_num.min().reset_index()
 
 # 3 Load Raw RawNav Data
 ########################################################################################
 # Data is loaded into a dictionary named by the ID
 RouteRawTagDict = {}
 for index, row in rawnav_inv_filt_first.iterrows():
-    tagInfo_LineNo = rawnav_inventory1[rawnav_inventory1['filename'] == row['filename']]
-    Refrence = min(tagInfo_LineNo.line_num.astype(int))
-    tagInfo_LineNo.loc[:,"NewLineNo"] = tagInfo_LineNo.line_num.astype(int) - Refrence-1
+    tagInfo_LineNo = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == row['filename']]
+    Refrence = min(tagInfo_LineNo.line_num)
+    tagInfo_LineNo.loc[:,"NewLineNo"] = tagInfo_LineNo.line_num - Refrence-1
     # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
-    temp = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))   
+    temp = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = row['line_num'])
     RouteRawTagDict[row['filename']] = {'RawData':temp,'tagLineInfo':tagInfo_LineNo}
     
 # 4 Clean RawNav Data
@@ -174,7 +182,7 @@ FinSummaryDat.to_csv(OutFiSum)
 ########################################################################################
 rte_id = "79"
 FinDat79 = pd.DataFrame()
-SearchDF = rawnav_inventory1[['route','filename']].set_index('route')
+SearchDF = rawnav_inventory_filtered[['route','filename']].set_index('route')
 Route79Files = (SearchDF.loc[rte_id,:].values).flatten()
 for file in Route79Files:
     tempDf =CleanDataDict[file]['rawnavdata']
