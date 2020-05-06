@@ -82,37 +82,16 @@ ZippedFilesDirs = glob.glob(os.path.join(path_source_data,ZipParentFolderName,'V
 UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,ZippedFilesDirParent,'Vehicles*[0-9]'))
     
 FileUniverse = wr.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
-#Directly get the zipped files path
-# WT: i'm a little confused by this; we're calling this function twice with a 
-#    different argument and reassigning file universe?
-#AxB: The function GetZippedFilesFromZipDir() extracts the zipped folder and gets the list of files 
-# from the unzipped folder. It does this if the Unzipped folder does not exist. The following function
-# call is just to show that the user can also use the Unzipped folder. 
-#FileUniverse = wr.GetZippedFilesFromZipDir(UnZippedFilesDir,ZippedFilesDirParent) 
 
 # Return a dataframe of routes and details
 rawnav_inventory = wr.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = True)
 # Filter to our set of analysis routes and any other conditions
 rawnav_inventory_filtered = rawnav_inventory.loc[(rawnav_inventory['route'].isin(AnalysisRoutes))]
-# AxB: Still need tag information at file level. Need tags from other routes to define a trip. 
 # Will subset data by route later
 rawnav_inventory1 = rawnav_inventory[rawnav_inventory.filename.isin(rawnav_inventory_filtered.filename.unique())]
 if (len(rawnav_inventory_filtered) ==0):
     raise Exception ("No Analysis Routes found in FileUniverse")
 
-# Return filtered list of files to pass to read-in functions
-# WT: Python is weird, any advice on converting column back to character list?
-# AxB: Do mean like the output of FindAllTags()?. Try something like
-#YourDataFrame.groupby(["CommonKey"])['Column"].apply(list)
-Example = rawnav_inventory_filtered.groupby(['fullpath','filename'])['taglist'].apply(list)
-# Naming is hard
-
-# rawnav_inv_filt_first = rawnav_inventory_filtered.groupby('fullpath').first().reset_index()
-# AxB: One file can have different routes. Just the first line for not work. We need to groupby fullpath and route
-# We not seening the issue with routes '79','X2','X9' in the 1st 500 files, but, if you look at route 'U6'and 'H4',
-# you will see this issue.
-# I am loosing the route information here to read files with multiple routes togather. Will use the rawnav_inventory_filtered
-# later to get back the mapping. 
 rawnav_inventory1.loc[:,"line_num"] = rawnav_inventory1.line_num.astype(int)
 rawnav_inv_filt_first = rawnav_inventory1.groupby(['fullpath','filename']).line_num.min().reset_index()
 
@@ -121,14 +100,9 @@ rawnav_inv_filt_first = rawnav_inventory1.groupby(['fullpath','filename']).line_
 # Data is loaded into a dictionary named by the ID
 RouteRawTagDict = {}
 for index, row in rawnav_inv_filt_first.iterrows():
-    #Since we already parsed the entire file for tag information. We can reuse the tag infomation here.
-    #Cannot use rawnav_inventory_filtered. We need all the tag information for defining a trip.
-    #Eg. Say we are analyzing route 79, we see a tag that says route 79 starts. The end tag can 
-    # Deadheading, PI, S9 etc. 
     tagInfo_LineNo = rawnav_inventory1[rawnav_inventory1['filename'] == row['filename']]
     Refrence = min(tagInfo_LineNo.line_num.astype(int))
     tagInfo_LineNo.loc[:,"NewLineNo"] = tagInfo_LineNo.line_num.astype(int) - Refrence-1
-    # Two routes can have the same file
     # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
     temp = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = pd.to_numeric(row['line_num']))   
     RouteRawTagDict[row['filename']] = {'RawData':temp,'tagLineInfo':tagInfo_LineNo}
@@ -139,14 +113,6 @@ for index, row in rawnav_inv_filt_first.iterrows():
 
 CleanDataDict = {}
 for key, datadict in RouteRawTagDict.items():
-    # WT: Is there a way we can restructure the clean_rawnav_data to not 
-    # require FirstTag to be passed like this? Can we used nested dataframes
-    # in a master dataframe with list comprehensions 
-    # instead of trying to subset a bunch of different objects?
-    # AxB: I changed the above dictionary to include tag information. Wouldn't nested dataframe have 
-    # essentially the same information?     
-    # WT: Apoorb, I think I'll need your help on GetTagInfo
-    # I think the way I'm trying to pass tag isn't quite working there    
     CleanDataDict[key] = wr.clean_rawnav_data(datadict)
 
 #DEBUG
@@ -156,9 +122,7 @@ if DEBUG:
     rawnavdata =data = RouteRawTagDict[key]['RawData']
     taglineData = RouteRawTagDict[key]['tagLineInfo']
 
-#AxB: 
 # TODO: Need to write processed data to database, HDF5, Feather, or parquet format.
-# I am not familiar with database set up. Wylie, can we talk a bit about storing the processed data? 
 
 FinSummaryDat = pd.DataFrame()
 for keys,datadict in CleanDataDict.items():
