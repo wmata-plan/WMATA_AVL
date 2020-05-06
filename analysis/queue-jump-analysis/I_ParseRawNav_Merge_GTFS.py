@@ -65,7 +65,7 @@ import wmatarawnav as wr
 # restrict_n = 500
 restrict_n = 500
 
-AnalysisRoutes = ['79']
+AnalysisRoutes = ['79','X2','X9','U6','H4']
 ZipParentFolderName = "October 2019 Rawnav"
 # Assumes directory structure:
 # ZipParentFolderName (e.g, October 2019 Rawnav)
