@@ -20,7 +20,8 @@ from shapely.geometry import Point
 def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent):
     '''
     Get the list of files to read from Zipped folder. Also Unzip the parent folder.
-    Will Unzip only once. 
+    Will Unzip only once. Can also pass a list of paths to unzipped folders
+    to achieve the same result.
     Parameters
     ----------
     ZipDirList : List or str, 
