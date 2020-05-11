@@ -125,9 +125,20 @@ def load_rawnav_data(ZipFolderPath, skiprows):
 
 
 def clean_rawnav_data(DataDict): 
-    # TODO: write documentation
+    '''
+    Parameters
+    ----------
+    DataDict : dict
+        dict of raw data and the data on tag lines.
+
+    Returns
+    -------
+    Cleaned data without any tags.
+
+    '''    
     rawnavdata = DataDict['RawData']
     taglineData = DataDict['tagLineInfo']
+    # Check the location of taglines from taglineData data match the locations in rawnavdata
     try:
         Temp = taglineData.NewLineNo.values.flatten()
         TagIndices= np.delete(Temp, np.where(Temp==-1))
@@ -147,6 +158,7 @@ def clean_rawnav_data(DataDict):
     #Remove APC and CAL labels and keep APC locations. Can merge_asof later.
     rawnavdata, APCTagLoc = RemoveAPC_CAL_Tags(rawnavdata)
     CheckDat = rawnavdata[~rawnavdata.apply(CheckValidDataEntry,axis=1)]
+    #Remove the other remaining tags. 
     Pat = re.compile('^\s*/\s*((\d{2}:\d{2}:\d{2})\s*(?:Buswares.*SHUTDOWN|bwrawnav)|collection stopped.*)',re.S|re.I) 
     assert(sum(~(CheckDat[0].str.match(Pat)))==0) ,"Did not handle some additional lines in CheckDat"
     rawnavdata = rawnavdata[rawnavdata.apply(CheckValidDataEntry,axis=1)]
@@ -156,20 +168,57 @@ def clean_rawnav_data(DataDict):
     rawnavdata.loc[:,'RowBeforeAPC'] = False
     rawnavdata.loc[APClocDat.IndexLoc,'RowBeforeAPC'] = True
     taglineData.rename(columns={'NewLineNo':"IndexTripStart"},inplace=True)
+    #Get trip summary
     SummaryData = GetTripSummary(data= rawnavdata,taglineData = taglineData)
     ColumnNmMap = {0:'Lat',1:'Long',2:'Heading',3:'DoorState',4:'VehState',5:'OdomtFt',6:'SecPastSt',7:'SatCnt',
                    8:'StopWindow',9:'Blank',10:'LatRaw',11:'LongRaw'}
     rawnavdata.rename(columns =ColumnNmMap,inplace=True )
+    #Add composite key to the data
     rawnavdata = AddTripDividers(rawnavdata,SummaryData )
     returnDict = {'rawnavdata':rawnavdata,'SummaryData':SummaryData}
     return(returnDict)
      
-# def summarize_rawnav_trip(): 
-# def import_GTFS_data(): 
+def subset_rawnav_trip(CleanDataDict_, rawnav_inventory_filtered_, AnalysisRoutes_):
+    '''
+    Subset data for analysis routes
+    '''
+    FinDat = pd.DataFrame()
+    SearchDF = rawnav_inventory_filtered_[['route','filename']].set_index('route')
+    RouteFiles = (SearchDF.loc[AnalysisRoutes_,:].values).flatten()
+    for file in RouteFiles:
+        tempDf =CleanDataDict_[file]['rawnavdata']
+        tempDf.loc[:,"filename"] = file
+        FinDat = pd.concat([FinDat,tempDf])
+    FinDat.reset_index(drop=True,inplace=True)
+    FinDat = FinDat.query("route in @AnalysisRoutes_")
+    return(FinDat)
 
+def subset_summary_data(FinSummaryDat_, AnalysisRoutes_):
+    SumData = FinSummaryDat_.query("route in @AnalysisRoutes_")
+    SumData.reset_index(drop=True,inplace=True)
+    tempDf = SumData[['filename','IndexTripStartInCleanData','LatStart', 'LongStart','route']]
+    geometryStart = [Point(xy) for xy in zip(tempDf.LongStart, tempDf.LatStart)]
+    SumData_StartGpd=gpd.GeoDataFrame(tempDf, geometry=geometryStart,crs={'init':'epsg:4326'})
+    tempDf=None
+    tempDf = SumData[['filename','IndexTripStartInCleanData','LatEnd', 'LongEnd','route']]
+    geometryEnd = [Point(xy) for xy in zip(tempDf.LongEnd, tempDf.LatEnd)]
+    SumData_EndGpd=gpd.GeoDataFrame(tempDf, geometry=geometryEnd,crs={'init':'epsg:4326'})
+    return(SumData,SumData_StartGpd,SumData_EndGpd)
 #Nested Functions
 #################################################################################################################
 def AddTripDividers(data, SummaryData):
+    '''
+    Parameters
+    ----------
+    data : pd.DataFrame
+        rawnav data without tags.
+    SummaryData : pd.DataFrame
+        Tagline data.
+    Returns
+    -------
+    rawnav data with composite keys.
+
+    '''
     SummaryData.columns
     TagsTemp = SummaryData[['route_pattern','route', 'pattern','IndexTripStartInCleanData','IndexTripEndInCleanData']]
     q1  = '''SELECT data.IndexLoc,data.Lat,data.Long,data.Heading,data.DoorState,data.VehState,data.OdomtFt,data.SecPastSt,
@@ -181,14 +230,29 @@ def AddTripDividers(data, SummaryData):
     return(data)    
     
 def GetTripSummary(data, taglineData):
+    '''
+    
+    Parameters
+    ----------
+    data : pd.DataFrame
+        rawnav data without tags.
+    taglineData : pd.DataFrame
+        Tagline data.
+
+    Returns
+    -------
+    Summary data.
+    '''
     temp = taglineData[['IndexTripStart','IndexTripEnd']]
     temp = temp.astype('int32')
     rawDaCpy = data[['IndexLoc',0,1,5,6]].copy()
     rawDaCpy[['IndexLoc',5,6]]= rawDaCpy[['IndexLoc',5,6]].astype('int32')
     rawDaCpy.rename(columns={0:'Lat',1:'Long',5:'OdomtFt',6:'SecPastSt'},inplace=True)
+    #Get rows with trip start from rawDaCpy
     temp = pd.merge_asof(temp,rawDaCpy,left_on = "IndexTripStart",right_on ="IndexLoc" , direction='forward')
     temp.rename(columns = {'Lat':"LatStart",'Long':"LongStart",
                            'OdomtFt': "OdomFtStart",'SecPastSt':"SecStart","IndexLoc":"IndexTripStartInCleanData"},inplace=True)
+    #Get rows with trip end from rawDaCpy
     temp = pd.merge_asof(temp,rawDaCpy,left_on = "IndexTripEnd",right_on ="IndexLoc" , direction='backward')
     temp.rename(columns = {'Lat':"LatEnd",'Long':"LongEnd",'OdomtFt': "OdomFtEnd",'SecPastSt':"SecEnd",
                            "IndexLoc":"IndexTripEndInCleanData"},inplace=True)
@@ -198,18 +262,9 @@ def GetTripSummary(data, taglineData):
               DistOdomMi = (OdomFtEnd - OdomFtStart)/ 5280
               SpeedOdomMPH = (DistOdomMi/ TripDurFromSec) * 3600
               """,inplace=True)
-      
     temp[["LatStart","LongStart","LatEnd","LongEnd"]] = temp[["LatStart","LongStart","LatEnd","LongEnd"]].astype(float)
-
-    geometryStart = [Point(xy) for xy in zip(temp.LongStart, temp.LatStart)]
-    gdf=gpd.GeoDataFrame(geometry=geometryStart,crs={'init':'epsg:4326'})
-    gdf.to_crs(epsg=3310,inplace=True)
-    geometryEnd = [Point(xy) for xy in zip(temp.LongEnd, temp.LatEnd)]
-    gdf2=gpd.GeoDataFrame(geometry=geometryEnd,crs={'init':'epsg:4326'})
-    gdf2.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
-
-    #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
-    temp.loc[:,'CrowFlyDistLatLongMi'] = gdf.geometry.distance(gdf2) * 0.000621371 # meters to miles
+    #Get distance b/w trip start and end lat-longs
+    temp.loc[:,'CrowFlyDistLatLongMi'] = GetDistanceLatLong_mi(temp,"LatStart","LongStart","LatEnd","LongEnd")
     SummaryDat = taglineData.merge(temp,on= ['IndexTripStart','IndexTripEnd'],how ='left')
     SummaryDat.tag_date = SummaryDat.tag_date.astype(str)
     SummaryDat.loc[:,"StartDateTime"] = pd.to_datetime(SummaryDat['tag_date']+" "+SummaryDat['TripStartTime'])
@@ -255,20 +310,26 @@ def AddEndRouteInfo(data, taglineData):
    
         
 #https://github.com/geopy/geopy
-# Make this function Generic ---later
-def GetDistanceforTripSummaryDat(row):
-    StartLat, StartLong, EndLat, EndLong = row['StartLat'], row['StartLong'], row['EndLat'], row['EndLong']
-    distance_miles = -999
-    distance_miles = geodesic((StartLat, StartLong), (EndLat, EndLong)).miles
-    return(distance_miles)
+# Make this function Generic
+def GetDistanceLatLong_mi(Data,Lat1,Long1,Lat2,Long2):
+    geometry1 = [Point(xy) for xy in zip(Data[Long1], Data[Lat1])]
+    gdf=gpd.GeoDataFrame(geometry=geometry1,crs={'init':'epsg:4326'})
+    gdf.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
+    geometry2 = [Point(xy) for xy in zip(Data[Long2], Data[Lat2])]
+    gdf2=gpd.GeoDataFrame(geometry=geometry2,crs={'init':'epsg:4326'})
+    gdf2.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
+    #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
+    DistanceMi = gdf.geometry.distance(gdf2) * 0.000621371 # meters to miles    
+    return(DistanceMi.values)
 
-def GetDistanceLatLong_ft(Lat1, Long1, Lat2, Long2):
-    distance_ft = geodesic((Lat1, Long1), (Lat2, Long2)).feet
-    return(distance_ft)
-
-def GetDistanceLatLong_mi(Lat1, Long1, Lat2, Long2):
-    distance_mi = geodesic((Lat1, Long1), (Lat2, Long2)).miles
-    return(distance_mi)
+def GetDistanceLatLong_ft_fromGeom(geometry1, geometry2):
+    gdf=gpd.GeoDataFrame(geometry=geometry1,crs={'init':'epsg:4326'})
+    gdf.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
+    gdf2=gpd.GeoDataFrame(geometry=geometry2,crs={'init':'epsg:4326'})
+    gdf2.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
+    #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
+    DistanceFt = gdf.geometry.distance(gdf2) * 3.28084 # meters to feet    
+    return(DistanceFt.values)
 
 def FindAllTags(ZipFolderPath, quiet = True):
     '''
