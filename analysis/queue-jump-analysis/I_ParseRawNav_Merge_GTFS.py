@@ -167,7 +167,7 @@ wr.PlotRawnavTrajWithGTFS(RawnavDat1, StopDat1,path_processed_data,SaveFile)
 for name, RawNavGrp in RawnavGrps:
     SaveFile= f"{name[0]}_Row{int(name[1])}_{name[2]}.html"
     StopDat1 = GroupsTemp.get_group(name)
-    wr.PlotRawnavTrajWithGTFS(RawNavGrp, StopDat1,path_processed_data,SaveFile)
+    wr.PlotRawnavTrajWithGTFS(RawnavDat1, StopDat1,path_processed_data,SaveFile)
       
 
 

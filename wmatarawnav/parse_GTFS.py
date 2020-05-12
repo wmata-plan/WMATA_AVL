@@ -306,8 +306,11 @@ def PlotRawnavTrajWithGTFS(RawnavTraj, GTFScloseStop,path_processed_data_,SaveFi
     folium.TileLayer('cartodbdark_matter').add_to(this_map) 
     fg = folium.FeatureGroup(name="Rawnav Trajectory")
     this_map.add_child(fg)
-    LineGr = folium.FeatureGroup(name="GTFS stop and Nearest Rawnav Point")
+    LineGr = folium.FeatureGroup(name="GTFS Stops and Nearest Rawnav Point")
     this_map.add_child(LineGr)
+    #StpGr = folium.FeatureGroup(name="GTFS Stops")
+    #this_map.add_child(StpGr)
+    #PlotMarkerClusters(this_map, GTFScloseStop,"stop_lat","stop_lon",StpGr)
     PlotMarkerClusters(this_map, RawnavTraj,"Lat","Long",fg)
     PlotLinesClusters(this_map, GTFScloseStop,LineGr)
     LatLongs = [[x,y] for x,y in zip(RawnavTraj.Lat,RawnavTraj.Long)]
@@ -330,10 +333,13 @@ def PlotMarkerClusters(this_map, Dat,Lat,Long, FeatureGrp):
 def PlotLinesClusters(this_map, Dat, FeatureGrp):
     popup_field_list = list(Dat.columns)     
     for i,row in Dat.iterrows():
+        TempGrp = plugins.FeatureGroupSubGroup(FeatureGrp,f"{row.stop_name}")
+        this_map.add_child(TempGrp)
         label = '<br>'.join([field + ': ' + str(row[field]) for field in popup_field_list])
         #https://deparkes.co.uk/2019/02/27/folium-lines-and-markers/
-        LinePoints = [(tuples[1],tuples[0]) for tuples in list(Dat.geometry[0].coords)]
-        folium.PolyLine(LinePoints, color="red", weight=4, opacity=1).add_to(FeatureGrp)
+        LinePoints = [(tuples[1],tuples[0]) for tuples in list(row.geometry.coords)]
+        folium.PolyLine(LinePoints, color="red", weight=4, opacity=1\
+        ,popup=folium.Popup(html = label,parse_html=False,max_width='150')).add_to(TempGrp)
     
     
     
