@@ -104,16 +104,36 @@ for index, row in rawnav_inv_filt_first.iterrows():
     
 # 4 Clean RawNav Data
 ########################################################################################
-CleanDataDict = {}
+#CleanDataDict = {}
+RawnavDataDict = {}
+SummaryDataDict = {}
+
 for key, datadict in RouteRawTagDict.items():
-    CleanDataDict[key] = wr.clean_rawnav_data(datadict)
+    #CleanDataDict[key] = wr.clean_rawnav_data(datadict)
+    Temp = wr.clean_rawnav_data(datadict, key)
+    RawnavDataDict[key] = Temp['rawnavdata']
+    SummaryDataDict[key] = Temp['SummaryData']
 RouteRawTagDict = None
-
 # TODO: Need to write processed data to database, HDF5, Feather, or parquet format.
-FinSummaryDat = pd.DataFrame()
-for keys,datadict in CleanDataDict.items():
-    FinSummaryDat = pd.concat([FinSummaryDat, datadict['SummaryData']])
+    
+# %%timeit -n 100
+# FinSummaryDat = pd.DataFrame()
+# for keys,data in SummaryDataDict.items():
+#     FinSummaryDat = pd.concat([FinSummaryDat, data])    
+# #Run Time: 57.1 ms ± 2.73 ms per loop (mean ± std. dev. of 7 runs, 100 loops each)
 
+# %%timeit -n 100
+# FinSummaryDat = pd.DataFrame()
+# for keys,data in SummaryDataDict.items():
+#     FinSummaryDat = FinSummaryDat.append(data)  
+# #Run Time: 56.6 ms ± 2.94 ms per loop (mean ± std. dev. of 7 runs, 100 loops each)    
+    
+#%%timeit -n 100
+FinSummaryDat = pd.DataFrame()
+FinSummaryDat = pd.concat(SummaryDataDict.values()) # 
+#Run Time: 14.7 ms ± 142 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+    
+    
 #Output Summary Files
 now = datetime.now()
 d4 = now.strftime("%b-%d-%Y %H")
@@ -122,7 +142,14 @@ FinSummaryDat.to_csv(OutFiSum)
 
 #5 Analyze Route 79---Subset RawNav Data. 
 ########################################################################################
-FinDat = wr.subset_rawnav_trip(CleanDataDict, rawnav_inventory_filtered, AnalysisRoutes)
+# %%timeit -n 1
+# FinDat1 = wr.subset_rawnav_trip(CleanDataDict, rawnav_inventory_filtered, AnalysisRoutes)
+#1min 8s ± 2.04 s per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+#%%timeit -n 5
+FinDat = wr.subset_rawnav_trip1(RawnavDataDict, rawnav_inventory_filtered, AnalysisRoutes)
+#1.93 s ± 86.9 ms per loop (mean ± std. dev. of 7 runs, 5 loops each)
+
 SumDat, SumDatStart, SumDatEnd = wr.subset_summary_data(FinSummaryDat, AnalysisRoutes)
 
 #6 Read the GTFS Data
@@ -158,11 +185,13 @@ NearestRawnavOnGTFS = wr.mergeStopsGTFSrawnav(GtfsData_UniqueStops, FinDat)
 ########################################################################################
 GroupsTemp =  NearestRawnavOnGTFS.groupby(['filename','IndexTripStartInCleanData','route_id'])
 RawnavGrps = FinDat.groupby(['filename','IndexTripStartInCleanData','route'])
+Stop = False
 for name, RawNavGrp in RawnavGrps:
+    Stop = True
     SaveFile= f"{name[0]}_Row{int(name[1])}_{name[2]}.html"
     StopDat1 = GroupsTemp.get_group(name)
     wr.PlotRawnavTrajWithGTFS(RawNavGrp, StopDat1,path_processed_data,SaveFile)
-      
+    if Stop: break
 
 
 
