@@ -158,12 +158,6 @@ NearestRawnavOnGTFS = wr.mergeStopsGTFSrawnav(GtfsData_UniqueStops, FinDat)
 ########################################################################################
 GroupsTemp =  NearestRawnavOnGTFS.groupby(['filename','IndexTripStartInCleanData','route_id'])
 RawnavGrps = FinDat.groupby(['filename','IndexTripStartInCleanData','route'])
-groupKeys = list(GroupsTemp.groups.keys())
-SaveFile= f"{groupKeys[0][0]}_Row{int(groupKeys[0][1])}_{groupKeys[0][2]}.html"
-StopDat1 = GroupsTemp.get_group(groupKeys[0])
-RawnavDat1 = RawnavGrp.get_group(groupKeys[0])
-wr.PlotRawnavTrajWithGTFS(RawnavDat1, StopDat1,path_processed_data,SaveFile)
-
 for name, RawNavGrp in RawnavGrps:
     SaveFile= f"{name[0]}_Row{int(name[1])}_{name[2]}.html"
     StopDat1 = GroupsTemp.get_group(name)

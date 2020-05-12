@@ -272,12 +272,12 @@ def mergeStopsGTFSrawnav(StopsGTFS, rawnavDat):
     GTFS_groups = gdA.groupby('route_id')
     NearestRawnavOnGTFS =pd.DataFrame()
     for name, groupRawnav in TripGroups:
-        print(name)
+        #print(name)
         GTFS_RelevantRouteDat = GTFS_groups.get_group(name[2])
         NearestRawnavOnGTFS = pd.concat([NearestRawnavOnGTFS,\
                                          ckdnearest(GTFS_RelevantRouteDat,groupRawnav)])
     NearestRawnavOnGTFS.dist = NearestRawnavOnGTFS.dist * 3.28084 # meters to feet
-    #NearestRawnavOnGTFS.Lat =NearestRawnavOnGTFS.Lat.astype('float')
+    NearestRawnavOnGTFS.Lat =NearestRawnavOnGTFS.Lat.astype('float')
     #NearestRawnavOnGTFS.loc[:,"CheckDist"] = NearestRawnavOnGTFS.apply(lambda x: geopy.distance.geodesic((x.Lat,x.Long),(x.stop_lat,x.stop_lon)).meters,axis=1)
     geometry1 = [Point(xy) for xy in zip(NearestRawnavOnGTFS.Long, NearestRawnavOnGTFS.Lat)]
     geometry2 = [Point(xy) for xy in zip(NearestRawnavOnGTFS.stop_lon, NearestRawnavOnGTFS.stop_lat)]
