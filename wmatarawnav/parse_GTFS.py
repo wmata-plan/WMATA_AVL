@@ -8,9 +8,28 @@ import pandas as pd
 import geopandas as gpd
 import os
 from shapely.geometry import Point
+from shapely.geometry import LineString
 from shapely.ops import nearest_points
+from scipy.spatial import cKDTree
+import geopy.distance
+import numpy as np
+import folium
+from folium.plugins import MarkerCluster
+from folium import plugins
 
 def readGTFS(GTFS_Dir_):
+    #TODO: Write Documentation
+    '''
+    Parameters
+    ----------
+    GTFS_Dir_ : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    '''
     StopsDat= pd.read_csv(os.path.join(GTFS_Dir_,"stops.txt"))
     StopTimeDat = pd.read_csv(os.path.join(GTFS_Dir_,"stop_times.txt"))
     TripsDat =pd.read_csv(os.path.join(GTFS_Dir_,"trips.txt"))
@@ -27,6 +46,21 @@ def readGTFS(GTFS_Dir_):
 
 
 def get1ststop(Merdat,AnalysisRoutes_):
+    #TODO: Write Documentation
+    '''
+    Parameters
+    ----------
+    Merdat : TYPE
+        DESCRIPTION.
+    AnalysisRoutes_ : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    '''
     #Get the 1st stops
     #########################################
     Mask_1stStop = (Merdat.stop_sequence ==1)
@@ -55,6 +89,20 @@ def get1ststop(Merdat,AnalysisRoutes_):
     return(FirstStopDat1_rte, CheckFirstStop, CheckFirstStop1)
 
 def getlaststop(Merdat,AnalysisRoutes_):
+    #TODO: Write Documentation
+    '''
+    Parameters
+    ----------
+    Merdat : TYPE
+        DESCRIPTION.
+    AnalysisRoutes_ : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+    '''
     #Get Last stops per trip
     #########################################
     TempDa = Merdat.groupby('trip_id')['stop_sequence'].max().reset_index() #can use groupby filter here
@@ -81,6 +129,25 @@ def getlaststop(Merdat,AnalysisRoutes_):
             
                                         
 def debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckLastStop1,path_processed_data_):
+    #TODO: Write Documentation
+    '''
+    Parameters
+    ----------
+    CheckFirstStop : TYPE
+        DESCRIPTION.
+    CheckFirstStop1 : TYPE
+        DESCRIPTION.
+    CheckLastStop : TYPE
+        DESCRIPTION.
+    CheckLastStop1 : TYPE
+        DESCRIPTION.
+    path_processed_data_ : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+    '''
     First_Last_Stop = CheckFirstStop.merge(CheckLastStop,left_index=True,right_index=True,how='left')
     #Check stops Data
     #########################################
@@ -95,6 +162,26 @@ def debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckL
 
 
 def getNearestStartEnd(SumDatStart, SumDatEnd, FirstStopDat1_rte, LastStopDat1_rte, AnalysisRoutes_):
+    #TODO: Write Documentation
+    '''
+    Parameters
+    ----------
+    SumDatStart : TYPE
+        DESCRIPTION.
+    SumDatEnd : TYPE
+        DESCRIPTION.
+    FirstStopDat1_rte : TYPE
+        DESCRIPTION.
+    LastStopDat1_rte : TYPE
+        DESCRIPTION.
+    AnalysisRoutes_ : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    '''
     FirstStp = pd.DataFrame()
     LastStp = pd.DataFrame()
     TempDict = {}
@@ -127,6 +214,20 @@ def getNearestStartEnd(SumDatStart, SumDatEnd, FirstStopDat1_rte, LastStopDat1_r
 
 
 def GetSummaryGTFSdata(FinDat_, SumDat_):
+    #TODO: Write Documentation
+    '''
+    Parameters
+    ----------
+    FinDat_ : TYPE
+        DESCRIPTION.
+    SumDat_ : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    '''
     #5 Get summary after using GTFS data
     ########################################################################################
     MinDat = FinDat_.groupby(['filename','IndexTripStartInCleanData'])['distances_start_ft','distances_end_ft'].idxmin().reset_index()
@@ -159,24 +260,85 @@ def GetSummaryGTFSdata(FinDat_, SumDat_):
     SumDat1 = SumDat1.merge(SumDat_,on=['filename','IndexTripStartInCleanData'],how='left')
     return(SumDat1)
 
-
+def mergeStopsGTFSrawnav(StopsGTFS, rawnavDat):
+    geometryStops = [Point(xy) for xy in zip(StopsGTFS.stop_lon.astype(float), StopsGTFS.stop_lat.astype(float))]
+    geometryPoints = [Point(xy) for xy in zip(rawnavDat.Long.astype(float), rawnavDat.Lat.astype(float))]
+    gdA =gpd.GeoDataFrame(StopsGTFS, geometry=geometryStops,crs={'init':'epsg:4326'})
+    gdB =gpd.GeoDataFrame(rawnavDat, geometry=geometryPoints,crs={'init':'epsg:4326'})
+    #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
+    gdA.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
+    gdB.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
+    TripGroups = gdB.groupby(['filename','IndexTripStartInCleanData','route'])
+    GTFS_groups = gdA.groupby('route_id')
+    NearestRawnavOnGTFS =pd.DataFrame()
+    for name, groupRawnav in TripGroups:
+        print(name)
+        GTFS_RelevantRouteDat = GTFS_groups.get_group(name[2])
+        NearestRawnavOnGTFS = pd.concat([NearestRawnavOnGTFS,\
+                                         ckdnearest(GTFS_RelevantRouteDat,groupRawnav)])
+    NearestRawnavOnGTFS.iloc[0]
+    NearestRawnavOnGTFS.iloc[20]
+    NearestRawnavOnGTFS.Lat =NearestRawnavOnGTFS.Lat.astype('float')
+    NearestRawnavOnGTFS.loc[:,"CheckDist"] = NearestRawnavOnGTFS.apply(lambda x: geopy.distance.geodesic((x.Lat,x.Long),(x.stop_lat,x.stop_lon)).meters,axis=1)
+    geometry1 = [Point(xy) for xy in zip(NearestRawnavOnGTFS.Long, NearestRawnavOnGTFS.Lat)]
+    geometry2 = [Point(xy) for xy in zip(NearestRawnavOnGTFS.stop_lon, NearestRawnavOnGTFS.stop_lat)]
+    geometry = [LineString(list(xy)) for xy in zip(geometry1,geometry2)]
+    NearestRawnavOnGTFS=gpd.GeoDataFrame(NearestRawnavOnGTFS, geometry=geometry,crs={'init':'epsg:4326'})
+    return(NearestRawnavOnGTFS)
 
 #https://gis.stackexchange.com/questions/222315/geopandas-find-nearest-point-in-other-dataframe
-# unary union of the gpd2 geomtries 
-pts3 = gpd2.geometry.unary_union
-def near(point, pts=pts3):
-     # find the nearest point and return the corresponding Place value
-     nearest = gpd2.geometry == nearest_points(point, pts)[1]
-     return gpd2[nearest].Place.get_values()[0]
-gpd1['Nearest'] = gpd1.apply(lambda row: near(row.geometry), axis=1)
+def ckdnearest(gdA, gdB):
+    gdA.reset_index(inplace=True);gdB.reset_index(inplace=True)
+    nA = np.array(list(zip(gdA.geometry.x, gdA.geometry.y)) )
+    nB = np.array(list(zip(gdB.geometry.x, gdB.geometry.y)) )
+    btree = cKDTree(nB)
+    dist, idx = btree.query(nA, k=1)
+    gdf = pd.concat(
+        [gdA.reset_index(drop=True), gdB.loc[idx, ['filename','IndexTripStartInCleanData','IndexLoc','Lat', 'Long']].reset_index(drop=True),
+         pd.Series(dist, name='dist')], axis=1)
+    return gdf
 
+def PlotRawnavTrajWithGTFS(RawnavTraj, GTFScloseStop,path_processed_data_,SaveFileNm):
+    this_map = folium.Map(zoom_start=16,
+    tiles='Stamen Terrain')
+    folium.TileLayer('openstreetmap').add_to(this_map)
+    folium.TileLayer('cartodbpositron').add_to(this_map)
+    folium.TileLayer('cartodbdark_matter').add_to(this_map) 
+    fg = folium.FeatureGroup(name="Rawnav Trajectory")
+    this_map.add_child(fg)
+    LineGr = folium.FeatureGroup(name="GTFS stop and Nearest Rawnav Point")
+    this_map.add_child(LineGr)
+    PlotMarkerClusters(this_map, RawnavTraj,"Lat","Long",fg)
+    PlotLinesClusters(this_map, GTFScloseStop,LineGr)
+    LatLongs = [[x,y] for x,y in zip(RawnavTraj.Lat,RawnavTraj.Long)]
+    this_map.fit_bounds(LatLongs)
+    folium.LayerControl(collapsed=False).add_to(this_map)
+    SaveDir= os.path.join(path_processed_data_,"TrajectoryFigures")
+    if not os.path.exists(SaveDir):os.makedirs(SaveDir)
+    this_map.save(os.path.join(SaveDir,f"{SaveFileNm}"))
 
-
-
-
-
-
-
-
-
+def PlotMarkerClusters(this_map, Dat,Lat,Long, FeatureGrp):
+    popup_field_list = list(Dat.columns)     
+    for i,row in Dat.iterrows():
+        label = '<br>'.join([field + ': ' + str(row[field]) for field in popup_field_list])
+        #https://deparkes.co.uk/2019/02/27/folium-lines-and-markers/
+        folium.CircleMarker(
+                location=[row[Lat], row[Long]], radius= 2,
+                popup=folium.Popup(html = label,parse_html=False,max_width='150')).add_to(FeatureGrp)
+    
+    
+def PlotLinesClusters(this_map, Dat, FeatureGrp):
+    popup_field_list = list(Dat.columns)     
+    for i,row in Dat.iterrows():
+        label = '<br>'.join([field + ': ' + str(row[field]) for field in popup_field_list])
+        #https://deparkes.co.uk/2019/02/27/folium-lines-and-markers/
+        LinePoints = [(tuples[1],tuples[0]) for tuples in list(Dat.geometry[0].coords)]
+        folium.PolyLine(LinePoints, color="red", weight=4, opacity=1).add_to(FeatureGrp)
+    
+    
+    
+    
+    
+    
+    
 

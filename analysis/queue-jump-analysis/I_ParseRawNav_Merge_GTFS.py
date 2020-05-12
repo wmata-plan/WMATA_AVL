@@ -17,7 +17,6 @@ from datetime import datetime
 from geopy.distance import geodesic
 from collections import defaultdict
 from shapely.geometry import Point
-from shapely.geometry import LineString
 
 import geopandas as gpd
 if not sys.warnoptions:
@@ -129,7 +128,6 @@ SumDat, SumDatStart, SumDatEnd = wr.subset_summary_data(FinSummaryDat, AnalysisR
 #6 Read the GTFS Data
 ########################################################################################
 GtfsData = wr.readGTFS(GTFS_Dir)
-
 FirstStopDat1_rte, CheckFirstStop, CheckFirstStop1 = wr.get1ststop(GtfsData,AnalysisRoutes)
 LastStopDat1_rte, CheckLastStop, CheckLastStop1 = wr.getlaststop(GtfsData,AnalysisRoutes)
 wr.debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckLastStop1,path_processed_data)
@@ -151,6 +149,40 @@ now = datetime.now()
 d4 = now.strftime("%b-%d-%Y %H")
 OutFiSum = os.path.join(path_processed_data,f'TripSummaries_{d4}.xlsx')
 SumDatWithGTFS.to_excel(OutFiSum,merge_cells=False)
+
+#8 Merge all stops to rawnav data
+########################################################################################
+GtfsData_UniqueStops = GtfsData[~GtfsData.duplicated(['route_id','stop_name'],keep='first')]
+NearestRawnavOnGTFS = wr.mergeStopsGTFSrawnav(GtfsData_UniqueStops, FinDat)
+#10 Plot Rawnav Trace and Nearest Stops
+########################################################################################
+GroupsTemp =  NearestRawnavOnGTFS.groupby(['filename','IndexTripStartInCleanData','route_id'])
+RawnavGrps = FinDat.groupby(['filename','IndexTripStartInCleanData','route'])
+groupKeys = list(GroupsTemp.groups.keys())
+SaveFile= f"{groupKeys[0][0]}_Row{int(groupKeys[0][1])}_{groupKeys[0][2]}.html"
+StopDat1 = GroupsTemp.get_group(groupKeys[0])
+RawnavDat1 = RawnavGrp.get_group(groupKeys[0])
+wr.PlotRawnavTrajWithGTFS(RawnavDat1, StopDat1,path_processed_data,SaveFile)
+
+for name, RawNavGrp in RawnavGrps:
+    SaveFile= f"{name[0]}_Row{int(name[1])}_{name[2]}.html"
+    StopDat1 = GroupsTemp.get_group(name)
+    wr.PlotRawnavTrajWithGTFS(RawNavGrp, StopDat1,path_processed_data,SaveFile)
+      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
