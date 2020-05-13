@@ -58,8 +58,8 @@ import wmatarawnav as wr
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
-restrict_n = 500
-AnalysisRoutes = ['79','X2','X9','U6','H4']
+restrict_n = None
+AnalysisRoutes = ['79']
 ZipParentFolderName = "October 2019 Rawnav"
 # Assumes directory structure:
 # ZipParentFolderName (e.g, October 2019 Rawnav)
@@ -73,6 +73,8 @@ ZippedFilesDirParent = os.path.join(path_source_data, ZipParentFolderName)
 ZippedFilesDirs = glob.glob(os.path.join(path_source_data,ZipParentFolderName,'Vehicles *.zip'))
 UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,ZippedFilesDirParent,'Vehicles*[0-9]'))
 
+#
+ZippedFilesDirs =ZippedFilesDirs[-1]
 FileUniverse = wr.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
 # Return a dataframe of routes and details
 rawnav_inventory = wr.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = True)

@@ -17,7 +17,7 @@ from shapely.geometry import Point
 #Parent Functions
 #################################################################################################################
     
-def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent):
+def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent,globSearch = "*.zip"):
     '''
     Get the list of files to read from Zipped folder. Also Unzip the parent folder.
     Will Unzip only once. Can also pass a list of paths to unzipped folders
@@ -49,7 +49,7 @@ def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent):
             with zipfile.ZipFile(ZipDir,'r') as zip:
                 zip.extractall(ZippedFilesDirParent)
         ZipDir1 = ZipDir.split('.zip')[0] #Will work even for Unzipped folders
-        listFiles = glob.glob(os.path.join(ZipDir1,"*.zip"))
+        listFiles = glob.glob(os.path.join(ZipDir1,globSearch))
         FileUniverse.extend(listFiles)
     return(FileUniverse)
            
