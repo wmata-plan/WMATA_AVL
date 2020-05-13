@@ -17,7 +17,8 @@ from datetime import datetime
 from geopy.distance import geodesic
 from collections import defaultdict
 from shapely.geometry import Point
-
+import pyarrow as pa
+import pyarrow.parquet as pq
 import geopandas as gpd
 if not sys.warnoptions:
     import warnings
@@ -58,7 +59,7 @@ import wmatarawnav as wr
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
-restrict_n = None
+restrict_n = 1500
 AnalysisRoutes = ['79']
 ZipParentFolderName = "October 2019 Rawnav"
 # Assumes directory structure:
@@ -73,8 +74,6 @@ ZippedFilesDirParent = os.path.join(path_source_data, ZipParentFolderName)
 ZippedFilesDirs = glob.glob(os.path.join(path_source_data,ZipParentFolderName,'Vehicles *.zip'))
 UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,ZippedFilesDirParent,'Vehicles*[0-9]'))
 
-#
-ZippedFilesDirs =ZippedFilesDirs[-1]
 FileUniverse = wr.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
 # Return a dataframe of routes and details
 rawnav_inventory = wr.find_rawnav_routes(FileUniverse, nmax = restrict_n, quiet = True)
@@ -137,23 +136,44 @@ FinSummaryDat = pd.concat(SummaryDataDict.values()) #
     
     
 #Output Summary Files
-now = datetime.now()
-d4 = now.strftime("%b-%d-%Y %H")
-OutFiSum = os.path.join(path_processed_data,f'TripSummaries_{d4}.csv')
+OutFiSum = os.path.join(path_processed_data,'TripSummaries.csv')
 FinSummaryDat.to_csv(OutFiSum)
 
-#5 Analyze Route 79---Subset RawNav Data. 
+#5 Analyze Route ---Subset RawNav Data. 
 ########################################################################################
-# %%timeit -n 1
-# FinDat1 = wr.subset_rawnav_trip(CleanDataDict, rawnav_inventory_filtered, AnalysisRoutes)
-#1min 8s ± 2.04 s per loop (mean ± std. dev. of 7 runs, 1 loop each)
-
-#%%timeit -n 5
 FinDat = wr.subset_rawnav_trip1(RawnavDataDict, rawnav_inventory_filtered, AnalysisRoutes)
-#1.93 s ± 86.9 ms per loop (mean ± std. dev. of 7 runs, 5 loops each)
+temp = FinSummaryDat[['filename','IndexTripStartInCleanData','wday','StartDateTime']]
+FinDat = FinDat.merge(temp, on = ['filename','IndexTripStartInCleanData'],how='left')
+FinDat = FinDat.assign(Lat = lambda x: x.Lat.astype('float'),
+                           Heading = lambda x: x.Heading.astype('float'),
+                           IndexTripStartInCleanData =lambda x: x.IndexTripStartInCleanData.astype('int'),
+                           IndexTripEndInCleanData =lambda x: x.IndexTripEndInCleanData.astype('int'))
+table_from_pandas = pa.Table.from_pandas(FinDat)
+## Get input ##
+RemFolder = os.path.join(path_processed_data,"Route79_Partition.parquet")
+# OverwritePrevData= input(f"Do you want to overwrite previous data in {RemFolder} (Y/N)?")
+## Try to delete the file ##
+try:
+    os.remove(RemFolder)
+except OSError as e:  ## if failed, report it back to the user ##
+    print ("Error: %s - %s." % (e.filename, e.strerror))
+#Remove data from RemFolder before writing
+pq.write_to_dataset(table_from_pandas,root_path =os.path.join(path_processed_data,"Route79_Partition.parquet"),\
+partition_cols=['wday','route'])
 
+
+FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet"),\
+filters =[('wday','=',"Tuesday"),('route','=',"79")]).to_pandas()
+FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet")).to_pandas()
+FinDat.drop(columns="__index_level_0__",inplace=True)
+FinDat.route = FinDat.route.astype('str')
+
+set(FinDat.IndexTripStartInCleanData.unique()) -set(FinSummaryDat.IndexTripStartInCleanData.unique())
+# 5.1 Summary Data
+########################################################################################
+FinSummaryDat = pd.read_csv(os.path.join(path_processed_data,'TripSummaries.csv'))
+FinSummaryDat.IndexTripStartInCleanData = FinSummaryDat.IndexTripStartInCleanData.astype('int32')
 SumDat, SumDatStart, SumDatEnd = wr.subset_summary_data(FinSummaryDat, AnalysisRoutes)
-
 #6 Read the GTFS Data
 ########################################################################################
 GtfsData = wr.readGTFS(GTFS_Dir)
@@ -176,8 +196,7 @@ SumDatWithGTFS.set_index(['fullpath','filename','file_id','wday','StartDateTime'
 #8 Output Summary Files
 ########################################################################################
 now = datetime.now()
-d4 = now.strftime("%b-%d-%Y %H")
-OutFiSum = os.path.join(path_processed_data,f'TripSummaries_{d4}.xlsx')
+OutFiSum = os.path.join(path_processed_data,f'GTFSTripSummaries.xlsx')
 SumDatWithGTFS.to_excel(OutFiSum,merge_cells=False)
 
 #8 Merge all stops to rawnav data
@@ -187,7 +206,7 @@ NearestRawnavOnGTFS = wr.mergeStopsGTFSrawnav(GtfsData_UniqueStops, FinDat)
 NearestRawnavOnGTFS = NearestRawnavOnGTFS[['filename','IndexTripStartInCleanData','direction_id'
                                            ,'stop_sequence','IndexLoc','route_id',
                                            'trip_headsign','stop_lat','stop_lon','stop_name'
-                                           ,'Lat','Long','dist','geometry']]
+                                           ,'Lat','Long','distNearestPointFromStop','geometry']]
 NearestRawnavOnGTFS.sort_values(['filename','IndexTripStartInCleanData',
                                  'direction_id','stop_sequence'],inplace=True)
 
@@ -203,8 +222,8 @@ SumDatWithGTFS.reset_index(inplace=True)
 DatFirstStops_AppxDir = DatFirstStops_AppxDir.merge(SumDatWithGTFS,on =['filename',"IndexTripStartInCleanData"])
 DatFirstStops_AppxDir.columns
 DatFirstStops_AppxDir.drop(columns = ['fullpath','file_id','taglist'],inplace=True)
-Check = DatFirstStops_AppxDir[['route_id','direction_id','route','pattern','dist',
-                               'Dist_from_GTFS1stStop_start_ft','trip_headsign','stop_name','TripDurationFromTags',
+Check = DatFirstStops_AppxDir[['route_id','direction_id','route','pattern','distNearestPointFromStop',
+                               'StartDistFromGTFS1stStopFt','trip_headsign','stop_name','TripDurationFromTags',
                                'CrowFlyDistLatLongMi']]
 DatFirstStops_AppxDir = DatFirstStops_AppxDir[DatFirstStops_AppxDir.CrowFlyDistLatLongMi>1]
 Check = Check[Check.CrowFlyDistLatLongMi>1]
@@ -217,6 +236,19 @@ NearestRawnavOnGTFS_appxDir = NearestRawnavOnGTFS_appxDir.query("route_id=='79'"
 NearestRawnavOnGTFS_appxDir = NearestRawnavOnGTFS_appxDir.merge(SumDatWithGTFS,on =['filename',"IndexTripStartInCleanData"])
 NearestRawnavOnGTFS_appxDir.drop(columns = ['fullpath','file_id','taglist'],inplace=True)
 
+NearestRawnavOnGTFS_appxDir =\
+NearestRawnavOnGTFS_appxDir[[ 'filename','wday', 'StartDateTime', 'EndDateTime', 'route', 'pattern', 'route_pattern',\
+ 'IndexTripStartInCleanData','IndexTripEndInCleanData', 
+ 'direction_id','stop_sequence', 'IndexLoc', 'route_id', 'trip_headsign', \
+ 'stop_lat','stop_lon', 'stop_name', 'Lat', 'Long', 'distNearestPointFromStop', 
+ 'StartOdomtFtGTFS','EndOdomtFtGTFS', 'TripDistMiGTFS', 'StartSecPastStGTFS','EndSecPastStGTFS', 
+ 'TripDurSecGTFS', 'StartLatGTFS', 'EndLatGTFS','StartLongGTFS', 'EndLongGTFS', 'StartDistFromGTFS1stStopFt',
+  'EndDistFromGTFSlastStopFt', 'TripSpeedMphGTFS','SecStart', 'OdomFtStart', 'SecEnd',
+       'OdomFtEnd', 'TripDurFromSec', 'TripDurationFromTags', 'DistOdomMi',
+       'SpeedOdomMPH', 'SpeedTripTagMPH', 'CrowFlyDistLatLongMi', 'LatStart',
+       'LongStart', 'LatEnd', 'LongEnd','geometry']]
+NearestRawnavOnGTFS_appxDir.rename(columns = {'IndexLoc':'ClosestIndexLocInRawnavTraj'},inplace=True)
+
 #10 Plot Rawnav Trace and Nearest Stops
 ########################################################################################
 GroupsTemp =  NearestRawnavOnGTFS_appxDir.groupby(['filename','IndexTripStartInCleanData','route_id'])
@@ -226,9 +258,12 @@ Stop = False
 for name, RawNavGrp in RawnavGrps:
     Pattern = RawNavGrp["pattern"].values[0]
     Stop = False
-    StopDat1 = GroupsTemp.get_group(name)
+    if name in GroupsTemp.groups:
+        StopDat1 = GroupsTemp.get_group(name)   
+    else: continue
     wday = StopDat1["wday"].values[0]
-    SaveFile= f"{wday}_{name[2]}_{Pattern}_{name[0]}_Row{int(name[1])}.html"
+    Hour = StopDat1.StartDateTime.values[0].split(" ")[1].split(":")[0]
+    SaveFile= f"{wday}_{Hour}_{name[2]}_{Pattern}_{name[0]}_Row{int(name[1])}.html"
     wr.PlotRawnavTrajWithGTFS(RawNavGrp, StopDat1,path_processed_data,SaveFile)
     if Stop: break
 
