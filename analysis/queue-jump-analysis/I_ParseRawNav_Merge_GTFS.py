@@ -160,6 +160,7 @@ LastStopDat1_rte, CheckLastStop, CheckLastStop1 = wr.getlaststop(GtfsData,Analys
 wr.debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckLastStop1,path_processed_data)
 
 #7 Analyze the Trip Start and End
+#TODO: The code from section 8 can handle this part. Need to rewrite this
 ########################################################################################
 SumDatStart, SumDatEnd = wr.getNearestStartEnd(SumDatStart, SumDatEnd, FirstStopDat1_rte, LastStopDat1_rte, AnalysisRoutes)
 
@@ -179,17 +180,53 @@ SumDatWithGTFS.to_excel(OutFiSum,merge_cells=False)
 
 #8 Merge all stops to rawnav data
 ########################################################################################
-GtfsData_UniqueStops = GtfsData[~GtfsData.duplicated(['route_id','stop_name'],keep='first')]
+GtfsData_UniqueStops = GtfsData[~GtfsData.duplicated(['route_id','direction_id','stop_name'],keep='first')]
 NearestRawnavOnGTFS = wr.mergeStopsGTFSrawnav(GtfsData_UniqueStops, FinDat)
+NearestRawnavOnGTFS = NearestRawnavOnGTFS[['filename','IndexTripStartInCleanData','direction_id'
+                                           ,'stop_sequence','IndexLoc','route_id',
+                                           'trip_headsign','stop_lat','stop_lon','stop_name'
+                                           ,'Lat','Long','dist','geometry']]
+NearestRawnavOnGTFS.sort_values(['filename','IndexTripStartInCleanData',
+                                 'direction_id','stop_sequence'],inplace=True)
+
+DatFirstStops = NearestRawnavOnGTFS.query("stop_sequence==1")
+DatFirstStops.sort_values(['filename','IndexTripStartInCleanData',
+                                 'direction_id','stop_sequence'],inplace=True)
+
+# Will not work for routes like S9 and X0
+DatFirstStops.loc[:,"GetDir"] = abs(DatFirstStops.IndexLoc - DatFirstStops.IndexTripStartInCleanData)
+DatFirstStops.loc[:,"CorDir"] = DatFirstStops.groupby(['filename','IndexTripStartInCleanData'])['GetDir'].transform(lambda x: x==x.min())
+DatFirstStops_AppxDir = DatFirstStops.query('CorDir')
+SumDatWithGTFS.reset_index(inplace=True)
+DatFirstStops_AppxDir = DatFirstStops_AppxDir.merge(SumDatWithGTFS,on =['filename',"IndexTripStartInCleanData"])
+DatFirstStops_AppxDir.columns
+DatFirstStops_AppxDir.drop(columns = ['fullpath','file_id','taglist'],inplace=True)
+Check = DatFirstStops_AppxDir[['route_id','direction_id','route','pattern','dist',
+                               'Dist_from_GTFS1stStop_start_ft','trip_headsign','stop_name','TripDurationFromTags',
+                               'CrowFlyDistLatLongMi']]
+DatFirstStops_AppxDir = DatFirstStops_AppxDir[DatFirstStops_AppxDir.CrowFlyDistLatLongMi>1]
+Check = Check[Check.CrowFlyDistLatLongMi>1]
+Check.groupby(['route_id','direction_id','pattern']).count()
+
+temp = DatFirstStops_AppxDir[['filename',"IndexTripStartInCleanData","direction_id"]]
+NearestRawnavOnGTFS_appxDir =temp.merge( NearestRawnavOnGTFS, on =['filename',"IndexTripStartInCleanData","direction_id"],
+                          how = 'left')
+NearestRawnavOnGTFS_appxDir = NearestRawnavOnGTFS_appxDir.query("route_id=='79'")
+NearestRawnavOnGTFS_appxDir = NearestRawnavOnGTFS_appxDir.merge(SumDatWithGTFS,on =['filename',"IndexTripStartInCleanData"])
+NearestRawnavOnGTFS_appxDir.drop(columns = ['fullpath','file_id','taglist'],inplace=True)
+
 #10 Plot Rawnav Trace and Nearest Stops
 ########################################################################################
-GroupsTemp =  NearestRawnavOnGTFS.groupby(['filename','IndexTripStartInCleanData','route_id'])
+GroupsTemp =  NearestRawnavOnGTFS_appxDir.groupby(['filename','IndexTripStartInCleanData','route_id'])
+FinDat = FinDat.query("route=='79'")
 RawnavGrps = FinDat.groupby(['filename','IndexTripStartInCleanData','route'])
 Stop = False
 for name, RawNavGrp in RawnavGrps:
-    Stop = True
-    SaveFile= f"{name[0]}_Row{int(name[1])}_{name[2]}.html"
+    Pattern = RawNavGrp["pattern"].values[0]
+    Stop = False
     StopDat1 = GroupsTemp.get_group(name)
+    wday = StopDat1["wday"].values[0]
+    SaveFile= f"{wday}_{name[2]}_{Pattern}_{name[0]}_Row{int(name[1])}.html"
     wr.PlotRawnavTrajWithGTFS(RawNavGrp, StopDat1,path_processed_data,SaveFile)
     if Stop: break
 
