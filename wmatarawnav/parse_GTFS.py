@@ -298,11 +298,15 @@ def ckdnearest(gdA, gdB):
     return gdf
 
 def PlotRawnavTrajWithGTFS(RawnavTraj, GTFScloseStop,path_processed_data_,SaveFileNm):
-    this_map = folium.Map(zoom_start=16,
-    tiles='Stamen Terrain')
-    folium.TileLayer('openstreetmap').add_to(this_map)
-    folium.TileLayer('cartodbpositron').add_to(this_map)
-    folium.TileLayer('cartodbdark_matter').add_to(this_map) 
+    ## Link to Esri World Imagery service plus attribution
+    #https://www.esri.com/arcgis-blog/products/constituent-engagement/constituent-engagement/esri-world-imagery-in-openstreetmap/
+    EsriImagery = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+    EsriAttribution = "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+    this_map = folium.Map( tiles='openstreetmap', zoom_start=12,max_zoom=25,control_scale=True)
+    folium.TileLayer(name="EsriImagery",tiles=EsriImagery, attr=EsriAttribution, zoom_start=16,max_zoom=25,control_scale=True).add_to(this_map)
+    folium.TileLayer('cartodbpositron',zoom_start=16,max_zoom=20,control_scale=True).add_to(this_map)
+    folium.TileLayer('cartodbdark_matter',zoom_start=16,max_zoom=20,control_scale=True).add_to(this_map) 
+
     fg = folium.FeatureGroup(name="Rawnav Trajectory")
     this_map.add_child(fg)
     LineGr = folium.FeatureGroup(name="GTFS Stops and Nearest Rawnav Point")
@@ -311,10 +315,11 @@ def PlotRawnavTrajWithGTFS(RawnavTraj, GTFScloseStop,path_processed_data_,SaveFi
     #this_map.add_child(StpGr)
     #PlotMarkerClusters(this_map, GTFScloseStop,"stop_lat","stop_lon",StpGr)
     PlotMarkerClusters(this_map, RawnavTraj,"Lat","Long",fg)
+    GTFScloseStop.sort_values(['stop_sequence'])
     PlotLinesClusters(this_map, GTFScloseStop,LineGr)
     LatLongs = [[x,y] for x,y in zip(RawnavTraj.Lat,RawnavTraj.Long)]
     this_map.fit_bounds(LatLongs)
-    folium.LayerControl(collapsed=False).add_to(this_map)
+    folium.LayerControl(collapsed=True).add_to(this_map)
     SaveDir= os.path.join(path_processed_data_,"TrajectoryFigures")
     if not os.path.exists(SaveDir):os.makedirs(SaveDir)
     this_map.save(os.path.join(SaveDir,f"{SaveFileNm}"))
@@ -326,19 +331,20 @@ def PlotMarkerClusters(this_map, Dat,Lat,Long, FeatureGrp):
         #https://deparkes.co.uk/2019/02/27/folium-lines-and-markers/
         folium.CircleMarker(
                 location=[row[Lat], row[Long]], radius= 2,
-                popup=folium.Popup(html = label,parse_html=False,max_width='150')).add_to(FeatureGrp)
+                popup=folium.Popup(html = label,parse_html=False,max_width='200')).add_to(FeatureGrp)
     
     
 def PlotLinesClusters(this_map, Dat, FeatureGrp):
     popup_field_list = list(Dat.columns)     
+    popup_field_list.remove('geometry')
     for i,row in Dat.iterrows():
-        TempGrp = plugins.FeatureGroupSubGroup(FeatureGrp,f"{row.stop_name}")
+        TempGrp = plugins.FeatureGroupSubGroup(FeatureGrp,f"{row.stop_sequence}-{row.stop_name}-{row.direction_id}")
         this_map.add_child(TempGrp)
         label = '<br>'.join([field + ': ' + str(row[field]) for field in popup_field_list])
         #https://deparkes.co.uk/2019/02/27/folium-lines-and-markers/
         LinePoints = [(tuples[1],tuples[0]) for tuples in list(row.geometry.coords)]
         folium.PolyLine(LinePoints, color="red", weight=4, opacity=1\
-        ,popup=folium.Popup(html = label,parse_html=False,max_width='150')).add_to(TempGrp)
+        ,popup=folium.Popup(html = label,parse_html=False,max_width='300')).add_to(TempGrp)
     
     
     
