@@ -248,15 +248,17 @@ def GetSummaryGTFSdata(FinDat_, SumDat_):
                                                      'SecPastSt':['min','max',Map1],
                                                      'Lat':['first','last'],
                                                      'Long':['first','last'],
-                                                     'Dist_from_GTFS1stStop':['first','last'],
+                                                     'Dist_from_GTFS1stStop':['first'],
                                                      'Dist_from_GTFSlastStop':['last']})
-    SumDat1.columns = ['OdomtFt_start_GTFS','OdomtFt_end_GTFS','Trip_Dist_Mi_GTFS',
-                       'SecPastSt_start_GTFS','SecPastSt_end_GTFS','Trip_Dur_Sec_GTFS',
-                       'Lat_start_GTFS','Lat_end_GTFS','Long_start_GTFS','Long_end_GTFS',
-                       'Dist_from_GTFS1stStop_start_ft','Dist_from_GTFS1stStop_end_mi',
-                       'Dist_from_GTFSlastStop_end_ft']
-    SumDat1.loc[:,['Trip_Dist_Mi_GTFS','Dist_from_GTFS1stStop_end_mi']] =SumDat1.loc[:,['Trip_Dist_Mi_GTFS','Dist_from_GTFS1stStop_end_mi']]/5280
-    SumDat1.loc[:,'Trip_Speed_mph_GTFS'] =round(3600* SumDat1.Trip_Dist_Mi_GTFS/SumDat1.Trip_Dur_Sec_GTFS,2)
+    SumDat1.columns = ['StartOdomtFtGTFS','EndOdomtFtGTFS','TripDistMiGTFS',
+                       'StartSecPastStGTFS','EndSecPastStGTFS','TripDurSecGTFS',
+                       'StartLatGTFS','EndLatGTFS','StartLongGTFS','EndLongGTFS',
+                       'StartDistFromGTFS1stStopFt',
+                       'EndDistFromGTFSlastStopFt']
+    SumDat1.loc[:,['TripDistMiGTFS']] =SumDat1.loc[:,['TripDistMiGTFS']]/5280
+    SumDat1.loc[:,'TripSpeedMphGTFS'] =round(3600* SumDat1.TripDistMiGTFS/SumDat1.TripDurSecGTFS,2)
+    SumDat1.loc[:,['TripDistMiGTFS','StartDistFromGTFS1stStopFt','EndDistFromGTFSlastStopFt']] = \
+            round(SumDat1.loc[:,['TripDistMiGTFS','StartDistFromGTFS1stStopFt','EndDistFromGTFSlastStopFt']],2)
     SumDat1 = SumDat1.merge(SumDat_,on=['filename','IndexTripStartInCleanData'],how='left')
     return(SumDat1)
 
@@ -283,6 +285,7 @@ def mergeStopsGTFSrawnav(StopsGTFS, rawnavDat):
     geometry2 = [Point(xy) for xy in zip(NearestRawnavOnGTFS.stop_lon, NearestRawnavOnGTFS.stop_lat)]
     geometry = [LineString(list(xy)) for xy in zip(geometry1,geometry2)]
     NearestRawnavOnGTFS=gpd.GeoDataFrame(NearestRawnavOnGTFS, geometry=geometry,crs={'init':'epsg:4326'})
+    NearestRawnavOnGTFS.rename(columns = {'dist':'distNearestPointFromStop'},inplace=True)
     return(NearestRawnavOnGTFS)
 
 #https://gis.stackexchange.com/questions/222315/geopandas-find-nearest-point-in-other-dataframe
