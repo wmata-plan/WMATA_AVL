@@ -3,7 +3,6 @@
 Created on Thu Apr  2 12:35:10 2020
 
 """
-
 #0.0 Housekeeping. Clear variable space
 from IPython import get_ipython  #run magic commands
 ipython = get_ipython()
@@ -117,33 +116,21 @@ for key, datadict in RouteRawTagDict.items():
     RawnavDataDict[key] = Temp['rawnavdata']
     SummaryDataDict[key] = Temp['SummaryData']
 RouteRawTagDict = None
-# TODO: Need to write processed data to database, HDF5, Feather, or parquet format.
-    
-# %%timeit -n 100
-# FinSummaryDat = pd.DataFrame()
-# for keys,data in SummaryDataDict.items():
-#     FinSummaryDat = pd.concat([FinSummaryDat, data])    
-# #Run Time: 57.1 ms ± 2.73 ms per loop (mean ± std. dev. of 7 runs, 100 loops each)
 
-# %%timeit -n 100
-# FinSummaryDat = pd.DataFrame()
-# for keys,data in SummaryDataDict.items():
-#     FinSummaryDat = FinSummaryDat.append(data)  
-# #Run Time: 56.6 ms ± 2.94 ms per loop (mean ± std. dev. of 7 runs, 100 loops each)    
-    
-#%%timeit -n 100
+# 5 Output
+########################################################################################
 FinSummaryDat = pd.DataFrame()
 FinSummaryDat = pd.concat(SummaryDataDict.values()) # 
 #Run Time: 14.7 ms ± 142 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
-    
-    
 #Output Summary Files
 OutFiSum = os.path.join(path_processed_data,'TripSummaries.csv')
 FinSummaryDat.to_csv(OutFiSum)
 
-# 5 Output
-########################################################################################
+########################
 FinDat = wr.subset_rawnav_trip1(RawnavDataDict, rawnav_inventory_filtered, AnalysisRoutes)
+#Check for duplicate IndexLoc
+assert(FinDat.groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
+
 temp = FinSummaryDat[['filename','IndexTripStartInCleanData','wday','StartDateTime']]
 FinDat = FinDat.merge(temp, on = ['filename','IndexTripStartInCleanData'],how='left')
 FinDat = FinDat.assign(Lat = lambda x: x.Lat.astype('float'),
@@ -162,12 +149,13 @@ try:
 except OSError as e:  ## if failed, report it back to the user ##
     print ("Error: %s - %s." % (e.filename, e.strerror))
 #Remove data from RemFolder before writing
-pq.write_to_dataset(table_from_pandas,root_path =os.path.join(path_processed_data,"Route79_Partition.parquet"))
+# pq.write_to_dataset(table_from_pandas,root_path =os.path.join(path_processed_data,"Route79_Partition.parquet"))
+pq.write_to_dataset(table_from_pandas,root_path =os.path.join(path_processed_data,"Route79_Partition.parquet"),\
+partition_cols=['wday','route'])
 
 
-
-
-
+FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet"),\
+filters =[('wday','=',"Monday"),('route','=',"79")]).to_pandas()
 
 
 
