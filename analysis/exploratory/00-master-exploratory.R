@@ -21,6 +21,8 @@ suppressPackageStartupMessages({
   library(scales)
   library(patchwork)
   library(stplanr)
+  library(dtplyr)
+  library(leaflet.extras)
 })
 
 
