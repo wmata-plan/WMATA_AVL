@@ -149,7 +149,7 @@ def clean_rawnav_data(DataDict, filename):
         infopat ='^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
         assert((~CheckTagLineData.taglist.str.match(infopat, re.S)).sum()==0)
     except:
-        logging.error("TagLists Did not match")
+        print("TagLists Did not match")
     #Keep index references. Will use later
     rawnavdata.reset_index(inplace=True); rawnavdata.rename(columns = {"index":"IndexLoc"},inplace=True)
     #Get End of route Info
@@ -159,8 +159,8 @@ def clean_rawnav_data(DataDict, filename):
     rawnavdata, APCTagLoc = RemoveAPC_CAL_Tags(rawnavdata)
     CheckDat = rawnavdata[~rawnavdata.apply(CheckValidDataEntry,axis=1)]
     #Remove the other remaining tags. 
-    Pat = re.compile('^\s*/\s*((\d{2}:\d{2}:\d{2})\s*(?:Buswares.*SHUTDOWN|bwrawnav)|collection stopped.*)',re.S|re.I) 
-    assert(sum(~(CheckDat[0].str.match(Pat)))==0) ,"Did not handle some additional lines in CheckDat"
+    Pat = re.compile('.*/\s*(((\d{2}:\d{2}:\d{2})\s*(Buswares.*SHUTDOWN|bwrawnav collection.*))|collection stopped.*)',re.S|re.I) 
+    assert(sum(~(CheckDat[0].str.match(Pat)))==0), print(f"Did not handle some additional lines in CheckDat. Check file {filename}")
     rawnavdata = rawnavdata[rawnavdata.apply(CheckValidDataEntry,axis=1)]
     #Add the APC tag to the rawnav data to identify stops
     APClocDat = pd.Series(APCTagLoc,name='APCTagLoc')
