@@ -201,7 +201,7 @@ def subset_rawnav_trip1(RawnavDataDict_, rawnav_inventory_filtered_, AnalysisRou
     '''
     FinDat = pd.DataFrame()
     SearchDF = rawnav_inventory_filtered_[['route','filename']].set_index('route')
-    RouteFiles = (SearchDF.loc[AnalysisRoutes_,:].values).flatten()
+    RouteFiles = np.unique((SearchDF.loc[AnalysisRoutes_,:].values).flatten())
     FinDat = pd.concat([RawnavDataDict_[file] for file in RouteFiles])
     FinDat.reset_index(drop=True,inplace=True)
     FinDat = FinDat.query("route in @AnalysisRoutes_")
