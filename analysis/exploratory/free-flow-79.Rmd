@@ -181,11 +181,18 @@ df <-
 rawnav_inventory_filtered_79_ourdata %>%
  count(tag_starthour, wday)
 
-  ggplot(df, aes(tag_starthour, wday)) + # x and y axes => Var1 and Var2
-  geom_tile(aes(fill = n)) + # background colours are mapped according to the value column
-  geom_text(aes(fill = n, label = round(df$n, 2))) 
-```
+make_heat <- function(dfin, val, text){
+  ggplot(dfin, aes(wday, tag_starthour)) + 
+    geom_tile(aes(fill = {{val}})) +
+    scale_fill_continuous(type = "viridis") +
+    geom_text(aes(label = {{text}}),
+              color = "grey80") +
+    scale_y_reverse()
+}
 
+make_heat(df,n,n)
+
+```
 
 
 By comparison, the distribution of all 79 southbound runs by day of week and hour for October 2019 is shown below.
@@ -194,12 +201,24 @@ df2 <-
 rawnav_inventory_filtered_79 %>%
  count(tag_starthour, wday)
 
-  ggplot(df2, aes(tag_starthour, wday)) + # x and y axes => Var1 and Var2
-  geom_tile(aes(fill = n)) + # background colours are mapped according to the value column
-  geom_text(aes(fill = n, label = round(n, 2))) 
+make_heat(df2,n,n)
+
 ```
 
+The percentage of trips captured in each day and hour are shown below.
 
+```{r}
+df3 <- 
+  df2 %>%
+  left_join(df, 
+            by = c("tag_starthour", "wday"),
+            suffix = c(".total",".sample")) %>%
+  mutate(percent = n.sample / n.total,
+         percent_fmt = scales::percent(percent, accuracy = 1)) %>%
+  drop_na(percent)
+
+make_heat(df3,percent,percent_fmt)
+```
 
 # Defining boundaries for our segment analyses
 
