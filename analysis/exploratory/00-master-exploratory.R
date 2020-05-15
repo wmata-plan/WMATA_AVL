@@ -23,6 +23,7 @@ suppressPackageStartupMessages({
   library(stplanr)
   library(dtplyr)
   library(leaflet.extras)
+  library(tibbletime)
 })
 
 
