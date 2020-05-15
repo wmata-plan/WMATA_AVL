@@ -29,19 +29,31 @@ IntersectionData1 = IntersectionData[['FULLINTERS','geometry']]
 RawnavData = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet")).to_pandas()
 RawnavData.drop(columns="__index_level_0__",inplace=True)
 FinSummaryDat = pd.read_excel(os.path.join(path_processed_data,'GTFSTripSummaries.xlsx'))
-
-FinSummaryDat = FinSummaryDat.query("CrowFlyDistLatLongMi>6 & route=='79'")
+file= 'rawnav02806191007.txt'
+IndxStLoc ="6227"
+FinSummaryDat = FinSummaryDat.query("filename==@file & IndexTripStartInCleanData == @IndxStLoc")
 FinSummaryDat = FinSummaryDat.iloc[0,:]
-RawnavData1 = RawnavData.query('filename== @FinSummaryDat.filename & IndexTripStartInCleanData==@FinSummaryDat.IndexTripStartInCleanData')
-
+RawnavData1 = RawnavData.query("filename==@file & IndexTripStartInCleanData == @IndxStLoc")
 
 Temp = mergeIntersectionRawnav(IntersectionData1, RawnavData1)
-Temp1 = Temp.query('dist<40')
+Temp1 = Temp.query('dist<100')
 IntData = IntersectionData1
 Temp1.loc[:,'stop_sequence'] = 0
 Temp1.loc[:,'stop_name'] = 0
 Temp1.loc[:,'direction_id'] = 0
-Temp1.geometry
+Temp2 =Temp1.copy()
+IntersectionData.rename(columns= {'geometry':"geometryInt"},inplace=True)
+Temp2 = Temp2.merge(IntersectionData,on =['FULLINTERS'],how='left')
+Temp2 = Temp2[["FULLINTERS",'OBJECTID', 'MARID', 'INTERSECTI',
+       'STREET1ID', 'STREET2ID', 'ST1NAME', 'ST1TYPE', 'ST1QUAD', 'FULLSTREET',
+       'ST2NAME', 'ST2TYPE', 'ST2QUAD', 'FULLSTRE_1', 'REFX', 'REFY',
+       'NATIONALGR', 'STREET1SEG', 'STREET2SEG', 'NODEID', 'INTERSEC_1',
+       'SOURCE', 'LATITUDE', 'LONGITUDE', 'geometryInt']]
+Temp2= gpd.GeoDataFrame(Temp2, geometry = Temp2.geometryInt)
+Temp2.drop(columns="geometryInt",inplace=True)
+outPath = os.path.join(path_processed_data,"IntersectionRoute79")
+if not os.path.exists(outPath): os.makedirs(outPath)
+Temp2.to_file( filename= os.path.join(outPath,"IntersectionRoute79.shp"))
 
 SaveFile= f"test.html"
 wr.PlotRawnavTrajWithGTFS(RawnavData1, Temp1,path_processed_data,SaveFile)
