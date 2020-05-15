@@ -187,7 +187,8 @@ make_heat <- function(dfin, val, text){
     scale_fill_continuous(type = "viridis") +
     geom_text(aes(label = {{text}}),
               color = "grey80") +
-    scale_y_reverse()
+    scale_y_reverse() +
+    scale_y_continuous('hour',breaks = 4:21)
 }
 
 make_heat(df,n,n)
@@ -207,7 +208,7 @@ make_heat(df2,n,n)
 
 The percentage of trips captured in each day and hour are shown below.
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 df3 <- 
   df2 %>%
   left_join(df, 
@@ -238,7 +239,7 @@ intersections_7901 <-
 Let's look at [hte piney branch intersection](https://www.google.com/maps/place/Piney+Branch+Rd+NW+%26+Georgia+Ave+NW,+Washington,+DC+20011,+USA/@38.9651607,-77.0298217,15.44z/data=!4m5!3m4!1s0x89b7c889f9d2cced:0x2f64ed3efceac785!8m2!3d38.9674749!4d-77.0274863), as it doesn't have two queue jumps adjacent to each other. From Piney Branch in Yellow, it's about 395 feet to the previous intersection at Underwood, but the previous signalized intersection is much further back at Van Buren Street. All of the intersections shown between Piney Branch and next stop are signalized with the exception of the one immediately south of Piney Branch at Tuckerman St. 
 
 Note that map layers can be toggled on and off in left panel
-```{r message=FALSE, warning=FALSE, out.width=}
+```{r message=FALSE, warning=FALSE, out.width= '100%'}
 {mapview(intersections_7901, 
         zcol = "study") + 
     mapview(stops_7901, col.regions = "red", layer.name = "79 SB stops") +
@@ -378,7 +379,7 @@ rawnav79_piney_run_sum_1 <-
 
 ```
 
-We'll remove bus runs with potential data quality issues before calculating distributions. In particular, our segment is `r st_length(segment_piney)`; we'll filter out any cases where the distance traveled was significantly longer or shorter than this.
+We'll remove bus runs with potential data quality issues before calculating distributions. In particular, our segment is `r round(as.numeric(st_length(segment_piney)),2)` feet long; we'll filter out any cases where the distance traveled was significantly longer or shorter than this.
 ```{r}
 rawnav79_piney_run_sum_2 <-
   rawnav79_piney_run_sum_1 %>%
