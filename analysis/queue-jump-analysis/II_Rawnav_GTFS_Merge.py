@@ -56,20 +56,30 @@ else:
 
 # User-Defined Package
 import wmatarawnav as wr
+# Globals
+# Restrict number of zip files to parse to this number for testing.
+# For all cases, use None 
+restrict_n = None
+AnalysisRoutes = ['79']
+ZipParentFolderName = "October 2019 Rawnav"
 
 #5 Analyze Route ---Subset RawNav Data. 
 ########################################################################################
-FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet")).to_pandas()
-FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet")).to_pandas()
-FinDat.drop(columns="__index_level_0__",inplace=True)
+FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet"),\
+filters =[('wday','=',"Monday"),('route','=',"79")]).to_pandas()
 FinDat.route = FinDat.route.astype('str')
+FinDat.columns
 
-set(FinDat.IndexTripStartInCleanData.unique()) -set(FinSummaryDat.IndexTripStartInCleanData.unique())
+#Check for duplicate IndexLoc
+assert(FinDat.groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
+
 # 5.1 Summary Data
 ########################################################################################
 FinSummaryDat = pd.read_csv(os.path.join(path_processed_data,'TripSummaries.csv'))
 FinSummaryDat.IndexTripStartInCleanData = FinSummaryDat.IndexTripStartInCleanData.astype('int32')
 SumDat, SumDatStart, SumDatEnd = wr.subset_summary_data(FinSummaryDat, AnalysisRoutes)
+set(FinDat.IndexTripStartInCleanData.unique()) -set(FinSummaryDat.IndexTripStartInCleanData.unique())
+
 #6 Read the GTFS Data
 ########################################################################################
 GtfsData = wr.readGTFS(GTFS_Dir)
@@ -150,10 +160,14 @@ NearestRawnavOnGTFS_appxDir.rename(columns = {'IndexLoc':'ClosestIndexLocInRawna
 GroupsTemp =  NearestRawnavOnGTFS_appxDir.groupby(['filename','IndexTripStartInCleanData','route_id'])
 FinDat = FinDat.query("route=='79'")
 RawnavGrps = FinDat.groupby(['filename','IndexTripStartInCleanData','route'])
-Stop = False
+
+len(RawnavGrps.groups.keys())
+Stop = 100
+i = 0
 for name, RawNavGrp in RawnavGrps:
+    i+1
+    print(name)
     Pattern = RawNavGrp["pattern"].values[0]
-    Stop = False
     if name in GroupsTemp.groups:
         StopDat1 = GroupsTemp.get_group(name)   
     else: continue
@@ -161,7 +175,7 @@ for name, RawNavGrp in RawnavGrps:
     Hour = StopDat1.StartDateTime.values[0].split(" ")[1].split(":")[0]
     SaveFile= f"{wday}_{Hour}_{name[2]}_{Pattern}_{name[0]}_Row{int(name[1])}.html"
     wr.PlotRawnavTrajWithGTFS(RawNavGrp, StopDat1,path_processed_data,SaveFile)
-    if Stop: break
+    if i==Stop: break
 
 
 
