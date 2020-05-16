@@ -179,22 +179,6 @@ def clean_rawnav_data(DataDict, filename):
     returnDict = {'rawnavdata':rawnavdata,'SummaryData':SummaryData}
     return(returnDict)
      
-# TODO: Delete this function
-# def subset_rawnav_trip(CleanDataDict_, rawnav_inventory_filtered_, AnalysisRoutes_):
-#     '''
-#     Subset data for analysis routes
-#     '''
-#     FinDat = pd.DataFrame()
-#     SearchDF = rawnav_inventory_filtered_[['route','filename']].set_index('route')
-#     RouteFiles = (SearchDF.loc[AnalysisRoutes_,:].values).flatten()
-#     for file in RouteFiles:
-#         tempDf =CleanDataDict_[file]['rawnavdata']
-#         tempDf.loc[:,"filename"] = file
-#         FinDat = pd.concat([FinDat,tempDf])
-#     FinDat.reset_index(drop=True,inplace=True)
-#     FinDat = FinDat.query("route in @AnalysisRoutes_")
-#     return(FinDat)
-
 def subset_rawnav_trip1(RawnavDataDict_, rawnav_inventory_filtered_, AnalysisRoutes_):
     '''
     Subset data for analysis routes
