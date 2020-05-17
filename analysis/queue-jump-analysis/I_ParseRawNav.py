@@ -121,7 +121,25 @@ RouteRawTagDict = None
 ########################################################################################
 FinSummaryDat = pd.DataFrame()
 FinSummaryDat = pd.concat(SummaryDataDict.values()) # 
-#Run Time: 14.7 ms ± 142 µs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+FinSummaryDat.loc[:,"count1"]=FinSummaryDat.groupby(['filename','IndexTripStartInCleanData'])['IndexTripStartInCleanData'].transform('count')
+IssueDat = FinSummaryDat.query('count1>1')
+FinSummaryDat = FinSummaryDat[~FinSummaryDat.duplicated(['filename','IndexTripStartInCleanData'],keep='last')] 
+#These two keys should have given unique trips but there was an issue with one of the file. 
+#Look at IssueDat to get more information on this issue. Duplicates occur when two tags occur 
+# with no data in between thus both these tags would have the same IndexTripStartInCleanData. 
+#Check Line 3842 and Line 3848 of file "rawnav06435191012.txt" to see this issue:
+"""
+   7901,6435,10/11/19,09:15:22,44999,05280
+/ 09:15:22 Buswares is Shutting down WaitResult SHUTDOWN,00000
+/ 09:18:09 BWRawNav Collection Module was STARTED 10.1.0.172 DB=S1000081a_SBA
+cal,0,0
+cal,205403,653
+/ 09:18:46 Buswares is now using route zero 
+   7901,6435,10/11/19,09:18:47,44999,05280
+38.994298,-77.030058,312,C,S,000000,0003,09,   ,9,38.994298,-77.030058
+"""
+#We only need the 2nd Tag as that giver the correct info.
+
 #Output Summary Files
 OutFiSum = os.path.join(path_processed_data,'TripSummaries.csv')
 FinSummaryDat.to_csv(OutFiSum)
@@ -130,16 +148,16 @@ FinSummaryDat.to_csv(OutFiSum)
 FinDat = wr.subset_rawnav_trip1(RawnavDataDict, rawnav_inventory_filtered, AnalysisRoutes)
 #Check for duplicate IndexLoc
 assert(FinDat.groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
-
 temp = FinSummaryDat[['filename','IndexTripStartInCleanData','wday','StartDateTime']]
 FinDat = FinDat.merge(temp, on = ['filename','IndexTripStartInCleanData'],how='left')
 FinDat = FinDat.assign(Lat = lambda x: x.Lat.astype('float'),
                            Heading = lambda x: x.Heading.astype('float'),
                            IndexTripStartInCleanData =lambda x: x.IndexTripStartInCleanData.astype('int'),
                            IndexTripEndInCleanData =lambda x: x.IndexTripEndInCleanData.astype('int'))
-RawnavDataDict = None
+#RawnavDataDict = None
+assert(FinDat.groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
 table_from_pandas = pa.Table.from_pandas(FinDat)
-FinDat = None
+#FinDat = None
 ## Get input ##
 RemFolder = os.path.join(path_processed_data,"Route79_Partition.parquet")
 # OverwritePrevData= input(f"Do you want to overwrite previous data in {RemFolder} (Y/N)?")
@@ -154,8 +172,8 @@ pq.write_to_dataset(table_from_pandas,root_path =os.path.join(path_processed_dat
 partition_cols=['wday','route'])
 
 
-FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet"),\
-filters =[('wday','=',"Monday"),('route','=',"79")]).to_pandas()
+FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet")).to_pandas()
 
-
+#Check for duplicate IndexLoc
+assert(FinDat.groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
 
