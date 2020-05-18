@@ -123,7 +123,11 @@ FinSummaryDat = pd.DataFrame()
 FinSummaryDat = pd.concat(SummaryDataDict.values()) # 
 FinSummaryDat.loc[:,"count1"]=FinSummaryDat.groupby(['filename','IndexTripStartInCleanData'])['IndexTripStartInCleanData'].transform('count')
 IssueDat = FinSummaryDat.query('count1>1')
+#TODO: Test the follow approach
+IssueDat = FinSummaryDat.query('IndexTripStartInCleanData>IndexTripEnd')
 FinSummaryDat = FinSummaryDat[~FinSummaryDat.duplicated(['filename','IndexTripStartInCleanData'],keep='last')] 
+
+
 #These two keys should have given unique trips but there was an issue with one of the file. 
 #Look at IssueDat to get more information on this issue. Duplicates occur when two tags occur 
 # with no data in between thus both these tags would have the same IndexTripStartInCleanData. 
