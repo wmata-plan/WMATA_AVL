@@ -148,9 +148,12 @@ TempDat.loc[:,"TripCount"] = TempDat.groupby([TempDat.wday.astype(object),TempDa
 TempDat = TempDat.query("TripCount<=10")
 TempDat = TempDat[['UniqueId','TripCount']]
 FinDat4 = FinDat3.merge(TempDat, on = ['UniqueId'],how='right')
-test = FinDat3.head(100)
 
-FinDat3.groupby(['']).DoorState.value_counts()
+Check = FinDat3.groupby(['UniqueId','StopWindow']).agg(CountStopWin=("StopWindow","count")).reset_index()
+Check = Check.query("StopWindow in ['E04','E05','X-1']")
+Check = Check.query("StopWindow in ['X-1']")
+Check.CountStopWin.describe()
+
 
 fig3 = px.line(FinDat4, x = "TimeAdjustedSec", y = "OdomAdjustedFt",
                line_group='UniqueId' ,color ="HourIntevals",line_dash="wday",facet_col ="Weekend-Weekday"
