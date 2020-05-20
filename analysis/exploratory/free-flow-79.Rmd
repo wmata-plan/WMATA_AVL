@@ -184,7 +184,7 @@ files_pulled <-
   collect() 
 ```
 
-`r nrow(files_pulled)` distinct rawnav zip files are included in this dataset. Each rawnav zip file included will contain some 79 NB, 79SB, pull-in, pull-out, and records for some other routes that are on the same block as a 79 trip. We have filtered to 79 southbound runs, but hav not yet filtered this universe of runs to exclude ones that have AVL quality issues.
+`r nrow(files_pulled)` distinct rawnav zip files are included in this dataset. Each rawnav zip file included will contain some 79 NB, 79SB, pull-in, pull-out, and records for some other routes that are on the same block as a 79 trip. We have filtered to 79 southbound runs, but have not yet filtered this universe of runs to exclude ones that have AVL quality issues.
 
 ```{r}
 runs_pulled <-
@@ -195,7 +195,7 @@ runs_pulled <-
   collect()
 
 ```
-Around `r scales::comma(nrow(runs_pulled))` unique runs of the 79 southbound are included in this datset out of `r (total <- nrow(distinct(rawnav_inventory_filtered_79,filename,route_pattern, tag_date,tag_time, tag_busid)))` runs that are in the October 2019 data: close to `r scales::percent(nrow(runs_pulled) / total)`. We'll investigate what happened to that missing run at some point.
+Around `r scales::comma(nrow(runs_pulled))` unique runs of the 79 southbound are included in this datset out of `r total <- nrow(distinct(rawnav_inventory_filtered_79,filename,route_pattern, tag_date,tag_time, tag_busid)); scales::comma(total)` runs that are in the October 2019 data: close to `r scales::percent(nrow(runs_pulled) / total)`. We'll investigate what happened to that missing run at some point.
 
 The distribution of trips by time of day and day of week are shown below. Start hour is shown on the x axis, day of week on the y-axis, and the number of bus runs in the dataset in each cell.
 
@@ -223,7 +223,11 @@ make_heat <- function(dfin, val, text){
     scale_fill_continuous(type = "viridis") +
     geom_text(aes(label = {{text}}),
               color = "grey80") +
-    scale_y_reverse('hour',breaks = 4:21) 
+    scale_y_reverse('Trip Start Hour',breaks = 4:21) +
+    labs(x = "Day of Week") +
+    guides(fill = guide_legend(title="Count of Trips",
+                               reverse = TRUE)) + 
+    FITP_Theme
 }
 
 make_heat(df,n,n)
@@ -253,7 +257,9 @@ df3 <-
          percent_fmt = scales::percent(percent, accuracy = 1)) %>%
   drop_na(percent)
 
-make_heat(df3,percent,percent_fmt)
+make_heat(df3,percent,percent_fmt) +
+      guides(fill = guide_legend(title="Percent of Trips"))
+  
 ```
 
 # Defining boundaries for our segment analyses
@@ -443,7 +449,10 @@ We'll remove bus runs with potential data quality issues before calculating dist
 rawnav79_segs_run_sum_2 <-
   rawnav79_segs_run_sum_1 %>%
   filter((name == "piney" & (odo_seg_diff > (1919-200) & odo_seg_diff < (1919+200))) |
-           (name == "columbia_irving" & (odo_seg_diff >(2394-200) & odo_seg_diff < (2394+200))))
+           (name == "columbia_irving" & (odo_seg_diff >(2394-200) & odo_seg_diff < (2394+200)))) %>%
+  ungroup() %>%
+  mutate(name = case_when(name == "columbia_irving" ~ "Columbia Rd",
+                          name == "piney" ~ "Piney Branch Rd"))
 ```
 
 The distribution of trip speeds is shown below.
@@ -452,12 +461,13 @@ The distribution of trip speeds is shown below.
 ggplot(rawnav79_segs_run_sum_2) +
   geom_histogram(aes(x = mph)) +
   facet_grid(rows = vars(name)) +  
+  labs(x = "Average Segment Speed (mph)", y = "Count of Trips")
   FITP_Theme
 ```
 
-Notably, our universe of trips used for this sample analysis skews towards the PM Peak. While speeds are likely to be lower during this time of day, this is also the off-direction for peak hour travel. As a result, we can expect some speeds in the full sample to be both higher and lower than these. Moreover, there's also a school slow zone somewhat south of tge Piney Branch intersection, and perhaps buses are slowing down later on, especially during school hours that might overlap with many of the trips in this dataset: [See google maps link here](https://www.google.com/maps/@38.9647409,-77.0277021,3a,41.1y,217.38h,85.85t/data=!3m6!1e1!3m4!1sPbn3DM4vSlkDSPt9ZM-mqA!2e0!7i16384!8i8192). Near Girard south of Columbia Road, there is also a number of crosswalks.
+Notably, there's a school slow zone somewhat south the Piney Branch intersection, and perhaps buses are slowing down later on, especially during school hours that might overlap with many of the trips in this dataset: [See google maps link here](https://www.google.com/maps/@38.9647409,-77.0277021,3a,41.1y,217.38h,85.85t/data=!3m6!1e1!3m4!1sPbn3DM4vSlkDSPt9ZM-mqA!2e0!7i16384!8i8192). Near Girard south of Columbia Road, there is also a number of crosswalks.
 
-Using this dataset as a distribution, the range of free flow travel speeds is between 15 and 18 mph. By comparison, the posted speed in this segment Southbound is 30 mph prior to the Piney Branch intersection. This said, even the highest speed trip in this sample barely exceeds 20 mph.
+Using this dataset as a distribution, the range of free flow travel speeds is shown below. By comparison, the posted speed in these segments is 30 mph in the southbound direction.
 
 ```{r}
 rawnav79_segs_run_sum_2 %>%
