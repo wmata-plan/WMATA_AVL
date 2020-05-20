@@ -5,7 +5,6 @@
 #AUTHOR:        Wylie Timmerman (wtimmerman@foursquareitp.com)
 #*******************************************************************************
 
-
 # Packages ----------------------------------------------------------------
 
 suppressPackageStartupMessages({

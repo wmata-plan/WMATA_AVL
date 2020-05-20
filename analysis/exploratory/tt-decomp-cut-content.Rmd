@@ -1,0 +1,110 @@
+---
+title: "TStop2 cut Content"
+output: html_notebook
+---
+
+
+Rather than trying to move back the segment start for now, we'll use the existing start of the segment and go past the same amount (about 400 feet); in this way, we'll have a sort of V-shaped interval to look at.
+
+```{r}
+#note, accel/decel stuff abbreviated ad
+segment_piney_ad <- 
+  tribble(~source,~lat, ~lon,
+         "start", 38.968452,-77.027389,
+         "end" ,38.966541,-77.027580) %>%
+  st_as_sf(., 
+           coords = c("lon", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") %>%
+  st_transform(DCCRS)
+```
+
+First, we'll find the first and last points for each run on this shorter segment. a sample is shown below
+```{r}
+
+rawnav79_piney_marg_ad <-
+  rawnav79_piney_marg %>%
+  ungroup()%>%
+  #we didn't calculate this for the entire sample, so we have NAs for the first 5
+  #of each run within the segment
+  filter(!is.na(next_mph_window)) %>%
+  mutate(dist_to_start_ad = st_distance(geometry,
+                                        filter(segment_piney_ad,source == "start")),
+         dist_to_end_ad = st_distance(geometry,
+                                      filter(segment_piney_ad,source == "end"))) %>%
+  group_by(filename,IndexTripStartInCleanData) %>%
+  mutate(ad_start = dist_to_start_ad == min(dist_to_start_ad),
+         ad_end  = dist_to_end_ad == min(dist_to_end_ad),
+         ad_class = case_when(ad_start ~ "start",
+                              ad_end ~ "end")) %>%
+  filter(!is.na(ad_class)) %>%
+  #could have ties if rawnav not moving, so we take the first of each case
+  group_by(filename,IndexTripStartInCleanData,ad_class) %>%
+  filter(row_number() ==1) %>%
+  ungroup()
+
+#check start and end for each
+rawnav79_piney_marg_ad %>% 
+  count(filename,IndexTripStartInCleanData) %>% 
+  pull(n) %>%
+  {all(. == 2)} %>%
+  testthat::expect_true()
+
+rawnav79_piney_marg_ad %>% st_drop_geometry() %>% head(n=20)
+```
+
+Next we'll summarize these to get starting speed, expected runtime, actual runtime, and the difference -- Tstop2
+```{r}
+rawnav79_piney_marg_ad_sum <-
+  rawnav79_piney_marg_ad %>%
+  st_drop_geometry() %>%
+  select(filename, IndexTripStartInCleanData,OdomtFt, SecPastSt,next_mph,next_mph_window, ad_class) %>%
+  pivot_wider(names_from = ad_class, values_from = (OdomtFt:next_mph_window)) %>%
+  mutate(tt_actual = SecPastSt_end - SecPastSt_start,
+         odom_actual = OdomtFt_end - OdomtFt_start,
+         fps_actual = odom_actual / tt_actual,
+         mph_actual = (odom_actual / 5280) / (tt_actual / 3600),
+         #convert from next_mph_window_start
+         fps_nodelay = next_mph_window_start * (5280 / 3600),
+         tt_nodelay = odom_actual / fps_nodelay,
+         tstop2 = tt_actual - tt_nodelay)
+```
+
+So what's this get us? Some values are negative -- if we happen to get a slow speed at the start of the intersection, it's possible the bus later speeds up. 
+
+```{r}
+rawnav79_piney_marg_ad_sum %>%
+  ggplot(aes(x = tstop2)) + 
+  geom_histogram()
+```
+
+```{r}
+rawnav79_piney_marg_ad_sum$tstop2 %>% summary()
+```
+
+Let's look back at that chart, filtering only to cases with negative tstop2 delay.
+
+Indeed, it looks like these are cases that are nearly at a stop at the start of the segment, accelerate, and then decelerate to hit the stop before the QJ, then accelerate again.
+
+```{r, out.width='100%'}
+funcases <-
+  rawnav79_piney_marg_ad_sum %>%
+  filter(tstop2 <= 0) %>%
+  pull(busrun)
+
+
+plotdf <-
+  rawnav79_piney_marg %>%
+  filter(busrun %in% funcases) %>%
+  plotly::highlight_key(., ~busrun)
+    
+plot <-
+  ggplot(plotdf,
+         aes(x = OdomtFt_seg, y = next_mph_window, group = busrun)) + 
+  geom_line()
+
+gg <- ggplotly(plot, tooltip = "busrun")
+
+highlight( gg, on = "plotly_hover", off = "plotly_deselect", color = "red" )
+
+```
