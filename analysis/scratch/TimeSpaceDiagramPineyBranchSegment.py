@@ -75,7 +75,7 @@ ZipParentFolderName = "October 2019 Rawnav"
 ########################################################################################
 FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet")).to_pandas()
 FinDat.route = FinDat.route.astype('str')
-FinDat.columns
+FinDat.drop(columns = ["SatCnt",'Blank','LatRaw', 'LongRaw','__index_level_0__'],inplace=True)
 #Check for duplicate IndexLoc
 assert(FinDat.groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
 
@@ -95,7 +95,8 @@ FinSummaryDat_79_01 = FinSummaryDat_79_01[['filename','IndexTripStartInCleanData
 FinDat2 = FinSummaryDat_79_01.merge(FinDat,on= ['filename','IndexTripStartInCleanData'],how='left')
 # 2 Get filter trajectory
 ########################################################################################
-PineyBranchData = pd.DataFrame({"Pineylat":[38.968452,38.963196],"Pineylong":[-77.027389,-77.027872],"pos":["start","end"]})
+#38.968452-77.027389 : old loc
+PineyBranchData = pd.DataFrame({"Pineylat":[38.969564, 38.962932],"Pineylong":[-77.027332,-77.027878],"pos":["start","end"]})
 geometryPoints = [Point(xy) for xy in zip(FinDat2.Long.astype(float), FinDat2.Lat.astype(float))]    
 geometryPiney = [Point(xy) for xy in zip(PineyBranchData.Pineylong.astype(float), PineyBranchData.Pineylat.astype(float))]
 FinDat2 =gpd.GeoDataFrame(FinDat2, geometry=geometryPoints,crs={'init':'epsg:4326'})
@@ -119,7 +120,7 @@ FilterDat1End = FilterDat1.query('pos=="end"')[['filename', 'IndexTripStartInCle
 FilterDat2 = FilterDat1St.merge(FilterDat1End,on =['filename', 'IndexTripStartInCleanData'],how='left')
 FinDat3 = FilterDat2.merge( FinDat2, on=['filename', 'IndexTripStartInCleanData'],how='left')
 FinDat3 = FinDat3.query('IndexLocFilterLower<=IndexLoc<=IndexLocFilterUpper')
-
+FinDat3.SubtractOdom.describe()
 #Check if the merging is correct
 FinDat3.groupby(['filename', 'IndexTripStartInCleanData']).\
     agg({'IndexLoc':['min','max'],'IndexLocFilterLower':'mean',
@@ -128,19 +129,58 @@ FinDat3.groupby(['filename', 'IndexTripStartInCleanData']).\
 
 FinDat3.loc[:,'hour'] = FinDat3.StartDateTime.dt.hour
 HourInterval = pd.IntervalIndex.from_tuples([(0, 5), (6, 10), (11, 13),
-                                     (14,16),(17,19),(20,24)],closed= "both")
+                                     (14,16),(17,19),(20,24)],closed= "left")
 FinDat3.loc[:,"HourIntevals"] = pd.cut(FinDat3.hour,HourInterval)
 FinDat3.loc[:,'Weekend-Weekday'] = FinDat3.wday.apply(lambda x: "weekend" if x in ['Saturday','Sunday'] else "weekday")
 FinDat3 = FinDat3.eval("OdomAdjustedFt=OdomtFt-SubtractOdom")
 FinDat3 = FinDat3.eval("TimeAdjustedSec=SecPastSt-SubtractSec")
 FinDat3.loc[:,"UniqueId"] = FinDat3.filename+FinDat3.IndexTripStartInCleanData.astype(str)
+FinDat3.wday = pd.Categorical(FinDat3.wday, ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'])
+FinDat3.sort_values(by =["wday","HourIntevals",'UniqueId','TimeAdjustedSec'],inplace=True)
+FinDat3.reset_index(drop=True,inplace=True)
+Check= FinDat3.groupby(['UniqueId'])['OdomAdjustedFt','TimeAdjustedSec'].max()
+Check.query("OdomAdjustedFt<4000").OdomAdjustedFt.describe()
+Check = FinDat3[FinDat3.UniqueId=="rawnav06457191006.txt944"]
+TempDat = FinDat3.groupby([FinDat3.wday.astype(object),FinDat3.HourIntevals.astype(object),
+                           'UniqueId'])['TimeAdjustedSec'].first().reset_index().drop("TimeAdjustedSec",axis=1).reset_index()
+
+TempDat.loc[:,"TripCount"] = TempDat.groupby([TempDat.wday.astype(object),TempDat.HourIntevals.astype(object)]).cumcount()
+TempDat = TempDat.query("TripCount<=10")
+TempDat = TempDat[['UniqueId','TripCount']]
+FinDat4 = FinDat3.merge(TempDat, on = ['UniqueId'],how='right')
 test = FinDat3.head(100)
-fig3 = px.line(FinDat3, x = "TimeAdjustedSec", y = "OdomAdjustedFt",
+
+FinDat3.groupby(['']).DoorState.value_counts()
+
+fig3 = px.line(FinDat4, x = "TimeAdjustedSec", y = "OdomAdjustedFt",
                line_group='UniqueId' ,color ="HourIntevals",line_dash="wday",facet_col ="Weekend-Weekday"
                ,template="plotly_white"
-               , title = "SpaceTimeDia")
+               , title = "Space-Time Diagram",
+               labels = {"TimeAdjustedSec":"Time (sec)","OdomAdjustedFt":"Distance (ft)","wday":"Day of the Week"
+                         ,"HourIntevals":"Hour Interval"})
 fig3.update_layout(showlegend=True)
-plot(fig3, filename=os.path.join(path_processed_data,"SpaceTimeDia.html"),auto_open=True)
+
+fig3.update_layout( shapes= [
+    #1st highlight during Feb 3rd to 4th (1st Sat Sun)
+    go.layout.Shape(
+    type = 'rect',
+    xref='paper',
+    yref ='y',
+    x0= 0,
+    y0 = 610,
+    x1 = 1,
+    y1= 750,
+    fillcolor = "LightSalmon",
+    opacity = 0.3,
+    layer = "below",
+    line_width = 0)])
+    
+plot(fig3, filename=os.path.join(path_processed_data,"Space-Time Diagram.html"),auto_open=True)
+
+
+FinSummaryDat.loc[:,"tempHour"] = pd.to_datetime(FinSummaryDat.StartDateTime).dt.hour
+FinSumDat_5am = FinSummaryDat.query('tempHour==5 & route=="79" & pattern==1')
+FinSumDat_5am.to_excel(os.path.join(path_processed_data,"Check79_5amStartTrips.xlsx"))
 
 def mergePineySegRawnav(PineyBranchData, rawnavDat):
     gdB = rawnavDat
