@@ -133,3 +133,4 @@ dmypy.json
 !data/readme.txt
 !docs/readme.txt
 !requirements.txt
+!data/00-raw/demo_data/*
