@@ -1,0 +1,115 @@
+---
+title: "WMATA Queue Jump Effectiveness: Quick Visualizations"
+output: 
+  html_notebook:
+    toc: true
+    toc_depth: 5
+    toc_float: yes
+    df_print: paged
+    number_sections: false
+    theme: simplex
+---
+
+#### Summary
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#Load libraries and basic params in separate script
+source("00-master-exploratory.R", local = TRUE)
+source("01-readin-exploratory.R", local = TRUE)
+
+#Additional libraries
+library(extrafont)
+library(scales)
+library(patchwork)
+#First run only
+# extrafont::font_import()
+# extrafont::loadfonts(device="win")
+
+#Some parameters 
+#Suppress internal viewer for mapview (TRUE during writing, use FALSE on knitting)
+viewersupp <- FALSE
+
+#Used for replacing geometry
+
+knitr::opts_chunk$set(
+  cache = FALSE,
+  highlight = TRUE,
+  collapse = TRUE
+)
+
+rawnav <-
+  rawnav_interim 
+
+s9_stops <- 
+  get_route_stops(gtfs_obj,stops,"S9") 
+
+s9_nb_ss_stops <-
+  s9_stops %>%
+  filter(trip_headsign == "SILVER SPRING STATION", shape_id == "2928")
+
+s9_nb_ss_stops %>%
+  st_drop_geometry()
+```
+
+
+#### 1. GPS Accuracy and Heading
+GPS pings appear to show movement in and out of curb lanes. For example, at the 16th Street and U St NW intersection in the northbound direction, a one bus run's worth of rawnav GPS records appear to show the bus pulling aside to enter the bus zone. For reference, [Google street view of this location is available here](https://www.google.com/maps/@38.9167036,-77.0365272,3a,75y,49.33h,76.11t/data=!3m6!1e1!3m4!1sYahUtvXy7LQjhGNjKtJkWg!2e0!7i16384!8i8192).
+
+Note that because of map tile layer limitations, you cannot zoom in any further on this map. To see points more clearly, try toggling to a different base map. This stop indeed recorded a door open and close at the point where speeds are lowest in the map below.
+
+```{r}
+{rawnav %>%
+    filter(id == 48942 &
+           (gps_reading_secs_past_midnight >= 26307 |
+             gps_reading_secs_past_midnight < 26365)) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mapview(.,
+          zcol = "mph",
+          layer.name = "Speed (mph)",
+          map.types = c("Esri.WorldImagery","CartoDB.Positron"))}@map %>%
+  setView( #zoom on 16th and U
+    lng = -77.0363,
+    lat = 38.9169,
+    zoom = 18
+  )
+```
+
+
+```{r}
+{rawnav %>%
+    filter(id == 48942 &
+           (gps_reading_secs_past_midnight >= 26307 |
+             gps_reading_secs_past_midnight < 26365)) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mutate(door_state = if_else(door_state == "C","Closed","Open")) %>%
+  mapview(.,
+          zcol = "door_state",
+          layer.name = "Door State",
+          map.types = c("Esri.WorldImagery","CartoDB.Positron"))}@map %>%
+  setView( #zoom on 16th and U
+    lng = -77.0363,
+    lat = 38.9169,
+    zoom = 18
+  )
+```
+
+
+```{r}
+{rawnav %>%
+    filter(id == 48942 &
+           (gps_reading_secs_past_midnight >= 26307 |
+             gps_reading_secs_past_midnight < 26365)) %>% #this is an S9 NB
+  arrange(door_state) %>%
+  mapview(.,
+          zcol = "heading_deg",
+          layer.name = "Heading",
+          map.types = c("Esri.WorldImagery","CartoDB.Positron"))}@map %>%
+  setView( #zoom on 16th and U
+    lng = -77.0363,
+    lat = 38.9169,
+    zoom = 18
+  )
+```
+
+
