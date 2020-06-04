@@ -54,7 +54,7 @@ else:
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
 restrict_n = None
-AnalysisRoutes = ['79']
+AnalysisRoutes = ['79','H4','X9','X2','S9','70']
 ZipParentFolderName = "October 2019 Rawnav"
 # Assumes directory structure:
 # ZipParentFolderName (e.g, October 2019 Rawnav)
@@ -99,7 +99,8 @@ for index, row in rawnav_inv_filt_first.iterrows():
     tagInfo_LineNo.loc[:,"NewLineNo"] = tagInfo_LineNo.line_num - Refrence-1
     # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
     temp = wr.load_rawnav_data(ZipFolderPath = row['fullpath'], skiprows = row['line_num'])
-    RouteRawTagDict[row['filename']] = {'RawData':temp,'tagLineInfo':tagInfo_LineNo}
+    if type(temp)!= type(None):
+        RouteRawTagDict[row['filename']] = {'RawData':temp,'tagLineInfo':tagInfo_LineNo}
     
 # 4 Clean RawNav Data
 ###########################################################################################################################################################

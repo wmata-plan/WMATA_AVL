@@ -5,13 +5,12 @@ Created on Thu Mar 26 10:09:45 2020
 Purpose: Functions for processing rawnav data
 """
 
-import zipfile,re,numpy as np, pandas as pd\
-    ,folium, io, os, shutil, glob
+import zipfile,re,numpy as np, pandas as pd, io, os, shutil, glob
 import pandasql as ps
 from zipfile import BadZipfile
 import geopandas as gpd
 from shapely.geometry import Point
-
+from pandas.io.parsers import ParserError
 #Parent Functions
 #################################################################################################################
 # GetZippedFilesFromZipDir
@@ -112,6 +111,10 @@ def load_rawnav_data(ZipFolderPath, skiprows):
         Path to the zipped rawnav.txt file..
     skiprows : int
         Number of rows with metadata.
+    Raises
+    ------
+    ParserError
+        More number of , in a file. pandas has issue with tokenizing data.   
     Returns
     -------
     pd.DataFrame with the file info.
@@ -120,7 +123,13 @@ def load_rawnav_data(ZipFolderPath, skiprows):
     # Get Filename
     namepat = re.compile('(rawnav\d+\.txt)') 
     ZipFileName = namepat.search(ZipFolderPath).group(1)     
-    RawData = pd.read_csv(zf.open(ZipFileName),skiprows = skiprows, header =None)
+    try:
+        RawData = pd.read_csv(zf.open(ZipFileName),skiprows = skiprows, header =None)
+    except ParserError as parseerr:
+        print("*"*100)
+        print(f"More number of ',' in a file {ZipFileName}. pandas has issue with tokenizing data. Error: {parseerr}")
+        print("*"*100)
+        RawData =None 
     return(RawData)
 #########################################################################################
 # clean_rawnav_data
@@ -553,4 +562,3 @@ def CheckValidDataEntry(row):
     except: ""
     return(IsValidEntry)
 #########################################################################################
-
