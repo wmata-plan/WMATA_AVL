@@ -1,22 +1,21 @@
 # -*- coding: utf-8 -*-
 """
+Create by: abibeka, wytimmerman
 Created on Thu Mar 26 10:09:45 2020
-Functions used in the AVL data analysis
-@author: abibeka
+Purpose: Functions for processing rawnav data
 """
 
-import zipfile,re,linecache,numpy as np, pandas as pd, datetime as dt\
-    ,folium, io, os, shutil, glob, logging
+import zipfile,re,numpy as np, pandas as pd\
+    ,folium, io, os, shutil, glob
 import pandasql as ps
-from itertools import islice
-#from folium.plugins import MarkerCluster
-from geopy.distance import geodesic # Can't vectorize
 from zipfile import BadZipfile
 import geopandas as gpd
 from shapely.geometry import Point
+
 #Parent Functions
 #################################################################################################################
-    
+# GetZippedFilesFromZipDir
+#########################################################################################
 def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent,globSearch = "*.zip"):
     '''
     Get the list of files to read from Zipped folder. Also Unzip the parent folder.
@@ -27,6 +26,12 @@ def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent,globSearch = "*.zip
     ZipDirList : List or str, 
         List of zipped directories with Rawnav data
         or a single zipped directory with Rawnav data.
+    ZippedFilesDirParent: str
+        Parent folder where list of zipped directories with Rawnav data is kept.
+        List of zipped directories with Rawnav data would be unzipped to this parent folder.
+    globSearch: str
+        Default value of "*.zip" will search for all .zip files. Can specify a pariticular file
+        name pattern for debugging. 
     Raises
     ------
     IOError
@@ -35,7 +40,6 @@ def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent,globSearch = "*.zip
     Returns
     -------
     List of Trip files (zipped) that need to be read.
-
     '''
     if isinstance(ZipDirList, list): 
         'do nothing'
@@ -52,10 +56,11 @@ def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent,globSearch = "*.zip
         listFiles = glob.glob(os.path.join(ZipDir1,globSearch))
         FileUniverse.extend(listFiles)
     return(FileUniverse)
-           
+#########################################################################################
+#find_rawnav_routes
+#########################################################################################           
 def find_rawnav_routes(FileUniverse, nmax = None, quiet = True): 
     '''   
-
     Parameters
     ----------
     FileUniverse : str
@@ -72,25 +77,20 @@ def find_rawnav_routes(FileUniverse, nmax = None, quiet = True):
     Returns
     -------
     ReturnDict.
-
     '''
     FileUniverseSet = FileUniverse[0:nmax]
-
     # Setup dataframe for iteration
     FileUniverseDF = pd.DataFrame({'fullpath' : FileUniverseSet})
     FileUniverseDF['filename'] = FileUniverseDF['fullpath'].str.extract('(rawnav\d+.txt)')
     FileUniverseDF['file_busid'] = FileUniverseDF['fullpath'].str.extract('rawnav(\d{5})\S+.txt')
     FileUniverseDF['file_id'] = FileUniverseDF['fullpath'].str.extract('rawnav(\d+).txt')
     FileUniverseDF['file_busid'] = pd.to_numeric(FileUniverseDF['file_busid'])
-    
     # Get Tags and Reformat
     FileUniverseDF['taglist'] = [FindAllTags(path, quiet = quiet) for path in FileUniverseDF['fullpath']]
     FileUniverseDF = FileUniverseDF.explode('taglist')
-    
     FileUniverseDF[['line_num','route_pattern','tag_busid','tag_date','tag_time','Unk1','CanBeMiFt']] = FileUniverseDF['taglist'].str.split(',', expand = True)
     FileUniverseDF[['route','pattern']] = FileUniverseDF['route_pattern'].str.extract('^(?:\s*)(?:(?!PO))(?:(?!PI))(?:(?!DH))(\S+)(\d{2})$')
     # Convert Column Types and Create new ones
-    # TODO: consider time period col; hour is probably fine though
     # Note that we leave line_num as text, as integer values don't support
     # NAs in Pandas
     FileUniverseDF['tag_busid'] = pd.to_numeric(FileUniverseDF['tag_busid'])
@@ -101,7 +101,9 @@ def find_rawnav_routes(FileUniverse, nmax = None, quiet = True):
     FileUniverseDF['tag_date'] = pd.to_datetime(FileUniverseDF['tag_date'], infer_datetime_format=True)
     FileUniverseDF['wday'] = FileUniverseDF['tag_date'].dt.day_name()
     return(FileUniverseDF)
-
+#########################################################################################
+# load_rawnav_data
+#########################################################################################
 def load_rawnav_data(ZipFolderPath, skiprows): 
     '''
     Parameters
@@ -110,11 +112,9 @@ def load_rawnav_data(ZipFolderPath, skiprows):
         Path to the zipped rawnav.txt file..
     skiprows : int
         Number of rows with metadata.
-
     Returns
     -------
     pd.DataFrame with the file info.
-
     '''
     zf = zipfile.ZipFile(ZipFolderPath)
     # Get Filename
@@ -122,19 +122,18 @@ def load_rawnav_data(ZipFolderPath, skiprows):
     ZipFileName = namepat.search(ZipFolderPath).group(1)     
     RawData = pd.read_csv(zf.open(ZipFileName),skiprows = skiprows, header =None)
     return(RawData)
-
-
+#########################################################################################
+# clean_rawnav_data
+#########################################################################################
 def clean_rawnav_data(DataDict, filename): 
     '''
     Parameters
     ----------
     DataDict : dict
         dict of raw data and the data on tag lines.
-
     Returns
     -------
     Cleaned data without any tags.
-
     '''    
     rawnavdata = DataDict['RawData']
     taglineData = DataDict['tagLineInfo']
@@ -178,10 +177,26 @@ def clean_rawnav_data(DataDict, filename):
     rawnavdata.loc[:,"filename"] = filename
     returnDict = {'rawnavdata':rawnavdata,'SummaryData':SummaryData}
     return(returnDict)
-     
-def subset_rawnav_trip1(RawnavDataDict_, rawnav_inventory_filtered_, AnalysisRoutes_):
+#########################################################################################
+# subset_rawnav_trip1
+#########################################################################################
+def subset_rawnav_trip(RawnavDataDict_, rawnav_inventory_filtered_, AnalysisRoutes_):
     '''
     Subset data for analysis routes
+    Parameters
+    ----------
+    RawnavDataDict_ : dict
+        Cleaned data without any tags. filename is the dictionary key.
+    rawnav_inventory_filtered_ : pd.DataFrame
+        DataFrame with file details to any file including at least one of our analysis routes 
+        Note that other non-analysis routes will be included here, but information about these routes
+        is currently necessary to split the rawnav file correctly.
+    AnalysisRoutes_ : list
+        list of routes that need to be subset.
+    Returns
+    -------
+    FinDat : pd.DataFrame
+        Concatenated data for an analysis route. 
     '''
     FinDat = pd.DataFrame()
     SearchDF = rawnav_inventory_filtered_[['route','filename']].set_index('route')
@@ -190,8 +205,26 @@ def subset_rawnav_trip1(RawnavDataDict_, rawnav_inventory_filtered_, AnalysisRou
     FinDat.reset_index(drop=True,inplace=True)
     FinDat = FinDat.query("route in @AnalysisRoutes_")
     return(FinDat)
-
+#########################################################################################
+# subset_summary_data
+#########################################################################################
 def subset_summary_data(FinSummaryDat_, AnalysisRoutes_):
+    '''
+    Parameters
+    ----------
+    FinSummaryDat_ : pd.DataFrame
+        Summary data that has columns on trip start and end lat-longs.
+    AnalysisRoutes_ : list
+        list of routes that need to be subset.
+    Returns
+    -------
+    SumData:pd.DataFrame
+        Subset of summary data with analysis routes only. 
+    SumData_StartGpd : gpd.GeoDataFrame
+            Subset of summary data with analysis routes only and start point used for geometry column. 
+    SumData_EndGpd : gpd.GeoDataFrame
+        Subset of summary data with analysis routes only and end point used for geometry column. 
+    '''
     SumData = FinSummaryDat_.query("route in @AnalysisRoutes_")
     SumData.reset_index(drop=True,inplace=True)
     tempDf = SumData[['filename','IndexTripStartInCleanData','LatStart', 'LongStart','route']]
@@ -202,8 +235,12 @@ def subset_summary_data(FinSummaryDat_, AnalysisRoutes_):
     geometryEnd = [Point(xy) for xy in zip(tempDf.LongEnd, tempDf.LatEnd)]
     SumData_EndGpd=gpd.GeoDataFrame(tempDf, geometry=geometryEnd,crs={'init':'epsg:4326'})
     return(SumData,SumData_StartGpd,SumData_EndGpd)
+#########################################################################################
+
 #Nested Functions
 #################################################################################################################
+# AddTripDividers
+#########################################################################################
 def AddTripDividers(data, SummaryData):
     '''
     Parameters
@@ -226,20 +263,21 @@ def AddTripDividers(data, SummaryData):
     '''
     data = ps.sqldf(q1, locals())
     return(data)    
-    
+#########################################################################################   
+# GetTripSummary
+#########################################################################################
 def GetTripSummary(data, taglineData):
     '''
-    
     Parameters
     ----------
     data : pd.DataFrame
         rawnav data without tags.
     taglineData : pd.DataFrame
         Tagline data.
-
     Returns
     -------
-    Summary data.
+    Summary data : pd.DataFrame
+        Data with trip level summary. 
     '''
     temp = taglineData[['IndexTripStart','IndexTripEnd']]
     temp = temp.astype('int32')
@@ -276,7 +314,22 @@ def GetTripSummary(data, taglineData):
                  "DistOdomMi", "SpeedOdomMPH", "SpeedTripTagMPH","CrowFlyDistLatLongMi"
                  ,"LatStart","LongStart","LatEnd","LongEnd"]]
     return(SummaryDat)
+#########################################################################################
+# RemoveAPC_CAL_Tags
+#########################################################################################
 def RemoveAPC_CAL_Tags(data):
+    '''
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Unclean data with tag information.
+    Returns
+    -------
+    data : pd.DataFrame
+        data without APC and CAL tags. 
+    APCTagLoc : np.array
+        Location of APC tags. Used to create a new column about bus door open status. 
+    '''
     #Remove all rows with "CAL" label
     MaskCal = data.loc[:,0].str.upper().str.strip() =="CAL"
     data = data[~MaskCal]
@@ -285,8 +338,26 @@ def RemoveAPC_CAL_Tags(data):
     APCTagLoc = np.array(data[MaskAPC].index)
     data = data[~MaskAPC]
     return(data, APCTagLoc)
-    
+#########################################################################################
+# AddEndRouteInfo
+#########################################################################################
 def AddEndRouteInfo(data, taglineData):
+    '''
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Unclean data with info on end of route.
+    taglineData : pd.DataFrame
+        Tagline data.
+    Returns
+    -------
+    taglineData : pd.DataFrame
+        Tagline data with trip end time adjusted based on
+        "Busware navigation reported end of route..." or
+        "Buswares is now using route zero" tags.
+    deleteIndices : np.array
+        indices to delete from raw data.
+    '''
     Pat = re.compile('^\s*/\s*(?P<TripEndTime>\d{2}:\d{2}:\d{2})\s*(?:Buswares navigation reported end of route|Buswares is now using route zero)',re.S) 
     data.loc[:,'TripEndTime']= data[0].str.extract(Pat)
     EndOfRoute = data[['IndexLoc','TripEndTime']]
@@ -305,11 +376,29 @@ def AddEndRouteInfo(data, taglineData):
         taglineData.loc[taglineData.index.max(), 'IndexTripEnd'] = max(data.IndexLoc)
     taglineData.rename(columns={'tag_time':"TripStartTime"},inplace=True)
     return(taglineData, deleteIndices)
-   
-        
-#https://github.com/geopy/geopy
-# Make this function Generic
+######################################################################################### 
+# GetDistanceLatLong_mi
+#########################################################################################
 def GetDistanceLatLong_mi(Data,Lat1,Long1,Lat2,Long2):
+    '''
+    Parameters
+    ----------
+    Data : pd.DataFrame
+        Any dataframe.
+    Lat1 : str
+        1st lat column.
+    Long1 : str
+        1st long column.
+    Lat2 : str
+        2nd lat column.
+    Long2 : str
+        2nd long column.
+    Returns
+    -------
+    DistanceMi: np.array
+        distances in mile between (Lat1,Long1) and (Lat2,Long2) columns in Data.
+        same size as number of rows in Data.
+    '''
     geometry1 = [Point(xy) for xy in zip(Data[Long1], Data[Lat1])]
     gdf=gpd.GeoDataFrame(geometry=geometry1,crs={'init':'epsg:4326'})
     gdf.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
@@ -319,8 +408,22 @@ def GetDistanceLatLong_mi(Data,Lat1,Long1,Lat2,Long2):
     #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
     DistanceMi = gdf.geometry.distance(gdf2) * 0.000621371 # meters to miles    
     return(DistanceMi.values)
-
+#########################################################################################
+# GetDistanceLatLong_ft_fromGeom
+#########################################################################################
 def GetDistanceLatLong_ft_fromGeom(geometry1, geometry2):
+    '''
+    Parameters
+    ----------
+    geometry1 : pd.series of shapely.geometry.point
+    geometry2 : pd.series of shapely.geometry.point
+        same size as geometry1
+    Returns
+    -------
+    DistanceFt: np.array
+    distances in feet between each points in geometry1 and geometry2.
+    same size as geometry1 or geometry2. 
+    '''
     gdf=gpd.GeoDataFrame(geometry=geometry1,crs={'init':'epsg:4326'})
     gdf.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
     gdf2=gpd.GeoDataFrame(geometry=geometry2,crs={'init':'epsg:4326'})
@@ -328,7 +431,9 @@ def GetDistanceLatLong_ft_fromGeom(geometry1, geometry2):
     #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
     DistanceFt = gdf.geometry.distance(gdf2) * 3.28084 # meters to feet    
     return(DistanceFt.values)
-
+#########################################################################################
+# FindAllTags
+#########################################################################################
 def FindAllTags(ZipFolderPath, quiet = True):
     '''
     Parameters
@@ -339,7 +444,6 @@ def FindAllTags(ZipFolderPath, quiet = True):
         Assumes that included text file has the same name as the zipped file,
         minus the '.zip' extension.
         Note: For absolute paths, use forward slashes.
-
     Returns
     -------
     TagLineElements
@@ -366,16 +470,12 @@ def FindAllTags(ZipFolderPath, quiet = True):
                     returnvals = str(TagLineNum) + "," + match.group()
                     TagLineElements.append(returnvals)
                 TagLineNum = TagLineNum + 1
-        # WT: Not sure if necessary, may help with separating later
-        # Python unnesting not as friendly as desired
         if len(TagLineElements) == 0:
              TagLineElements.append(',,,,,,')
     except BadZipfile as BadZipEr:
         print("*"*100)
         print(f"Issue with opening zipped file: {ZipFolderPath}. Error: {BadZipEr}")
         print("*"*100)
-        #TODO: Figure out how to use logger here. Logger not working within Spyder.
-        #AxB: Any suggestions? I was getting a BadZipFile when I tried processing 10,000 files
         TagLineElements = []
         TagLineElements.append(',,,,,,')
     except KeyError as keyerr:
@@ -385,7 +485,9 @@ def FindAllTags(ZipFolderPath, quiet = True):
         TagLineElements = []
         TagLineElements.append(',,,,,,')
     return(TagLineElements)
-        
+#########################################################################################
+# MoveEmptyIncorrectLabelFiles
+#########################################################################################   
 def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
     '''
     Parameters
@@ -396,11 +498,9 @@ def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
         Sending the file "File" to a directory in path_source_data.
     Issue : str, optional
         Type of issue with the file: missing/Empty. The default is 'EmptyFiles'.
-
     Returns
     -------
     None.
-
     '''
     # Copy empty files to another directory for checking.
     pat  = re.compile('.*(Vehicles\s*[0-9]*-[0-9]*)') 
@@ -415,9 +515,9 @@ def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
         print('Error Dir creation')
     shutil.copy(File,MoveDir)  #Will change it to "move" later
     return(None)
-
-
-
+#########################################################################################
+# is_numeric
+#########################################################################################
 def is_numeric(s):
     '''
     Check if Lat/Long is a String. Data has tags like APC : Automatic passenger count
@@ -428,8 +528,9 @@ def is_numeric(s):
         return True
     except(ValueError, TypeError):
         return False
-    
-
+#########################################################################################
+# CheckValidDataEntry
+#########################################################################################
 def CheckValidDataEntry(row):
     '''
     row: Pandas DataFrame Row
@@ -451,21 +552,5 @@ def CheckValidDataEntry(row):
             IsValidEntry = True
     except: ""
     return(IsValidEntry)
-
-
-def PlotTripStart_End(SumDat,StartGrp,EndGrp):
-    # mc_start = MarkerCluster(name='TripStart').add_to(this_map)
-    # mc_end = MarkerCluster(name='TripEnd').add_to(this_map)    
-    popup_field_list = list(SumDat.columns)     
-    for i,row in SumDat.iterrows():
-        label = '<br>'.join([field + ': ' + str(row[field]) for field in popup_field_list])
-        folium.Marker(
-                location=[row.StartLat, row.StartLong],
-                popup=folium.Popup(html = label,parse_html=False,max_width='150'),
-                icon=folium.Icon(color='darkblue', icon='ok-sign')).add_to(StartGrp)
-        folium.Marker(
-            location=[row.EndLat, row.EndLong],
-            popup=folium.Popup(html = label,parse_html=False,max_width='150'),
-            icon=folium.Icon(color='darkred', icon='ok-sign')).add_to(EndGrp)
-        
+#########################################################################################
 
