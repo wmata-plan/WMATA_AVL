@@ -12,9 +12,9 @@ import geopandas as gpd
 from shapely.geometry import Point
 from pandas.io.parsers import ParserError
 #Parent Functions
-#################################################################################################################
+###########################################################################################################################################################################################
 # GetZippedFilesFromZipDir
-#########################################################################################
+###################################################################################################################################
 def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent,globSearch = "*.zip"):
     '''
     Get the list of files to read from Zipped folder. Also Unzip the parent folder.
@@ -55,9 +55,10 @@ def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent,globSearch = "*.zip
         listFiles = glob.glob(os.path.join(ZipDir1,globSearch))
         FileUniverse.extend(listFiles)
     return(FileUniverse)
-#########################################################################################
+###################################################################################################################################
+
 #find_rawnav_routes
-#########################################################################################           
+###################################################################################################################################           
 def find_rawnav_routes(FileUniverse, nmax = None, quiet = True): 
     '''   
     Parameters
@@ -100,9 +101,10 @@ def find_rawnav_routes(FileUniverse, nmax = None, quiet = True):
     FileUniverseDF['tag_date'] = pd.to_datetime(FileUniverseDF['tag_date'], infer_datetime_format=True)
     FileUniverseDF['wday'] = FileUniverseDF['tag_date'].dt.day_name()
     return(FileUniverseDF)
-#########################################################################################
+###################################################################################################################################
+
 # load_rawnav_data
-#########################################################################################
+###################################################################################################################################
 def load_rawnav_data(ZipFolderPath, skiprows): 
     '''
     Parameters
@@ -131,9 +133,10 @@ def load_rawnav_data(ZipFolderPath, skiprows):
         print("*"*100)
         RawData =None 
     return(RawData)
-#########################################################################################
+###################################################################################################################################
+
 # clean_rawnav_data
-#########################################################################################
+###################################################################################################################################
 def clean_rawnav_data(DataDict, filename): 
     '''
     Parameters
@@ -150,14 +153,15 @@ def clean_rawnav_data(DataDict, filename):
     try:
         Temp = taglineData.NewLineNo.values.flatten()
         TagIndices= np.delete(Temp, np.where(Temp==-1))
-        CheckTagLineData = rawnavdata.loc[TagIndices,:]
-        CheckTagLineData[[1,4,5]] = CheckTagLineData[[1,4,5]].astype(int)
-        CheckTagLineData.loc[:,'taglist']=(CheckTagLineData[[0,1,2,3,4,5]].astype(str)+',').sum(axis=1).str.rsplit(",",1,expand=True)[0]
-        CheckTagLineData.loc[:,'taglist']= CheckTagLineData.loc[:,'taglist'].str.strip()
-        infopat ='^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
-        assert((~CheckTagLineData.taglist.str.match(infopat, re.S)).sum()==0)
+        if(len(TagIndices))!=0:
+            CheckTagLineData = rawnavdata.loc[TagIndices,:]
+            CheckTagLineData[[1,4,5]] = CheckTagLineData[[1,4,5]].astype(int)
+            CheckTagLineData.loc[:,'taglist']=(CheckTagLineData[[0,1,2,3,4,5]].astype(str)+',').sum(axis=1).str.rsplit(",",1,expand=True)[0]
+            CheckTagLineData.loc[:,'taglist']= CheckTagLineData.loc[:,'taglist'].str.strip()
+            infopat ='^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
+            assert((~CheckTagLineData.taglist.str.match(infopat, re.S)).sum()==0)
     except:
-        print("TagLists Did not match")
+        print(f"TagLists Did not match in file {filename}")
     #Keep index references. Will use later
     rawnavdata.reset_index(inplace=True); rawnavdata.rename(columns = {"index":"IndexLoc"},inplace=True)
     #Get End of route Info
@@ -165,10 +169,11 @@ def clean_rawnav_data(DataDict, filename):
     rawnavdata = rawnavdata[~rawnavdata.index.isin(np.append(TagIndices,deleteIndices1))]
     #Remove APC and CAL labels and keep APC locations. Can merge_asof later.
     rawnavdata, APCTagLoc = RemoveAPC_CAL_Tags(rawnavdata)
-    CheckDat = rawnavdata[~rawnavdata.apply(CheckValidDataEntry,axis=1)]
+    #CheckDat = rawnavdata[~rawnavdata.apply(CheckValidDataEntry,axis=1)]
     #Remove the other remaining tags. 
-    Pat = re.compile('.*/\s*(((\d{2}:\d{2}:\d{2})\s*(Buswares.*SHUTDOWN|bwrawnav collection.*))|collection stopped.*)',re.S|re.I) 
-    assert(sum(~(CheckDat[0].str.match(Pat)))==0), print(f"Did not handle some additional lines in CheckDat. Check file {filename}")
+    #Pat = re.compile('.*/\s*(((\d{2}:\d{2}:\d{2})\s*(Buswares.*SHUTDOWN|bwrawnav collection.*))|collection stopped.*)',re.S|re.I) 
+    #assert(sum(~(CheckDat[0].str.match(Pat)))==0), print(f"Did not handle some additional lines in CheckDat. Check file {filename}")
+    #Removing this assertion. Not able to handle unexpected data format.
     rawnavdata = rawnavdata[rawnavdata.apply(CheckValidDataEntry,axis=1)]
     #Add the APC tag to the rawnav data to identify stops
     APClocDat = pd.Series(APCTagLoc,name='APCTagLoc')
@@ -186,9 +191,10 @@ def clean_rawnav_data(DataDict, filename):
     rawnavdata.loc[:,"filename"] = filename
     returnDict = {'rawnavdata':rawnavdata,'SummaryData':SummaryData}
     return(returnDict)
-#########################################################################################
+###################################################################################################################################
+
 # subset_rawnav_trip1
-#########################################################################################
+###################################################################################################################################
 def subset_rawnav_trip(RawnavDataDict_, rawnav_inventory_filtered_, AnalysisRoutes_):
     '''
     Subset data for analysis routes
@@ -209,14 +215,18 @@ def subset_rawnav_trip(RawnavDataDict_, rawnav_inventory_filtered_, AnalysisRout
     '''
     FinDat = pd.DataFrame()
     SearchDF = rawnav_inventory_filtered_[['route','filename']].set_index('route')
-    RouteFiles = np.unique((SearchDF.loc[AnalysisRoutes_,:].values).flatten())
-    FinDat = pd.concat([RawnavDataDict_[file] for file in RouteFiles])
-    FinDat.reset_index(drop=True,inplace=True)
-    FinDat = FinDat.query("route in @AnalysisRoutes_")
+    try:
+        RouteFiles = np.unique((SearchDF.loc[AnalysisRoutes_,:].values).flatten())
+        FinDat = pd.concat([RawnavDataDict_[file] for file in RouteFiles])
+        FinDat.reset_index(drop=True,inplace=True)
+        FinDat = FinDat.query("route in @AnalysisRoutes_")
+    except KeyError as keyerr:
+        print('Route {AnalysisRoutes_} not found. Error. {keyerr}')
     return(FinDat)
-#########################################################################################
+###################################################################################################################################
+
 # subset_summary_data
-#########################################################################################
+###################################################################################################################################
 def subset_summary_data(FinSummaryDat_, AnalysisRoutes_):
     '''
     Parameters
@@ -244,12 +254,12 @@ def subset_summary_data(FinSummaryDat_, AnalysisRoutes_):
     geometryEnd = [Point(xy) for xy in zip(tempDf.LongEnd, tempDf.LatEnd)]
     SumData_EndGpd=gpd.GeoDataFrame(tempDf, geometry=geometryEnd,crs={'init':'epsg:4326'})
     return(SumData,SumData_StartGpd,SumData_EndGpd)
-#########################################################################################
+###################################################################################################################################
 
 #Nested Functions
-#################################################################################################################
+###########################################################################################################################################################################################
 # AddTripDividers
-#########################################################################################
+###################################################################################################################################
 def AddTripDividers(data, SummaryData):
     '''
     Parameters
@@ -272,9 +282,10 @@ def AddTripDividers(data, SummaryData):
     '''
     data = ps.sqldf(q1, locals())
     return(data)    
-#########################################################################################   
+###################################################################################################################################   
+
 # GetTripSummary
-#########################################################################################
+###################################################################################################################################
 def GetTripSummary(data, taglineData):
     '''
     Parameters
@@ -323,9 +334,10 @@ def GetTripSummary(data, taglineData):
                  "DistOdomMi", "SpeedOdomMPH", "SpeedTripTagMPH","CrowFlyDistLatLongMi"
                  ,"LatStart","LongStart","LatEnd","LongEnd"]]
     return(SummaryDat)
-#########################################################################################
+###################################################################################################################################
+
 # RemoveAPC_CAL_Tags
-#########################################################################################
+###################################################################################################################################
 def RemoveAPC_CAL_Tags(data):
     '''
     Parameters
@@ -347,9 +359,10 @@ def RemoveAPC_CAL_Tags(data):
     APCTagLoc = np.array(data[MaskAPC].index)
     data = data[~MaskAPC]
     return(data, APCTagLoc)
-#########################################################################################
+###################################################################################################################################
+
 # AddEndRouteInfo
-#########################################################################################
+###################################################################################################################################
 def AddEndRouteInfo(data, taglineData):
     '''
     Parameters
@@ -385,9 +398,10 @@ def AddEndRouteInfo(data, taglineData):
         taglineData.loc[taglineData.index.max(), 'IndexTripEnd'] = max(data.IndexLoc)
     taglineData.rename(columns={'tag_time':"TripStartTime"},inplace=True)
     return(taglineData, deleteIndices)
-######################################################################################### 
+################################################################################################################################### 
+
 # GetDistanceLatLong_mi
-#########################################################################################
+###################################################################################################################################
 def GetDistanceLatLong_mi(Data,Lat1,Long1,Lat2,Long2):
     '''
     Parameters
@@ -417,9 +431,10 @@ def GetDistanceLatLong_mi(Data,Lat1,Long1,Lat2,Long2):
     #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
     DistanceMi = gdf.geometry.distance(gdf2) * 0.000621371 # meters to miles    
     return(DistanceMi.values)
-#########################################################################################
+###################################################################################################################################
+
 # GetDistanceLatLong_ft_fromGeom
-#########################################################################################
+###################################################################################################################################
 def GetDistanceLatLong_ft_fromGeom(geometry1, geometry2):
     '''
     Parameters
@@ -440,9 +455,10 @@ def GetDistanceLatLong_ft_fromGeom(geometry1, geometry2):
     #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
     DistanceFt = gdf.geometry.distance(gdf2) * 3.28084 # meters to feet    
     return(DistanceFt.values)
-#########################################################################################
+###################################################################################################################################
+
 # FindAllTags
-#########################################################################################
+###################################################################################################################################
 def FindAllTags(ZipFolderPath, quiet = True):
     '''
     Parameters
@@ -494,9 +510,10 @@ def FindAllTags(ZipFolderPath, quiet = True):
         TagLineElements = []
         TagLineElements.append(',,,,,,')
     return(TagLineElements)
-#########################################################################################
+###################################################################################################################################
+
 # MoveEmptyIncorrectLabelFiles
-#########################################################################################   
+###################################################################################################################################   
 def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
     '''
     Parameters
@@ -524,9 +541,10 @@ def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
         print('Error Dir creation')
     shutil.copy(File,MoveDir)  #Will change it to "move" later
     return(None)
-#########################################################################################
+###################################################################################################################################
+
 # is_numeric
-#########################################################################################
+###################################################################################################################################
 def is_numeric(s):
     '''
     Check if Lat/Long is a String. Data has tags like APC : Automatic passenger count
@@ -537,9 +555,10 @@ def is_numeric(s):
         return True
     except(ValueError, TypeError):
         return False
-#########################################################################################
+###################################################################################################################################
+
 # CheckValidDataEntry
-#########################################################################################
+###################################################################################################################################
 def CheckValidDataEntry(row):
     '''
     row: Pandas DataFrame Row
@@ -561,4 +580,7 @@ def CheckValidDataEntry(row):
             IsValidEntry = True
     except: ""
     return(IsValidEntry)
-#########################################################################################
+###################################################################################################################################
+
+###################################################################################################################################
+###################################################################################################################################
