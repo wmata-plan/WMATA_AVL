@@ -1,0 +1,397 @@
+---
+title: "WMATA Queue Jump Effectiveness: TStop Speed Estimates"
+output: 
+  html_notebook:
+    toc: true
+    toc_depth: 2
+    toc_float: yes
+    df_print: paged
+    number_sections: false
+    theme: simplex
+---
+
+# Read In
+```{r include=FALSE}
+source("00-master-exploratory.R", local = TRUE)
+path_gtfs <-  file.path(datadir,
+                     "wmata-2019-05-18 dl20200205gtfs.zip")
+source("02-gtfsprep-exploratory.R", local = TRUE)
+rolling_mean <- tibbletime::rollify(~ mean(.,na.rm = TRUE), window = 3)
+```
+
+```{r message=FALSE, include=FALSE}
+# Rawnav from parser; partial export of 79 data
+rawnav79_raw <-
+  read_csv(
+    file = file.path(
+      sharepointpath,
+      "Client Shared Folder",
+      "data",
+      "01-interim",
+      "Route79_20200519.csv"
+    ),
+    col_types = cols(
+      X1 = col_double(),
+      IndexLoc = col_double(),
+      Lat = col_double(),
+      Long = col_double(),
+      Heading = col_double(),
+      DoorState = col_character(),
+      VehState = col_character(),
+      OdomtFt = col_double(),
+      SecPastSt = col_double(),
+      SatCnt = col_double(),
+      StopWindow = col_character(),
+      Blank = col_double(),
+      LatRaw = col_double(),
+      LongRaw = col_double(),
+      RowBeforeAPC = col_double(),
+      route_pattern = col_double(),
+      pattern = col_character(),
+      IndexTripStartInCleanData = col_double(),
+      IndexTripEndInCleanData = col_double(),
+      filename = col_character(),
+      StartDateTime = col_datetime(format = ""),
+      `__index_level_0__` = col_double(),
+      wday = col_character(),
+      route = col_double()
+    ))
+
+```
+
+We'll reuse a segment defined along Georgia Avenue near Piney Branch as before, and filter our rawnav data to points along this segment.
+```{r}
+segments <- 
+  tribble(~name, ~source,~lat, ~lon,
+          "piney",  "start", 38.968452,-77.027389,
+         "piney", "end" ,38.963196,-77.027872,
+         "columbia_irving", "start", 38.92984, -77.02337,
+         "columbia_irving", "end", 38.92331, -77.02242) %>%
+  st_as_sf(., 
+           coords = c("lon", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") %>%
+  group_by(name) %>%
+  summarize() %>%
+  st_cast("LINESTRING") %>%
+  st_transform(DCCRS)
+
+segments_buff <-
+  segments %>%
+  st_buffer(., dist = 50, endCapStyle = "FLAT")
+
+rawnav79 <-
+  rawnav79_raw %>%
+  lazy_dt() %>%
+  filter(route_pattern == "7901") %>% 
+  # note, i'm notsure this is a perfect way to group, seeing some potential
+  #issues
+  group_by(filename,IndexTripStartInCleanData) %>%
+  #sorting, since we've seen some issues
+  arrange(IndexLoc, .by_group = TRUE) %>%
+  mutate(busrun = paste0(filename,"-",IndexTripStartInCleanData)) %>%
+  mutate(hit_stop = str_extract(StopWindow,"E\\d*"),
+         wday = factor(wday,
+                       levels = c("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"),
+                       ordered = TRUE),
+         stop_segment = hit_stop) %>%
+  mutate(rowno = row_number()) %>%
+  #Some additional calcs we'll reuse later
+  #Coudl assume defaults are 0, but a bit cleaner to use NA and show we don't know
+  mutate(next_odo_feet_marginal = lead(OdomtFt, default = NA) - OdomtFt,
+         next_seconds_marginal = lead(SecPastSt, default = NA) - SecPastSt,
+         next_tot_seconds = lead(SecPastSt, default = NA),
+         next_mph = (next_odo_feet_marginal / 5280) / (next_seconds_marginal / 3600)) %>%
+  #note, will create some cases where last point has speed of previous, but that's okay for this quick look
+  collect() %>%
+  fill(stop_segment, .direction = "down") %>%
+  mutate(door_state_changes = data.table::rleid(DoorState))
+
+
+rawnav79_segs_1 <-
+  rawnav79 %>%
+  lazy_dt() %>%
+  #technically further than we need to go with E05, but being safe
+  filter(stop_segment %in% c("E03","E04","E08","E09")) %>%
+  ungroup() %>%
+  collect() %>%
+  st_as_sf(., 
+           coords = c("Long", "Lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") %>%
+  st_transform(DCCRS)
+
+rawnav79_segs <-
+  rawnav79_segs_1 %>%
+  st_intersection(segments_buff) %>%
+  group_by(name, filename,IndexTripStartInCleanData) %>%
+  arrange(IndexLoc, .by_group = TRUE) %>%
+  mutate(odo_feet_seg_min = min(OdomtFt),
+         OdomtFt_seg = OdomtFt - odo_feet_seg_min,
+         secs_seg_min = min(SecPastSt),
+         secs_seg = SecPastSt - SecPastSt)%>% #naming is hard
+  #require at least 5 observations
+  filter(any(max(row_number()) > 5))
+
+rm(rawnav79_segs_1)
+```
+
+
+# Estimating T-stop 1 
+
+We'll estimate from RawNav for each trip when a bus is stopped and doors are open. Per earlier analysis, door open time will be counted from the start of an observation with a 'door open' indicator until the doors closed. Cases with multiple door openings are discussed below.
+
+```{r}
+rawnav79_segs_marg <- 
+  rawnav79_segs %>%
+  group_by(name, filename,IndexTripStartInCleanData) %>%
+  # could be moved up into data cleaning step, but dtplyr not keen on ifelse
+  mutate(next_mph = ifelse(is.infinite(next_mph)|is.nan(next_mph),NA_real_,next_mph),
+         #capturing the average mph over last 5 observations; will use later
+         next_mph_window = rolling_mean(next_mph))
+```
+
+## Understanding the Data
+
+Interestingly, we find more cases where a real valued speed cannot be calculated because the odometer is incremented but the number of seconds elapsed is not. At least some of these cases appear to be immediately prior to reaching a stop window indicator, ala E01 or X-1; not all stop window indicators appear to have this characteristic, however.
+
+A selection of relevant columns and rows for one run along the Piney Branch segment is shown below.
+
+```{r message=FALSE}
+rawnav79_segs_marg %>%
+  st_drop_geometry() %>%
+  ungroup() %>%
+  filter(name == "piney") %>%
+  select(OdomtFt,SecPastSt,next_odo_feet_marginal, next_seconds_marginal, StopWindow,DoorState,next_mph) %>%
+  head(n = 60)
+```
+
+Sometimes the doors will open and shut quite a bit around a stop. We'll show one extreme case below:
+
+```{r}
+rawnav79_segs_marg %>%
+  st_drop_geometry() %>%
+  ungroup() %>%
+  filter(filename == "rawnav02626191022.txt",
+         IndexTripStartInCleanData == 12674,
+         name == "piney") %>%
+  filter(SecPastSt >= 1100) %>%
+  select(X1, DoorState,OdomtFt, SecPastSt,next_mph,door_state_changes) %>%
+  head(n=60)
+```
+
+We'll show approaches for calculating door open time, though we'll only use the first of these:
+
+1. Define dwell time as time of *first* door opening to the *first* time the door closes at the stop. In the example above, the door first opened at 1104 and first closed at 1109, so the total TStop1 time would be 5 seconds.
+2. Define dwell time as time of *first* door opening to the *last* time the door closes at the stop. In the example above, the timestamp following the last door open state was 1180, the total TStop1 time would be 76 seconds.
+
+Later, one could add a condition that we only take these door open times that coincide with the stop window to avoid outliers that may occur if the operator opens a door again later outside a stop segment. 
+
+```{r}
+rawnav79_segs_marg_doors_a1 <-
+  rawnav79_segs_marg %>%
+  st_drop_geometry() %>%
+  filter(DoorState == "O") %>%
+  group_by(name, filename, IndexTripStartInCleanData, DoorState) %>%
+  # THIS PART IS DIFFERENT 
+  filter(IndexLoc == min(IndexLoc)) %>%
+  summarize(OdomtFt_start = min(OdomtFt),
+            OdomtFt_end = max(OdomtFt),
+            SecPastSt_start = min(SecPastSt),
+            SecPastSt_end = max(SecPastSt),
+            #we earlier stole the time stamp of the next record
+            #this was we can see when the last door closing happened
+            #even after filtering to DoorState == "O"
+            SecPastSt_endnext = max(next_tot_seconds), 
+            door_state_changes_begin = min(door_state_changes),
+            door_state_changes_end = max(door_state_changes)) %>%
+  mutate(addl_door_state_changes = door_state_changes_end - door_state_changes_begin) %>%
+  mutate(OdomtFt_change = OdomtFt_end - OdomtFt_start) %>%
+  mutate(door_open_plus = SecPastSt_endnext - SecPastSt_start)
+
+#Second approach has suffix _a2 -- a little hacked together to demonstrate the 
+# two approaches
+rawnav79_segs_marg_doors_a2 <-
+  rawnav79_segs_marg %>%
+  st_drop_geometry() %>%
+  filter(DoorState == "O") %>%
+  group_by(name, filename, IndexTripStartInCleanData, DoorState) %>%
+  summarize(OdomtFt_start = min(OdomtFt),
+            OdomtFt_end = max(OdomtFt),
+            SecPastSt_start = min(SecPastSt),
+            SecPastSt_end = max(SecPastSt),
+            #we earlier stole the time stamp of the next record
+            #this was we can see when the last door closing happened
+            #even after filtering to DoorState == "O"
+            SecPastSt_endnext = max(next_tot_seconds), 
+            door_state_changes_begin = min(door_state_changes),
+            door_state_changes_end = max(door_state_changes)) %>%
+  mutate(addl_door_state_changes = door_state_changes_end - door_state_changes_begin) %>%
+  mutate(OdomtFt_change = OdomtFt_end - OdomtFt_start) %>%
+  mutate(door_open_plus = SecPastSt_endnext - SecPastSt_start)
+```
+
+
+## Confirming Calculation Methods
+
+Just checking, how much did buses move between their first door open and last in the segment?
+
+Using the first approach where door open is defined narrowly, not much.
+```{r}
+rawnav79_segs_marg_doors_a1 %>%
+  ungroup() %>%
+  ggplot(aes(x = OdomtFt_change)) +
+  geom_histogram()
+```
+Using the multiple door open approach, the distances are quite a bit longer -- these are cases where the operator might have opened the door along the segment but not at a stop. Some work could be done to more narrowly tailor the definition of when to count the 'last' door closure.
+```{r}
+rawnav79_segs_marg_doors_a2 %>%
+  ungroup() %>%
+  ggplot(aes(x = OdomtFt_change)) +
+  geom_histogram()
+```
+
+From here, we filter the outliers out (keep buses that moved less than 30 feet between door open and shut), simplify the table a bit further and visualize.
+```{r}
+rawnav79_segs_marg_doors_a1_sum <-
+  rawnav79_segs_marg_doors_a1 %>%
+  ungroup() %>%
+  filter(OdomtFt_change < 30) %>%
+  group_by(name, filename, IndexTripStartInCleanData) %>%
+  summarize(door_open_plus = sum(door_open_plus,na.rm = TRUE))
+
+rawnav79_segs_marg_doors_a2_sum <-
+  rawnav79_segs_marg_doors_a2 %>%
+  ungroup() %>%
+  filter(OdomtFt_change < 30) %>%
+  group_by(name, filename, IndexTripStartInCleanData) %>%
+  summarize(door_open_plus = sum(door_open_plus,na.rm = TRUE))
+```
+
+To check, let's confirm our earlier case was calculated as expected. We do see that the Piney Branch stop had 5 seconds of door open time. Notably, the doors were also open for more than three minutes at the Columbia Rd stop. This is the longest open door dwell time of any run for the stops and segments under study in this notebook.
+```{r}
+rawnav79_segs_marg_doors_a1_sum %>%
+  filter(filename == "rawnav02626191022.txt",
+         IndexTripStartInCleanData == 12674)
+```
+
+The dwell times at Piney Branch are much longer using the multiple door open aprpoach.
+```{r}
+rawnav79_segs_marg_doors_a2_sum %>%
+  filter(filename == "rawnav02626191022.txt",
+         IndexTripStartInCleanData == 12674)
+```
+
+## Decomposition Results
+
+Using the each method we see the following results:
+
+1. Using *first* door opening to *first* door close
+
+```{r}
+
+make_hist_tstop1 <- 
+  function(df, facet){
+    df %>%
+      #whoops
+      ungroup() %>%
+      mutate(name = case_when(name == "columbia_irving" ~ "Columbia Rd",
+                              name == "piney" ~ "Piney Branch Rd")) %>%
+      ggplot(aes(x = door_open_plus)) +
+      geom_histogram() + 
+      scale_x_continuous(breaks = seq(0, 100, by = 10),
+                         limits = c(0,100)) + 
+      labs(x = "Door Open Time", y = "Count of Trips") + 
+      facet_grid(rows = vars(name)) +  
+      FITP_Theme
+  }
+
+make_hist_tstop1(rawnav79_segs_marg_doors_a1_sum)
+```
+The distribution of values is shown below:
+```{r}
+rawnav79_segs_marg_doors_a1_sum %>%
+  group_by(name) %>%
+  summarize(distr = list(summary(door_open_plus))) %>%
+  unnest_wider(col = distr)
+```
+
+
+2. Using *first* door opening to *last* door close
+```{r}
+make_hist_tstop1(rawnav79_segs_marg_doors_a2_sum)
+```
+
+The distribution of values is shown below:
+```{r}
+rawnav79_segs_marg_doors_a2_sum %>%
+  group_by(name) %>%
+  summarize(distr = list(summary(door_open_plus))) %>%
+  unnest_wider(col = distr)
+```
+
+
+# Estimating T-stop 2
+
+For a quick approximation of the method, we'll define two points upstream and downstream of the intersection, see what points are closest, and then estimate TStop2 delay. Because record-to-record speeds in rawnav data may vary wildly, we'll use the average of speeds for the past 5 records to generate this speed. 
+
+First, we'll visualize speeds of routes along the segment at each distance. This will give us a sense of when buses begin to decelerate (if they haven't already), stop, and then accelerate again. 
+
+Only the first 300 trips at  Piney Branch are shown to improve the performance of the interactive chart.
+
+```{r}
+set.seed(1)
+
+sample_cases <-
+  rawnav79_segs_marg %>%
+  ungroup() %>%
+  st_drop_geometry() %>%
+  filter(name == "piney") %>%
+  # filter(filename == "rawnav02816191016.txt", IndexTripStartInCleanData == 8566)
+  distinct(name, filename,IndexTripStartInCleanData) %>%
+  sample_n(size = 400)
+
+plotdf <-
+  rawnav79_segs_marg %>%
+  semi_join(sample_cases,
+            by = c("name","IndexTripStartInCleanData", "filename")) %>%
+  plotly::highlight_key(., ~busrun)
+    
+plot <-
+  ggplot(plotdf,
+         aes(x = OdomtFt_seg, y = next_mph, group = busrun)) + 
+  geom_line(alpha = .1) + 
+  scale_x_continuous(labels = comma) +
+  labs(x = "Distance Traveled (ft) in Segment", y = "Speed (mph) over previous 5 observations")
+
+gg <- ggplotly(plot, tooltip = "busrun")
+
+highlight( gg, on = "plotly_hover", off = "plotly_deselect", color = "red" )
+```
+This is the same plot for all values, without interactivity
+```{r, out.width= '100%'}
+rawnav79_segs_marg %>%
+  filter(!(any(next_mph <0) | any(OdomtFt_seg > 2000))) %>%
+  ggplot(aes(x = OdomtFt_seg, y = next_mph, group = busrun)) + 
+  scale_x_continuous(labels = comma) +
+  geom_line(alpha = .1) +
+  labs(x = "Distance Traveled (ft) in Segment", y = "Speed (mph) over 3 observations") +
+  FITP_Theme
+```
+
+For a less jittery look at the overall picture, we'll use the values averaged over 5 records, and remove cases with excessive distances or speeds
+
+```{r, out.width= '100%'}
+rawnav79_segs_marg %>%
+  filter(!(any(next_mph <0) | any(OdomtFt_seg > 2000))) %>%
+  ggplot(aes(x = OdomtFt_seg, y = next_mph_window, group = busrun)) + 
+  scale_x_continuous(labels = comma) +
+  geom_line(alpha = .1) +
+  labs(x = "Distance Traveled (ft) in Segment", y = "Speed (mph) over 3 observations") +
+  FITP_Theme
+```
+
+We can see the distinct cases where buses slowed down significantly at signalized intersections further south. While no values here show speeds of zero, that is a reflection of averaging.
+
+It seems decel is already happening at the start of the segment. Pending further, we'll leave off further calculation of TStop2.
+

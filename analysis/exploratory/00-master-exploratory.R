@@ -5,7 +5,6 @@
 #AUTHOR:        Wylie Timmerman (wtimmerman@foursquareitp.com)
 #*******************************************************************************
 
-
 # Packages ----------------------------------------------------------------
 
 suppressPackageStartupMessages({
@@ -21,6 +20,9 @@ suppressPackageStartupMessages({
   library(scales)
   library(patchwork)
   library(stplanr)
+  library(dtplyr)
+  library(leaflet.extras)
+  library(tibbletime)
 })
 
 

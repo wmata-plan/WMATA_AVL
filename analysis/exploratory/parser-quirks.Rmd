@@ -1,0 +1,48 @@
+---
+title: "Parser quirks"
+output: html_notebook
+---
+
+Some rows are duplicated in the raw export, but aren't duplicated in the source data
+```{r}
+rawnav79_piney %>%
+  filter(OdomtFt == 9245,
+         SecPastSt == 458,
+         filename == "rawnav02626191029.txt") %>%
+  View()
+
+rawnav79_raw %>%
+  filter(OdomtFt == 9245,
+         SecPastSt == 458,
+         filename == "rawnav02626191029.txt") %>%
+  View()
+
+```
+check row 357 of original file
+
+Seems like some entries are still really tiny.
+did other rows get dropped, or is this just something with the export again?
+```{r}
+rawnav79_piney_marg_test <- 
+  rawnav79_piney %>%
+  group_by(filename,IndexTripStartInCleanData) %>%
+  mutate(next_mph = ifelse(is.infinite(next_mph),NA_real_,next_mph),
+         doublena = is.na(next_mph) & (is.na(lag(next_mph)) | is.na(lead(next_mph))))
+
+rawnav79_piney_marg_test %>%
+    filter(filename == "rawnav02682191023.txt",
+         IndexTripStartInCleanData == 6106) %>% 
+  View()
+```
+
+
+```{r}
+rawnav79_raw %>%
+  filter(filename == "rawnav02682191023.txt") %>%
+  View('fil big one')
+```
+
+```{r}
+
+```
+
