@@ -58,7 +58,8 @@ else:
 restrict_n = None
 #AnalysisRoutes = ['S9','70','79'] # Ran
 # AnalysisRoutes = ['S1','S2','S4','64'] # Ran
-AnalysisRoutes = ['G8','D32','H1','H2','H3','H4'] #Ran
+#AnalysisRoutes = ['G8','D32','H1','H2','H3','H4'] #Ran
+AnalysisRoutes = ['H8','W47'] #Ran
 #AnalysisRoutes = ['S1','S2','S4','S9','70','79','64','G8','D32','H1','H2','H3','H4','H8','W47'] # 16 Gb RAM can't handle all these at one go
 ZipParentFolderName = "October 2019 Rawnav"
 # Assumes directory structure:
