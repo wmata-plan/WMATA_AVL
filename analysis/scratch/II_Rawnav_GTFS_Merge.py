@@ -1,30 +1,32 @@
 # -*- coding: utf-8 -*-
 """
+Create by: abibeka, wytimmerman
+Purpose: Merge GTFS and Rawnav data
 Created on Fri May 15 15:36:49 2020
-
-@author: abibeka
 """
-
-#0.0 Housekeeping. Clear variable space
+# 0 Housekeeping. Clear variable space
+###########################################################################################################################################################
 from IPython import get_ipython  #run magic commands
 ipython = get_ipython()
 ipython.magic("reset -f")
 ipython = get_ipython()
 
-#1 Import Libraries
-########################################################################################
-import pandas as pd, os, numpy as np, pyproj, sys, zipfile, glob, logging
+# 1 Import Libraries and Set Global Parameters
+###########################################################################################################################################################
+# 1.1 Import Python Libraries
+############################################
 from datetime import datetime
-from geopy.distance import geodesic
-from collections import defaultdict
+begin_time = datetime.now() ##
+import pandas as pd, os, sys
+#from geopy.distance import geodesic
 from shapely.geometry import Point
-import pyarrow as pa
 import pyarrow.parquet as pq
-import geopandas as gpd
 if not sys.warnoptions:
     import warnings
-    warnings.simplefilter("ignore") #Too many Pandas warnings
-
+    warnings.simplefilter("ignore") #Stop Pandas warnings
+    
+# 1.2 Set Global Parameters
+############################################
 if os.getlogin() == "WylieTimmerman":
     # Working Paths
     path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL"
@@ -44,18 +46,15 @@ elif os.getlogin()=="abibeka":
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
     os.chdir(os.path.join(path_working))
     sys.path.append(path_working) 
-    
     # Source Data
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
     GTFS_Dir = os.path.join(path_source_data, "google_transit")   
     # Processed Data
-    path_processed_data = os.path.join(path_source_data,"ProcessedData")
+    path_processed_data = os.path.join(path_source_data,"ProcessedData\BackupData")
 else:
     raise FileNotFoundError("Define the path_working, path_source_data, GTFS_Dir, \
                             ZippedFilesloc, and path_processed_data in a new elif block")
 
-# User-Defined Package
-import wmatarawnav as wr
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
@@ -63,50 +62,52 @@ restrict_n = None
 AnalysisRoutes = ['79']
 ZipParentFolderName = "October 2019 Rawnav"
 
-#5 Analyze Route ---Subset RawNav Data. 
-########################################################################################
+# 1.3 Import User-Defined Package
+############################################
+import wmatarawnav as wr
+
+executionTime= str(datetime.now() - begin_time).split('.')[0]
+print(f"Run Time Section 1 Import Libraries and Set Global Parameters : {executionTime}")
+
+# 2 Analyze Route ---Subset RawNav Data. 
+###########################################################################################################################################################
+begin_time = datetime.now() ##
+# 2.1 Rawnav Data
+############################################
 FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet"),\
 filters =[('wday','=',"Monday"),('route','=',"79")]).to_pandas()
 FinDat.route = FinDat.route.astype('str')
-FinDat.columns
-
+FinDat.drop(columns=['Blank','LatRaw','LongRaw','SatCnt','__index_level_0__'],inplace=True)
 #Check for duplicate IndexLoc
 assert(FinDat.groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
 
-# 5.1 Summary Data
-########################################################################################
+# 2.2 Summary Data
+############################################
 FinSummaryDat = pd.read_csv(os.path.join(path_processed_data,'TripSummaries.csv'))
 FinSummaryDat.IndexTripStartInCleanData = FinSummaryDat.IndexTripStartInCleanData.astype('int32')
+Issues = FinSummaryDat.query('TripDurFromSec < 600 | DistOdomMi < 2') # Trip should be atleast 5 min and 2 mile long
+FinSummaryDat =FinSummaryDat .query('not (TripDurFromSec < 600 | DistOdomMi < 2)')
 SumDat, SumDatStart, SumDatEnd = wr.subset_summary_data(FinSummaryDat, AnalysisRoutes)
+Subset = SumDat[['filename','IndexTripStartInCleanData']]
+FinDat = FinDat.merge(Subset,on=['filename','IndexTripStartInCleanData'],how='right')
 set(FinDat.IndexTripStartInCleanData.unique()) -set(FinSummaryDat.IndexTripStartInCleanData.unique())
 
-#6 Read the GTFS Data
-########################################################################################
+executionTime= str(datetime.now() - begin_time).split('.')[0]
+print(f"Run Time Section 2 Analyze Route ---Subset RawNav Data : {executionTime}")
+
+# 3 Read, analyze and summarize GTFS Data
+###########################################################################################################################################################
+begin_time = datetime.now() ##
+# 3.1 Read the GTFS Data
+############################################
 GtfsData = wr.readGTFS(GTFS_Dir)
 FirstStopDat1_rte, CheckFirstStop, CheckFirstStop1 = wr.get1ststop(GtfsData,AnalysisRoutes)
 LastStopDat1_rte, CheckLastStop, CheckLastStop1 = wr.getlaststop(GtfsData,AnalysisRoutes)
 wr.debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckLastStop1,path_processed_data)
 
-#7 Analyze the Trip Start and End
-#TODO: The code from section 8 can handle this part. Need to rewrite this
-########################################################################################
-SumDatStart, SumDatEnd = wr.getNearestStartEnd(SumDatStart, SumDatEnd, FirstStopDat1_rte, LastStopDat1_rte, AnalysisRoutes)
-
-GeomNearest_start = FinDat.merge(SumDatStart,on =['filename','IndexTripStartInCleanData'],how='left')['nearest_start']
-GeomNearest_end = FinDat.merge(SumDatEnd,on =['filename','IndexTripStartInCleanData'],how='left')['nearest_end']
-geometryPoints = [Point(xy) for xy in zip(FinDat.Long.astype(float), FinDat.Lat.astype(float))]
-FinDat.loc[:,'distances_start_ft'] = wr.GetDistanceLatLong_ft_fromGeom(GeomNearest_start, geometryPoints)
-FinDat.loc[:,'distances_end_ft'] = wr.GetDistanceLatLong_ft_fromGeom(GeomNearest_end, geometryPoints)
-SumDatWithGTFS = wr.GetSummaryGTFSdata(FinDat,SumDat)
-SumDatWithGTFS.set_index(['fullpath','filename','file_id','wday','StartDateTime','EndDateTime','IndexTripStartInCleanData','taglist','route_pattern','route','pattern'],inplace=True,drop=True) 
-#8 Output Summary Files
-########################################################################################
-now = datetime.now()
-OutFiSum = os.path.join(path_processed_data,f'GTFSTripSummaries.xlsx')
-SumDatWithGTFS.to_excel(OutFiSum,merge_cells=False)
-
-#8 Merge all stops to rawnav data
-########################################################################################
+# 3.2 Merge all stops to rawnav data
+############################################
+# Get all stops on a bus route irrespective of short and long or direction. Will figure out the direction later.
 GtfsData_UniqueStops = GtfsData[~GtfsData.duplicated(['route_id','direction_id','stop_name'],keep='first')]
 NearestRawnavOnGTFS = wr.mergeStopsGTFSrawnav(GtfsData_UniqueStops, FinDat)
 NearestRawnavOnGTFS = NearestRawnavOnGTFS[['filename','IndexTripStartInCleanData','direction_id'
@@ -115,57 +116,47 @@ NearestRawnavOnGTFS = NearestRawnavOnGTFS[['filename','IndexTripStartInCleanData
                                            ,'Lat','Long','distNearestPointFromStop','geometry']]
 NearestRawnavOnGTFS.sort_values(['filename','IndexTripStartInCleanData',
                                  'direction_id','stop_sequence'],inplace=True)
+#Get data with correct direction
+DatRawnavGTFS_CorDir, DatFirstLastStops = wr.GetCorrectDirGTFS(NearestRawnavOnGTFS,SumDat)
+SumDatWithGTFS = wr.GetSummaryGTFSdata(FinDat,SumDat,DatFirstLastStops)
+SumDatWithGTFS.set_index(['fullpath','filename','file_id','wday','StartDateTime','EndDateTime','IndexTripStartInCleanData','taglist','route_pattern','route','pattern'],inplace=True,drop=True) 
+# 3.3 Output Summary Files
+############################################
+OutFiSum = os.path.join(path_processed_data,f'GTFSTripSummaries.xlsx')
+SumDatWithGTFS.to_excel(OutFiSum,merge_cells=False)
 
-DatFirstStops = NearestRawnavOnGTFS.query("stop_sequence==1")
-DatFirstStops.sort_values(['filename','IndexTripStartInCleanData',
-                                 'direction_id','stop_sequence'],inplace=True)
+executionTime= str(datetime.now() - begin_time).split('.')[0]
+print(f"Run Time Section 3 Read, analyze and summarize GTFS Data : {executionTime}")
 
-# Will not work for routes like S9 and X0
-DatFirstStops.loc[:,"GetDir"] = abs(DatFirstStops.IndexLoc - DatFirstStops.IndexTripStartInCleanData)
-DatFirstStops.loc[:,"CorDir"] = DatFirstStops.groupby(['filename','IndexTripStartInCleanData'])['GetDir'].transform(lambda x: x==x.min())
-DatFirstStops_AppxDir = DatFirstStops.query('CorDir')
+# 4 Plot Rawnav Trace and Nearest Stops
+###########################################################################################################################################################
+begin_time = datetime.now() ##
+# 4.1 Add Summary data to Stop data from Plotting
+############################################
+DatRawnavGTFS_CorDir = DatRawnavGTFS_CorDir[['filename','IndexTripStartInCleanData','direction_id','stop_sequence','IndexLoc','stop_lat',
+                                             'stop_lon','distNearestPointFromStop','geometry','stop_name']]
 SumDatWithGTFS.reset_index(inplace=True)
-DatFirstStops_AppxDir = DatFirstStops_AppxDir.merge(SumDatWithGTFS,on =['filename',"IndexTripStartInCleanData"])
-DatFirstStops_AppxDir.columns
-DatFirstStops_AppxDir.drop(columns = ['fullpath','file_id','taglist'],inplace=True)
-Check = DatFirstStops_AppxDir[['route_id','direction_id','route','pattern','distNearestPointFromStop',
-                               'StartDistFromGTFS1stStopFt','trip_headsign','stop_name','TripDurationFromTags',
-                               'CrowFlyDistLatLongMi']]
-DatFirstStops_AppxDir = DatFirstStops_AppxDir[DatFirstStops_AppxDir.CrowFlyDistLatLongMi>1]
-Check = Check[Check.CrowFlyDistLatLongMi>1]
-Check.groupby(['route_id','direction_id','pattern']).count()
-
-temp = DatFirstStops_AppxDir[['filename',"IndexTripStartInCleanData","direction_id"]]
-NearestRawnavOnGTFS_appxDir =temp.merge( NearestRawnavOnGTFS, on =['filename',"IndexTripStartInCleanData","direction_id"],
-                          how = 'left')
-NearestRawnavOnGTFS_appxDir = NearestRawnavOnGTFS_appxDir.query("route_id=='79'")
-NearestRawnavOnGTFS_appxDir = NearestRawnavOnGTFS_appxDir.merge(SumDatWithGTFS,on =['filename',"IndexTripStartInCleanData"])
-NearestRawnavOnGTFS_appxDir.drop(columns = ['fullpath','file_id','taglist'],inplace=True)
-
+NearestRawnavOnGTFS_appxDir = SumDatWithGTFS.merge(DatRawnavGTFS_CorDir, on = ['filename','IndexTripStartInCleanData'],how='right')
 NearestRawnavOnGTFS_appxDir =\
-NearestRawnavOnGTFS_appxDir[[ 'filename','wday', 'StartDateTime', 'EndDateTime', 'route', 'pattern', 'route_pattern',\
- 'IndexTripStartInCleanData','IndexTripEndInCleanData', 
- 'direction_id','stop_sequence', 'IndexLoc', 'route_id', 'trip_headsign', \
- 'stop_lat','stop_lon', 'stop_name', 'Lat', 'Long', 'distNearestPointFromStop', 
- 'StartOdomtFtGTFS','EndOdomtFtGTFS', 'TripDistMiGTFS', 'StartSecPastStGTFS','EndSecPastStGTFS', 
- 'TripDurSecGTFS', 'StartLatGTFS', 'EndLatGTFS','StartLongGTFS', 'EndLongGTFS', 'StartDistFromGTFS1stStopFt',
-  'EndDistFromGTFSlastStopFt', 'TripSpeedMphGTFS','SecStart', 'OdomFtStart', 'SecEnd',
-       'OdomFtEnd', 'TripDurFromSec', 'TripDurationFromTags', 'DistOdomMi',
-       'SpeedOdomMPH', 'SpeedTripTagMPH', 'CrowFlyDistLatLongMi', 'LatStart',
-       'LongStart', 'LatEnd', 'LongEnd','geometry']]
+NearestRawnavOnGTFS_appxDir[[ 'filename','wday', 'StartDateTime', 'EndDateTime','route', 'pattern','direction_id','stop_sequence','stop_name','stop_lat','stop_lon',\
+ 'IndexTripStartInCleanData','IndexTripEndInCleanData', 'distNearestPointFromStop','IndexLoc',\
+ 'StartOdomtFtGTFS','EndOdomtFtGTFS', 'TripDistMiGTFS','DistOdomMi','CrowFlyDistLatLongMi', 'StartSecPastStGTFS','EndSecPastStGTFS', 
+ 'TripDurSecGTFS','TripDurFromSec','TripDurationFromTags', 'StartLatGTFS', 'EndLatGTFS','StartLongGTFS', 'EndLongGTFS', 'StartDistFromGTFS1stStopFt'
+ , 'TripSpeedMphGTFS','SpeedOdomMPH','SpeedTripTagMPH','SecStart', 'OdomFtStart', 'SecEnd',
+       'OdomFtEnd', 'LatStart','LongStart', 'LatEnd', 'LongEnd','geometry']]
 NearestRawnavOnGTFS_appxDir.rename(columns = {'IndexLoc':'ClosestIndexLocInRawnavTraj'},inplace=True)
 
-#10 Plot Rawnav Trace and Nearest Stops
-########################################################################################
-GroupsTemp =  NearestRawnavOnGTFS_appxDir.groupby(['filename','IndexTripStartInCleanData','route_id'])
+# 4.2 Plot Trajectories
+############################################
+GroupsTemp =  NearestRawnavOnGTFS_appxDir.groupby(['filename','IndexTripStartInCleanData','route'])
 FinDat = FinDat.query("route=='79'")
 RawnavGrps = FinDat.groupby(['filename','IndexTripStartInCleanData','route'])
 
 len(RawnavGrps.groups.keys())
-Stop = 100
+Stop = 10
 i = 0
 for name, RawNavGrp in RawnavGrps:
-    i+1
+    i=i+1
     print(name)
     Pattern = RawNavGrp["pattern"].values[0]
     if name in GroupsTemp.groups:
@@ -174,10 +165,19 @@ for name, RawNavGrp in RawnavGrps:
     wday = StopDat1["wday"].values[0]
     Hour = StopDat1.StartDateTime.values[0].split(" ")[1].split(":")[0]
     SaveFile= f"{wday}_{Hour}_{name[2]}_{Pattern}_{name[0]}_Row{int(name[1])}.html"
-    wr.PlotRawnavTrajWithGTFS(RawNavGrp, StopDat1,path_processed_data,SaveFile)
+    map1 = wr.PlotRawnavTrajWithGTFS(RawNavGrp, StopDat1)
+    SaveDir= os.path.join(path_processed_data,"TrajectoryFigures")
+    if not os.path.exists(SaveDir):os.makedirs(SaveDir)
+    SaveDir2= os.path.join(path_processed_data,"TrajectoryFigures",f'{name[2]}_{Pattern}')
+    if not os.path.exists(SaveDir2):os.makedirs(SaveDir2)
+    map1.save(os.path.join(SaveDir2,f"{SaveFile}"))
     if i==Stop: break
 
+executionTime= str(datetime.now() - begin_time).split('.')[0]
+print(f"Run Time Section 4 Plot Rawnav Trace and Nearest Stops : {executionTime}")
 
+###########################################################################################################################################################
+###########################################################################################################################################################
 
 
 
