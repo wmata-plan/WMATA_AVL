@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
+Create by: abibeka, wytimmerman
 Created on Tue Apr 28 15:07:59 2020
-
-@author: 
+Purpose: Functions for processing rawnav & GTFS data data
 """
 import pandas as pd
 import geopandas as gpd
@@ -11,28 +11,26 @@ from shapely.geometry import Point
 from shapely.geometry import LineString
 from shapely.ops import nearest_points
 from scipy.spatial import cKDTree
-import geopy.distance
 import numpy as np
 import folium
-from folium.plugins import MarkerCluster
 from folium import plugins
 
+# readGTFS
+###################################################################################################################################
 def readGTFS(GTFS_Dir_):
-    #TODO: Write Documentation
     '''
     Parameters
     ----------
-    GTFS_Dir_ : TYPE
-        DESCRIPTION.
-
+    GTFS_Dir_ : str
+        full path to GTFS directory.
     Returns
     -------
-    None.
-
+    Merdat : pd.DataFrame
+        Merged stop, stop time, and trip data from GTFS.
     '''
-    StopsDat= pd.read_csv(os.path.join(GTFS_Dir_,"stops.txt"))
-    StopTimeDat = pd.read_csv(os.path.join(GTFS_Dir_,"stop_times.txt"))
-    TripsDat =pd.read_csv(os.path.join(GTFS_Dir_,"trips.txt"))
+    StopsDat= pd.read_csv(os.path.join(GTFS_Dir_,"stops.txt")) #stops data---has stop_id and stop lat-long
+    StopTimeDat = pd.read_csv(os.path.join(GTFS_Dir_,"stop_times.txt")) #stoptime data---has trip_id and stop_sequence
+    TripsDat =pd.read_csv(os.path.join(GTFS_Dir_,"trips.txt")) #trip data---has route_id and trip_id
     StopsDat= StopsDat[['stop_id','stop_name','stop_lat','stop_lon']]
     StopTimeDat = StopTimeDat[['trip_id','arrival_time','departure_time','stop_id','stop_sequence','pickup_type','drop_off_type']]
     TripsDat = TripsDat[['route_id','service_id','trip_id','trip_headsign','direction_id']]
@@ -43,26 +41,29 @@ def readGTFS(GTFS_Dir_):
     Merdat = TripsDat.merge(StopTimeDat,on="trip_id",how='inner')
     Merdat = Merdat.merge(StopsDat,on= "stop_id")
     return(Merdat)
+###################################################################################################################################
 
-
+# get1ststop
+###################################################################################################################################
 def get1ststop(Merdat,AnalysisRoutes_):
-    #TODO: Write Documentation
     '''
     Parameters
     ----------
-    Merdat : TYPE
-        DESCRIPTION.
-    AnalysisRoutes_ : TYPE
-        DESCRIPTION.
-
+    Merdat : pd.DataFrame
+        Merged stop, stop time, and trip data from GTFS..
+    AnalysisRoutes_ : list
+        list of routes that need to be analyzed.
     Returns
     -------
-    TYPE
-        DESCRIPTION.
-
+    FirstStopDat1_rte : pd.DataFrame
+        Long data with information on unique 1st stops per route. 
+    CheckFirstStop : pd.DataFrame
+        Data with unique 1st stops by directions in a set---for debugging
+    CheckFirstStop1 : pd.DataFrame
+        Data with info on frequency of location, arrival, and departures of different 1st stop on a route---for debugging
     '''
-    #Get the 1st stops
-    #########################################
+    # Get the 1st stops
+    ########################################################################################
     Mask_1stStop = (Merdat.stop_sequence ==1)
     FirstStopDat = Merdat[Mask_1stStop]
     FirstStopDat.rename(columns = {'stop_id':'first_stopId','stop_name':"first_stopNm",'stop_lat':'first_sLat',
@@ -71,79 +72,89 @@ def get1ststop(Merdat,AnalysisRoutes_):
     FirstStopDat = FirstStopDat[['route_id','direction_id','trip_headsign',
                                  'first_stopId',"first_stopNm",'first_sLat',
                                  'first_sLon','arrival_time','departure_time']]
-    
-    #4 Get first stops and lasts stops by route---ignore direction
+    # Get unique first stops by route---ignore direction
     ########################################################################################
     dropCols = ['direction_id','trip_headsign','arrival_time','departure_time']
     FirstStopDat1 =FirstStopDat.drop(columns=dropCols)        
-    FirstStopDat1 = FirstStopDat1.groupby(['route_id','first_stopId','first_stopNm']).first()
+    FirstStopDat1 = FirstStopDat1.groupby(['route_id','first_stopId','first_stopNm']).first() #For each route get all unique 1st stops
     FirstStopDat1.reset_index(inplace=True)
-    FirstStopDat1_rte = FirstStopDat1.query('route_id in @AnalysisRoutes_') 
+    FirstStopDat1_rte = FirstStopDat1.query('route_id in @AnalysisRoutes_') # subset data for analysis routes
     def to_set(x):
         return set(x)
+    # Debugging data
+    ########################################################################################
     CheckFirstStop = FirstStopDat.groupby(['route_id','direction_id','trip_headsign']).agg({'first_stopId':to_set,'first_stopNm':to_set})
+    #get the unique 1st stops by directions in a set. 
     CheckFirstStop1 = FirstStopDat.groupby(['route_id','direction_id','trip_headsign',\
                                             'first_stopId','first_stopNm'])\
                                             .agg({'first_sLat':['count','first'],'first_sLon':'first'
                                                  ,'arrival_time':to_set,'departure_time':to_set})
+    #get the info on frequency of location, arrival, and departures of different 1st stop on a route                                
     return(FirstStopDat1_rte, CheckFirstStop, CheckFirstStop1)
+###################################################################################################################################
 
+# getlaststop
+#################################################################################################################
 def getlaststop(Merdat,AnalysisRoutes_):
-    #TODO: Write Documentation
     '''
     Parameters
     ----------
-    Merdat : TYPE
-        DESCRIPTION.
-    AnalysisRoutes_ : TYPE
-        DESCRIPTION.
-
+    Merdat : pd.DataFrame
+        Merged stop, stop time, and trip data from GTFS..
+    AnalysisRoutes_ : list
+        list of routes that need to be analyzed.
     Returns
     -------
-    TYPE
-        DESCRIPTION.
+    LastStopDat1_rte : pd.DataFrame
+        Long data with information on unique last stops per route. 
+    CheckLastStop : pd.DataFrame
+        Data with unique last stops by directions in a set---for debugging
+    CheckLastStop1 : pd.DataFrame
+        Data with info on frequency of location, arrival, and departures of different last stop on a route---for debugging
     '''
-    #Get Last stops per trip
-    #########################################
-    TempDa = Merdat.groupby('trip_id')['stop_sequence'].max().reset_index() #can use groupby filter here
+    # Get Last stops per trip
+    ########################################################################################
+    TempDa = Merdat.groupby('trip_id')['stop_sequence'].max().reset_index() 
     LastStopDat = TempDa.merge(Merdat, on=['trip_id','stop_sequence'],how='left')
     LastStopDat.rename(columns = {'stop_id':'last_stopId','stop_name':"last_stopNm",'stop_lat':'last_sLat',
                                    'stop_lon':'last_sLon'},inplace=True)
     LastStopDat = LastStopDat[['route_id','direction_id','trip_headsign',
                                'last_stopId',"last_stopNm",'last_sLat','last_sLon','arrival_time','departure_time']]
-    #4 Get lasts stops by route---ignore direction
+    # Get lasts stops by route---ignore direction
     ########################################################################################
     dropCols = ['direction_id','trip_headsign','arrival_time','departure_time']
     LastStopDat1 =LastStopDat.drop(columns=dropCols)        
-    LastStopDat1 = LastStopDat1.groupby(['route_id','last_stopId','last_stopNm']).first()
+    LastStopDat1 = LastStopDat1.groupby(['route_id','last_stopId','last_stopNm']).first() #For each route get all unique last stops
     LastStopDat1.reset_index(inplace=True)
-    LastStopDat1_rte = LastStopDat1.query('route_id in @AnalysisRoutes_') 
+    LastStopDat1_rte = LastStopDat1.query('route_id in @AnalysisRoutes_') # subset data for analysis routes
     def to_set(x):
         return set(x)
+    #get the unique last stops by directions in a set. 
     CheckLastStop = LastStopDat.groupby(['route_id','direction_id','trip_headsign']).agg({'last_stopId':to_set,'last_stopNm':to_set})
+    #get the info on frequency of location, arrival, and departures of different last stops on a route                                
     CheckLastStop1 = LastStopDat.groupby(['route_id','direction_id','trip_headsign',
                                           'last_stopId','last_stopNm'])\
                                         .agg({'last_sLat':['count','first'],
                                               'last_sLon':'first' ,'arrival_time':to_set,'departure_time':to_set})
     return(LastStopDat1_rte, CheckLastStop, CheckLastStop1)
-            
-                                        
+###################################################################################################################################
+
+# debugGTFS1stLastStopData
+###################################################################################################################################                          
 def debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckLastStop1,path_processed_data_):
-    #TODO: Write Documentation
     '''
     Parameters
     ----------
-    CheckFirstStop : TYPE
-        DESCRIPTION.
-    CheckFirstStop1 : TYPE
-        DESCRIPTION.
-    CheckLastStop : TYPE
-        DESCRIPTION.
-    CheckLastStop1 : TYPE
-        DESCRIPTION.
-    path_processed_data_ : TYPE
-        DESCRIPTION.
-
+    CheckFirstStop : pd.DataFrame
+        Data with unique 1st stops by directions in a set---for debugging
+    CheckFirstStop1 : pd.DataFrame
+        Data with info on frequency of location, arrival, and departures of different 1st stop on a route---for debugging
+    CheckLastStop : pd.DataFrame
+        Data with unique last stops by directions in a set---for debugging
+    CheckLastStop1 : pd.DataFrame
+        Data with info on frequency of location, arrival, and departures of different last stop on a route---for debugging
+    path_processed_data_ : str
+        path for storing the output data.
     Returns
     -------
     None.
@@ -152,68 +163,17 @@ def debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckL
     #Check stops Data
     #########################################
     OutFi = os.path.join(path_processed_data_,'First_Last_Stop.xlsx')
-    writer = pd.ExcelWriter(OutFi)
-    First_Last_Stop.to_excel(writer,'First_Last_Stop')
-    CheckFirstStop1.to_excel(writer,'First_Stop')
-    CheckLastStop1.to_excel(writer,'Last_Stop')
+    writer = pd.ExcelWriter(OutFi) # excel writer object
+    First_Last_Stop.to_excel(writer,'First_Last_Stop') # sheet 1
+    CheckFirstStop1.to_excel(writer,'First_Stop') # sheet 2
+    CheckLastStop1.to_excel(writer,'Last_Stop') # sheet 3
     writer.save()
     return()
+###################################################################################################################################
 
-
-
-def getNearestStartEnd(SumDatStart, SumDatEnd, FirstStopDat1_rte, LastStopDat1_rte, AnalysisRoutes_):
-    #TODO: Write Documentation
-    '''
-    Parameters
-    ----------
-    SumDatStart : TYPE
-        DESCRIPTION.
-    SumDatEnd : TYPE
-        DESCRIPTION.
-    FirstStopDat1_rte : TYPE
-        DESCRIPTION.
-    LastStopDat1_rte : TYPE
-        DESCRIPTION.
-    AnalysisRoutes_ : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    None.
-
-    '''
-    FirstStp = pd.DataFrame()
-    LastStp = pd.DataFrame()
-    TempDict = {}
-    for rte in AnalysisRoutes_:
-        FirstStp = FirstStopDat1_rte.query('route_id == @rte')
-        LastStp = LastStopDat1_rte.query('route_id == @rte')
-        geometryStart = [Point(xy) for xy in zip(FirstStp.first_sLon, FirstStp.first_sLat)]
-        FirstStp=gpd.GeoDataFrame(FirstStp, geometry=geometryStart,crs={'init':'epsg:4326'})
-        geometryEnd = [Point(xy) for xy in zip(LastStp.last_sLon, LastStp.last_sLat)]
-        LastStp=gpd.GeoDataFrame(LastStp, geometry=geometryEnd,crs={'init':'epsg:4326'})
-        TempDict[rte] = {'FirstStp':FirstStp,'LastStp':LastStp}
-    #https://stackoverflow.com/questions/56520780/how-to-use-geopanda-or-shapely-to-find-nearest-point-in-same-geodataframe
-    try:
-        SumDatStart.insert(3, 'nearest_start', None)
-        SumDatEnd.insert(3, 'nearest_end', None)
-    except: pass
-    for index, row in SumDatStart.iterrows():
-        point = row.geometry
-        multipoint = TempDict[row.route]['FirstStp'].geometry.unary_union
-        queried_geom, nearest_geom = nearest_points(point, multipoint)
-        SumDatStart.loc[index, 'nearest_start'] = nearest_geom
-    for index, row in SumDatEnd.iterrows():
-        point = row.geometry
-        multipoint = TempDict[row.route]['LastStp'].geometry.unary_union
-        queried_geom, nearest_geom = nearest_points(point, multipoint)
-        SumDatEnd.loc[index, 'nearest_end'] = nearest_geom
-    SumDatStart = SumDatStart[['filename','route','IndexTripStartInCleanData','nearest_start']]
-    SumDatEnd = SumDatEnd[['filename','route','IndexTripStartInCleanData','nearest_end']]
-    return(SumDatStart, SumDatEnd)
-
-
-def GetSummaryGTFSdata(FinDat_, SumDat_):
+# GetSummaryGTFSdata
+###################################################################################################################################
+def GetSummaryGTFSdata(FinDat_, SumDat_,DatFirstLastStops_):
     #TODO: Write Documentation
     '''
     Parameters
@@ -222,7 +182,7 @@ def GetSummaryGTFSdata(FinDat_, SumDat_):
         DESCRIPTION.
     SumDat_ : TYPE
         DESCRIPTION.
-
+    DatFirstLastStops_ : 
     Returns
     -------
     None.
@@ -230,66 +190,95 @@ def GetSummaryGTFSdata(FinDat_, SumDat_):
     '''
     #5 Get summary after using GTFS data
     ########################################################################################
-    MinDat = FinDat_.groupby(['filename','IndexTripStartInCleanData'])['distances_start_ft','distances_end_ft'].idxmin().reset_index()
-    MinDat.rename(columns = {'distances_start_ft':'LowerBoundLoc','distances_end_ft':"UpperBoundLoc"},inplace=True)
-    MinDat.loc[:,'LowerBound'] = FinDat_.loc[MinDat.loc[:,'LowerBoundLoc'],'IndexLoc'].values
-    MinDat.loc[:,'UpperBound'] = FinDat_.loc[MinDat.loc[:,'UpperBoundLoc'],'IndexLoc'].values
-    MinDat.drop(columns=['LowerBoundLoc','UpperBoundLoc'],inplace=True)
-    MinDat.reset_index(inplace=True)
-    FinDat_ = FinDat_.merge(MinDat,on=['filename','IndexTripStartInCleanData'],how='left')
-    FinDat_ = FinDat_.query('IndexLoc>=LowerBound & IndexLoc<=UpperBound')
-    FinDat_.rename(columns= {'distances_start_ft':'Dist_from_GTFS1stStop',
-                                  'distances_end_ft':'Dist_from_GTFSlastStop'},inplace=True)
+    FinDat_ = FinDat_.merge(DatFirstLastStops_,on=['filename','IndexTripStartInCleanData'],how='right')
+    FinDat_ = FinDat_.query('IndexLoc>=LowerBoundLoc & IndexLoc<=UpperBoundLoc')
+    FinDat_.rename(columns= {'distFromFirstStop':'Dist_from_GTFS1stStop'},inplace=True)
     FinDat_ = FinDat_[['filename','IndexTripStartInCleanData','Lat','Long','Heading','OdomtFt','SecPastSt'
-                           ,'Dist_from_GTFS1stStop','Dist_from_GTFSlastStop']]
-    
+                           ,'Dist_from_GTFS1stStop']]
     Map1 = lambda x: max(x)-min(x)
     SumDat1 =FinDat_.groupby(['filename','IndexTripStartInCleanData']).agg({'OdomtFt':['min','max',Map1],
                                                      'SecPastSt':['min','max',Map1],
                                                      'Lat':['first','last'],
                                                      'Long':['first','last'],
-                                                     'Dist_from_GTFS1stStop':['first'],
-                                                     'Dist_from_GTFSlastStop':['last']})
+                                                     'Dist_from_GTFS1stStop':['first']})
     SumDat1.columns = ['StartOdomtFtGTFS','EndOdomtFtGTFS','TripDistMiGTFS',
                        'StartSecPastStGTFS','EndSecPastStGTFS','TripDurSecGTFS',
                        'StartLatGTFS','EndLatGTFS','StartLongGTFS','EndLongGTFS',
-                       'StartDistFromGTFS1stStopFt',
-                       'EndDistFromGTFSlastStopFt']
+                       'StartDistFromGTFS1stStopFt']
     SumDat1.loc[:,['TripDistMiGTFS']] =SumDat1.loc[:,['TripDistMiGTFS']]/5280
     SumDat1.loc[:,'TripSpeedMphGTFS'] =round(3600* SumDat1.TripDistMiGTFS/SumDat1.TripDurSecGTFS,2)
-    SumDat1.loc[:,['TripDistMiGTFS','StartDistFromGTFS1stStopFt','EndDistFromGTFSlastStopFt']] = \
-            round(SumDat1.loc[:,['TripDistMiGTFS','StartDistFromGTFS1stStopFt','EndDistFromGTFSlastStopFt']],2)
+    SumDat1.loc[:,['TripDistMiGTFS','StartDistFromGTFS1stStopFt']] = \
+            round(SumDat1.loc[:,['TripDistMiGTFS','StartDistFromGTFS1stStopFt']],2)
     SumDat1 = SumDat1.merge(SumDat_,on=['filename','IndexTripStartInCleanData'],how='left')
     return(SumDat1)
+###################################################################################################################################
 
+# mergeStopsGTFSrawnav
+###################################################################################################################################
 def mergeStopsGTFSrawnav(StopsGTFS, rawnavDat):
+    '''
+    Parameters
+    ----------
+    StopsGTFS : pd.DataFrame
+        GTFS data with unique stops per route irrespective of short/long or direction.
+    rawnavDat : pd.DataFrame
+        rawnav data.
+
+    Returns
+    -------
+    NearestRawnavOnGTFS : gpd.GeoDataFrame
+        A geopandas dataframe with nearest rawnav point to each of the GTFS stops on that route. 
+    '''
+    # Convert to geopandas dataframe
     geometryStops = [Point(xy) for xy in zip(StopsGTFS.stop_lon.astype(float), StopsGTFS.stop_lat.astype(float))]
     geometryPoints = [Point(xy) for xy in zip(rawnavDat.Long.astype(float), rawnavDat.Lat.astype(float))]
     gdA =gpd.GeoDataFrame(StopsGTFS, geometry=geometryStops,crs={'init':'epsg:4326'})
     gdB =gpd.GeoDataFrame(rawnavDat, geometry=geometryPoints,crs={'init':'epsg:4326'})
+    # Project to 2-D plane
+    # TODO : check if we actually need to convert to a 2-D or the distance in degree can be used.
     #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
     gdA.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
     gdB.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
-    TripGroups = gdB.groupby(['filename','IndexTripStartInCleanData','route'])
-    GTFS_groups = gdA.groupby('route_id')
+    TripGroups = gdB.groupby(['filename','IndexTripStartInCleanData','route']) # Group rawnav data
+    GTFS_groups = gdA.groupby('route_id') # Group GTFS data
     NearestRawnavOnGTFS =pd.DataFrame()
     for name, groupRawnav in TripGroups:
         #print(name)
-        GTFS_RelevantRouteDat = GTFS_groups.get_group(name[2])
+        GTFS_RelevantRouteDat = GTFS_groups.get_group(name[2]) #Get the relevant group in GTFS corresponding to rawnav.
+        # TODO : Does the GTFS route_id matches exactly with rawnav route? 
         NearestRawnavOnGTFS = pd.concat([NearestRawnavOnGTFS,\
                                          ckdnearest(GTFS_RelevantRouteDat,groupRawnav)])
     NearestRawnavOnGTFS.dist = NearestRawnavOnGTFS.dist * 3.28084 # meters to feet
     NearestRawnavOnGTFS.Lat =NearestRawnavOnGTFS.Lat.astype('float')
+    # 2nd method for cross checking
     #NearestRawnavOnGTFS.loc[:,"CheckDist"] = NearestRawnavOnGTFS.apply(lambda x: geopy.distance.geodesic((x.Lat,x.Long),(x.stop_lat,x.stop_lon)).meters,axis=1)
-    geometry1 = [Point(xy) for xy in zip(NearestRawnavOnGTFS.Long, NearestRawnavOnGTFS.Lat)]
+    # TODO : Remove later. Might be consuming unnecessary resources. 
+    geometry1 = [Point(xy) for xy in zip(NearestRawnavOnGTFS.Long, NearestRawnavOnGTFS.Lat)] 
     geometry2 = [Point(xy) for xy in zip(NearestRawnavOnGTFS.stop_lon, NearestRawnavOnGTFS.stop_lat)]
     geometry = [LineString(list(xy)) for xy in zip(geometry1,geometry2)]
     NearestRawnavOnGTFS=gpd.GeoDataFrame(NearestRawnavOnGTFS, geometry=geometry,crs={'init':'epsg:4326'})
     NearestRawnavOnGTFS.rename(columns = {'dist':'distNearestPointFromStop'},inplace=True)
     return(NearestRawnavOnGTFS)
+###################################################################################################################################
 
+# ckdnearest
+###################################################################################################################################
 #https://gis.stackexchange.com/questions/222315/geopandas-find-nearest-point-in-other-dataframe
 def ckdnearest(gdA, gdB):
+    #TODO: Write Documentation
+    '''
+    Parameters
+    ----------
+    gdA : TYPE
+        DESCRIPTION.
+    gdB : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    gdf : TYPE
+        DESCRIPTION.
+    '''
     gdA.reset_index(inplace=True);gdB.reset_index(inplace=True)
     nA = np.array(list(zip(gdA.geometry.x, gdA.geometry.y)) )
     nB = np.array(list(zip(gdB.geometry.x, gdB.geometry.y)) )
@@ -299,16 +288,75 @@ def ckdnearest(gdA, gdB):
         [gdA.reset_index(drop=True), gdB.loc[idx, ['filename','IndexTripStartInCleanData','IndexLoc','Lat', 'Long']].reset_index(drop=True),
          pd.Series(dist, name='dist')], axis=1)
     return gdf
+###################################################################################################################################
 
-def PlotRawnavTrajWithGTFS(RawnavTraj, GTFScloseStop,path_processed_data_,SaveFileNm):
+# GetCorrectDirGTFS
+###################################################################################################################################
+def GetCorrectDirGTFS(NearestRawnavOnGTFS_, SumDat_):
+    #TODO: Write Documentation
+    DatFirstStopTemp = NearestRawnavOnGTFS_.query("stop_sequence==1")
+    DatFirstStopTemp.sort_values(['filename','IndexTripStartInCleanData',
+                                     'direction_id','stop_sequence'],inplace=True)
+    DatFirstStopTemp.loc[:,'var'] = DatFirstStopTemp.groupby(['filename','IndexTripStartInCleanData']).IndexLoc.transform(np.var)
+    IssueDat = DatFirstStopTemp.query('var==0') # e.g. route 79: same rawnav index is close to silver spring and Archives in case of route 79. 
+    DatFirstStopTemp = DatFirstStopTemp.query('var!=0') 
+    DatStopSnapping = DatFirstStopTemp.groupby(['filename','IndexTripStartInCleanData']).apply(lambda  g: g[g['IndexLoc'] == g['IndexLoc'].min()]).reset_index(drop=True)
+    DatStopSnapping = DatStopSnapping.query('distNearestPointFromStop<200') # Get trips that start within 200 ft. of the 1st stop
+    DatStopSnapping = DatStopSnapping.merge(SumDat_[['filename','IndexTripStartInCleanData','pattern','route']],on=['filename','IndexTripStartInCleanData'],how='left')
+    DatStopSnapping = DatStopSnapping[['filename', 'IndexTripStartInCleanData','direction_id','stop_name']]
+    DatStopSnapping.rename(columns={'stop_name':'first_stopNm'},inplace=True)
+    DatStopSnapping = NearestRawnavOnGTFS_.merge(DatStopSnapping,on=['filename', 'IndexTripStartInCleanData','direction_id'],how='right')
+    DatStopSnapping.sort_values(['filename','IndexTripStartInCleanData',
+                                     'direction_id','stop_sequence'],inplace=True)
+    assert(DatStopSnapping.groupby(['filename', 'IndexTripStartInCleanData']).IndexLoc.apply(lambda x: x<0).sum()==0) # IndexLoc increases with stop sequence
+    DatStopSnapping =DatStopSnapping.query('distNearestPointFromStop<200') # Remove stops where nearest rawnav point is more than 200 ft. away
+  
+    DatLastStop = DatStopSnapping.groupby(['filename', 'IndexTripStartInCleanData']).\
+        apply(lambda g: g[g['stop_sequence'] == g['stop_sequence'].max()]).reset_index(drop=True)
+    DatLastStop = DatLastStop[['filename','IndexTripStartInCleanData','IndexLoc',
+                               'distNearestPointFromStop','stop_sequence','stop_name',
+                               'stop_lat','stop_lon']].\
+        rename(columns={'IndexLoc':'UpperBoundLoc','distNearestPointFromStop':"distFromLastStop",
+                        'stop_sequence':'lastStopSequence','stop_name':'last_stopNm',
+                        'stop_lat':'LastStop_lat','stop_lon':'LastStop_lon'})
+    DatFirstStop = DatStopSnapping.query('stop_sequence==1')
+    DatFirstStop.rename(columns ={'IndexLoc':"LowerBoundLoc",'distNearestPointFromStop':"distFromFirstStop",
+                                  'stop_sequence':'firstStopSequence','stop_lat':'StartStop_lat','stop_lon':'StartStop_lon'},inplace=True)
+    DatFirstStop.drop(columns=['Lat', 'Long','stop_name'],inplace=True)
+    DatFirstLastStops = DatFirstStop.merge(DatLastStop,on=['filename','IndexTripStartInCleanData'],how='left')
+    DatFirstLastStops.drop(columns=['geometry'],inplace=True)
+    return(DatStopSnapping,DatFirstLastStops)
+###################################################################################################################################
+
+# PlotRawnavTrajWithGTFS
+###################################################################################################################################
+def PlotRawnavTrajWithGTFS(RawnavTraj, GTFScloseStop):
+    #TODO: Write Documentation
+    '''
+    Parameters
+    ----------
+    RawnavTraj : TYPE
+        DESCRIPTION.
+    GTFScloseStop : TYPE
+        DESCRIPTION.
+    path_processed_data_ : TYPE
+        DESCRIPTION.
+    SaveFileNm : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    '''
     ## Link to Esri World Imagery service plus attribution
     #https://www.esri.com/arcgis-blog/products/constituent-engagement/constituent-engagement/esri-world-imagery-in-openstreetmap/
     EsriImagery = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
     EsriAttribution = "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
-    this_map = folium.Map( tiles='openstreetmap', zoom_start=12,max_zoom=25,control_scale=True)
+    this_map = folium.Map( tiles='cartodbdark_matter', zoom_start=16,max_zoom=25,control_scale=True)
     folium.TileLayer(name="EsriImagery",tiles=EsriImagery, attr=EsriAttribution, zoom_start=16,max_zoom=25,control_scale=True).add_to(this_map)
     folium.TileLayer('cartodbpositron',zoom_start=16,max_zoom=20,control_scale=True).add_to(this_map)
-    folium.TileLayer('cartodbdark_matter',zoom_start=16,max_zoom=20,control_scale=True).add_to(this_map) 
+    folium.TileLayer('openstreetmap',zoom_start=16,max_zoom=20,control_scale=True).add_to(this_map) 
 
     fg = folium.FeatureGroup(name="Rawnav Trajectory")
     this_map.add_child(fg)
@@ -323,11 +371,30 @@ def PlotRawnavTrajWithGTFS(RawnavTraj, GTFScloseStop,path_processed_data_,SaveFi
     LatLongs = [[x,y] for x,y in zip(RawnavTraj.Lat,RawnavTraj.Long)]
     this_map.fit_bounds(LatLongs)
     folium.LayerControl(collapsed=True).add_to(this_map)
-    SaveDir= os.path.join(path_processed_data_,"TrajectoryFigures")
-    if not os.path.exists(SaveDir):os.makedirs(SaveDir)
-    this_map.save(os.path.join(SaveDir,f"{SaveFileNm}"))
+    return(this_map)
+###################################################################################################################################
 
+# PlotMarkerClusters
+###################################################################################################################################
 def PlotMarkerClusters(this_map, Dat,Lat,Long, FeatureGrp):
+    #TODO: Write Documentation
+    '''
+    Parameters
+    ----------
+    this_map : TYPE
+        DESCRIPTION.
+    Dat : TYPE
+        DESCRIPTION.
+    Lat : TYPE
+        DESCRIPTION.
+    Long : TYPE
+        DESCRIPTION.
+    FeatureGrp : TYPE
+        DESCRIPTION.
+    Returns
+    -------
+    None.
+    '''
     popup_field_list = list(Dat.columns)     
     for i,row in Dat.iterrows():
         label = '<br>'.join([field + ': ' + str(row[field]) for field in popup_field_list])
@@ -335,9 +402,25 @@ def PlotMarkerClusters(this_map, Dat,Lat,Long, FeatureGrp):
         folium.CircleMarker(
                 location=[row[Lat], row[Long]], radius= 2,
                 popup=folium.Popup(html = label,parse_html=False,max_width='200')).add_to(FeatureGrp)
-    
-    
+###################################################################################################################################
+
+# PlotLinesClusters
+###################################################################################################################################
 def PlotLinesClusters(this_map, Dat, FeatureGrp):
+    #TODO: Write Documentation
+    '''
+    Parameters
+    ----------
+    this_map : TYPE
+        DESCRIPTION.
+    Dat : TYPE
+        DESCRIPTION.
+    FeatureGrp : TYPE
+        DESCRIPTION.
+    Returns
+    -------
+    None.
+    '''
     popup_field_list = list(Dat.columns)     
     popup_field_list.remove('geometry')
     for i,row in Dat.iterrows():
@@ -348,9 +431,10 @@ def PlotLinesClusters(this_map, Dat, FeatureGrp):
         LinePoints = [(tuples[1],tuples[0]) for tuples in list(row.geometry.coords)]
         folium.PolyLine(LinePoints, color="red", weight=4, opacity=1\
         ,popup=folium.Popup(html = label,parse_html=False,max_width='300')).add_to(TempGrp)
-    
-    
-    
+###################################################################################################################################
+
+###################################################################################################################################
+###################################################################################################################################   
     
     
     
