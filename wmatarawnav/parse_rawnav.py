@@ -225,37 +225,6 @@ def subset_rawnav_trip(RawnavDataDict_, rawnav_inventory_filtered_, AnalysisRout
     return(FinDat)
 ###################################################################################################################################
 
-# subset_summary_data
-###################################################################################################################################
-def subset_summary_data(FinSummaryDat_, AnalysisRoutes_):
-    '''
-    Parameters
-    ----------
-    FinSummaryDat_ : pd.DataFrame
-        Summary data that has columns on trip start and end lat-longs.
-    AnalysisRoutes_ : list
-        list of routes that need to be subset.
-    Returns
-    -------
-    SumData:pd.DataFrame
-        Subset of summary data with analysis routes only. 
-    SumData_StartGpd : gpd.GeoDataFrame
-            Subset of summary data with analysis routes only and start point used for geometry column. 
-    SumData_EndGpd : gpd.GeoDataFrame
-        Subset of summary data with analysis routes only and end point used for geometry column. 
-    '''
-    SumData = FinSummaryDat_.query("route in @AnalysisRoutes_")
-    SumData.reset_index(drop=True,inplace=True)
-    tempDf = SumData[['filename','IndexTripStartInCleanData','LatStart', 'LongStart','route']]
-    geometryStart = [Point(xy) for xy in zip(tempDf.LongStart, tempDf.LatStart)]
-    SumData_StartGpd=gpd.GeoDataFrame(tempDf, geometry=geometryStart,crs={'init':'epsg:4326'})
-    tempDf=None
-    tempDf = SumData[['filename','IndexTripStartInCleanData','LatEnd', 'LongEnd','route']]
-    geometryEnd = [Point(xy) for xy in zip(tempDf.LongEnd, tempDf.LatEnd)]
-    SumData_EndGpd=gpd.GeoDataFrame(tempDf, geometry=geometryEnd,crs={'init':'epsg:4326'})
-    return(SumData,SumData_StartGpd,SumData_EndGpd)
-###################################################################################################################################
-
 #Nested Functions
 ###########################################################################################################################################################################################
 # AddTripDividers

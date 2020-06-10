@@ -14,6 +14,49 @@ from scipy.spatial import cKDTree
 import numpy as np
 import folium
 from folium import plugins
+import pyarrow.parquet as pq
+
+
+# readProcessedRawnav
+###################################################################################################################################
+def readProcessedRawnav(AnalysisRoutes_,path_processed_route_data, restrict, analysis_days):
+    tempList= []
+    FinDat= pd.DataFrame()
+    for analysisRte in AnalysisRoutes_:
+        filterParquet = [[('wday','=',day)] for day in analysis_days]
+        tempDat = pq.read_table(source =os.path.join(path_processed_route_data,f"Route{analysisRte}_Restrict{restrict}.parquet")\
+        ,filters =filterParquet).to_pandas()
+        tempDat.route = tempDat.route.astype('str')
+        tempDat.drop(columns=['Blank','LatRaw','LongRaw','SatCnt','__index_level_0__'],inplace=True)
+        #Check for duplicate IndexLoc
+        assert(tempDat.groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
+        tempList.append(tempDat)
+    FinDat = pd.concat(tempList)
+    return(FinDat)
+
+# readSummaryRawnav
+###################################################################################################################################
+def readSummaryRawnav(AnalysisRoutes_,path_processed_route_data, restrict,analysis_days):
+    tempList= []
+    issueList =[]
+    FinIssueDat = pd.DataFrame()
+    FinSummaryDat= pd.DataFrame()
+    for analysisRte in AnalysisRoutes_:
+        tempSumDat = pd.read_csv(os.path.join(path_processed_route_data,f'TripSummaries_Route{analysisRte}_Restrict{restrict}.csv'))
+        tempSumDat.IndexTripStartInCleanData = tempSumDat.IndexTripStartInCleanData.astype('int32')
+        tempSumDat  = tempSumDat.query('wday in @analysis_days')
+        if tempSumDat.shape[0]==0: raise ValueError(f"No trips on any of the analysis_days ({analysis_days})")
+        issueDat = tempSumDat.query('TripDurFromSec < 600 | DistOdomMi < 2') # Trip should be atleast 5 min and 2 mile long
+        tempSumDat =tempSumDat .query('not (TripDurFromSec < 600 | DistOdomMi < 2)')
+        print(f'Removing {issueDat.shape[0]} out of {tempSumDat.shape[0]} trips/ rows with TripDurFromSec < 600 seconds or DistOdomMi < 2 miles from route {analysisRte}')
+        tempList.append(tempSumDat)
+        issueList.append(issueDat)
+    FinSummaryDat = pd.concat(tempList)
+    FinIssueDat = pd.concat(issueList)
+    return(FinSummaryDat,FinIssueDat)
+
+
+
 
 # readGTFS
 ###################################################################################################################################
@@ -191,7 +234,13 @@ def GetSummaryGTFSdata(FinDat_, SumDat_,DatFirstLastStops_):
     #5 Get summary after using GTFS data
     ########################################################################################
     FinDat_ = FinDat_.merge(DatFirstLastStops_,on=['filename','IndexTripStartInCleanData'],how='right')
+    #Debug : 
+    FinDat_[~FinDat_.duplicated(['filename','IndexTripStartInCleanData'])] 
     FinDat_ = FinDat_.query('IndexLoc>=LowerBoundLoc & IndexLoc<=UpperBoundLoc')
+    check = FinDat_[['filename','IndexTripStartInCleanData','distFromFirstStop']][~FinDat_.duplicated(['filename','IndexTripStartInCleanData'])] 
+    check =check.merge(DatFirstLastStops_,on=['filename','IndexTripStartInCleanData'],how='right')
+    check  = check[check.distFromFirstStop_x.isna()]
+    assert(check.shape[0]==0)
     FinDat_.rename(columns= {'distFromFirstStop':'Dist_from_GTFS1stStop'},inplace=True)
     FinDat_ = FinDat_[['filename','IndexTripStartInCleanData','Lat','Long','Heading','OdomtFt','SecPastSt'
                            ,'Dist_from_GTFS1stStop']]
@@ -215,7 +264,7 @@ def GetSummaryGTFSdata(FinDat_, SumDat_,DatFirstLastStops_):
 
 # mergeStopsGTFSrawnav
 ###################################################################################################################################
-def mergeStopsGTFSrawnav(StopsGTFS, rawnavDat):
+def mergeStopsGTFSrawnav(StopsGTFS, rawnavDat, useDirId=False):
     '''
     Parameters
     ----------
@@ -239,13 +288,20 @@ def mergeStopsGTFSrawnav(StopsGTFS, rawnavDat):
     #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
     gdA.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
     gdB.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
-    TripGroups = gdB.groupby(['filename','IndexTripStartInCleanData','route']) # Group rawnav data
-    GTFS_groups = gdA.groupby('route_id') # Group GTFS data
+    if useDirId:
+        TripGroups = gdB.groupby(['filename','IndexTripStartInCleanData','route','direction_id']) # Group rawnav data
+        GTFS_groups = gdA.groupby(['route_id','direction_id']) # Group GTFS data       
+    else:
+        TripGroups = gdB.groupby(['filename','IndexTripStartInCleanData','route']) # Group rawnav data
+        GTFS_groups = gdA.groupby('route_id') # Group GTFS data
     NearestRawnavOnGTFS =pd.DataFrame()
     for name, groupRawnav in TripGroups:
         #print(name)
-        GTFS_RelevantRouteDat = GTFS_groups.get_group(name[2]) #Get the relevant group in GTFS corresponding to rawnav.
-        # TODO : Does the GTFS route_id matches exactly with rawnav route? 
+        if useDirId:
+            GTFS_RelevantRouteDat = GTFS_groups.get_group((name[2],name[3])) #Get the relevant group in GTFS corresponding to rawnav.
+        else:
+            GTFS_RelevantRouteDat = GTFS_groups.get_group(name[2]) #Get the relevant group in GTFS corresponding to rawnav.
+            # TODO : Does the GTFS route_id matches exactly with rawnav route? 
         NearestRawnavOnGTFS = pd.concat([NearestRawnavOnGTFS,\
                                          ckdnearest(GTFS_RelevantRouteDat,groupRawnav)])
     NearestRawnavOnGTFS.dist = NearestRawnavOnGTFS.dist * 3.28084 # meters to feet
@@ -292,40 +348,76 @@ def ckdnearest(gdA, gdB):
 
 # GetCorrectDirGTFS
 ###################################################################################################################################
-def GetCorrectDirGTFS(NearestRawnavOnGTFS_, SumDat_):
+def GetCorrectDirGTFS(Dat1stStop,SumDat_):
     #TODO: Write Documentation
-    DatFirstStopTemp = NearestRawnavOnGTFS_.query("stop_sequence==1")
-    DatFirstStopTemp.sort_values(['filename','IndexTripStartInCleanData',
-                                     'direction_id','stop_sequence'],inplace=True)
-    DatFirstStopTemp.loc[:,'var'] = DatFirstStopTemp.groupby(['filename','IndexTripStartInCleanData']).IndexLoc.transform(np.var)
-    IssueDat = DatFirstStopTemp.query('var==0') # e.g. route 79: same rawnav index is close to silver spring and Archives in case of route 79. 
-    DatFirstStopTemp = DatFirstStopTemp.query('var!=0') 
-    DatStopSnapping = DatFirstStopTemp.groupby(['filename','IndexTripStartInCleanData']).apply(lambda  g: g[g['IndexLoc'] == g['IndexLoc'].min()]).reset_index(drop=True)
-    DatStopSnapping = DatStopSnapping.query('distNearestPointFromStop<200') # Get trips that start within 200 ft. of the 1st stop
-    DatStopSnapping = DatStopSnapping.merge(SumDat_[['filename','IndexTripStartInCleanData','pattern','route']],on=['filename','IndexTripStartInCleanData'],how='left')
-    DatStopSnapping = DatStopSnapping[['filename', 'IndexTripStartInCleanData','direction_id','stop_name']]
-    DatStopSnapping.rename(columns={'stop_name':'first_stopNm'},inplace=True)
-    DatStopSnapping = NearestRawnavOnGTFS_.merge(DatStopSnapping,on=['filename', 'IndexTripStartInCleanData','direction_id'],how='right')
-    DatStopSnapping.sort_values(['filename','IndexTripStartInCleanData',
-                                     'direction_id','stop_sequence'],inplace=True)
-    assert(DatStopSnapping.groupby(['filename', 'IndexTripStartInCleanData']).IndexLoc.apply(lambda x: x<0).sum()==0) # IndexLoc increases with stop sequence
+    # Get Correct Direction
+    #######################################################
+    Dat1stStop = Dat1stStop.query('distNearestPointFromStop<5280') # Get trips that have the closest rawnav point within 5280 ft. of 1nd stop
+    Dat1stStop.sort_values(['filename','IndexTripStartInCleanData',
+                                      'direction_id','stop_sequence'],inplace=True)
+    Dat1stStop.loc[:,"tempCol"]= Dat1stStop.groupby(['filename','IndexTripStartInCleanData']).IndexLoc.transform(min)
+    Dat1stStop = Dat1stStop.query('IndexLoc==tempCol').reset_index().drop(columns='tempCol')
+    assert(Dat1stStop.duplicated(['filename','IndexTripStartInCleanData']).sum()==0)
+    print(f"Removed {SumDat_.shape[0] - Dat1stStop.shape[0]} trips from {SumDat_.shape[0]} with closest rawnav point > 1 mi. from the GTFS 1st stop")
+    Dat1stStop = Dat1stStop[['filename', 'IndexTripStartInCleanData','direction_id','stop_name']]
+    Dat1stStop.rename(columns={'stop_name':'1st_stopNm'},inplace=True)
+    return(Dat1stStop)
+###################################################################################################################################    
+
+# FindStopOnRoute
+###################################################################################################################################
+def FindStopOnRoute(DatStopSnapping, SumDat_):
+    # Find stops on route
+    #######################################################
+    print(f"Removing {DatStopSnapping.query('distNearestPointFromStop>200').shape[0]} from {DatStopSnapping.shape[0]} stops/ rows where the nearest rawnav point from a stop is over 200 ft.")
+    # Remove long route stops from a short route trip
     DatStopSnapping =DatStopSnapping.query('distNearestPointFromStop<200') # Remove stops where nearest rawnav point is more than 200 ft. away
-  
-    DatLastStop = DatStopSnapping.groupby(['filename', 'IndexTripStartInCleanData']).\
-        apply(lambda g: g[g['stop_sequence'] == g['stop_sequence'].max()]).reset_index(drop=True)
+    #Tie breaker for short and long route which where a given stop sequence can be for 2 different stop locations
+    #Inefficient method: DatStopSnapping = DatStopSnapping.groupby(['filename','IndexTripStartInCleanData','stop_sequence']).apply(lambda  g: g[g['IndexLoc'] == g['IndexLoc'].min()]).reset_index(drop=True)
+    DatStopSnapping.loc[:,"tempCol"]= DatStopSnapping.groupby(['filename','IndexTripStartInCleanData','stop_sequence']).IndexLoc.transform(min)
+    DatStopSnapping = DatStopSnapping.query('IndexLoc==tempCol').reset_index(drop=True).drop(columns='tempCol')
+    #Tie breaker for very close bus stops which get snapped to the same rawnav point
+    DatStopSnapping.loc[:,"tempCol"]= DatStopSnapping.groupby(['filename','IndexTripStartInCleanData','stop_sequence']).distNearestPointFromStop.transform(min)
+    DatStopSnapping = DatStopSnapping.query('distNearestPointFromStop==tempCol').reset_index(drop=True).drop(columns='tempCol')
+    check =DatStopSnapping[DatStopSnapping.duplicated(['filename','IndexTripStartInCleanData','stop_sequence'],keep=False)]
+    assert(DatStopSnapping.duplicated(['filename','IndexTripStartInCleanData','stop_sequence']).sum()==0), "Unique stop sequence; handle short and long route"
+    DatStopSnapping.sort_values(['filename','IndexTripStartInCleanData',
+                                      'direction_id','stop_sequence'],inplace=True)
+    try:
+        assert(sum(DatStopSnapping.groupby(['filename','IndexTripStartInCleanData']).IndexLoc.diff().dropna()<=0)==0)
+    except AssertionError as AsErr:
+        print("Gathering trips with incorrect direction issue.")
+        issueDat = DatStopSnapping[DatStopSnapping.groupby(['filename','IndexTripStartInCleanData']).IndexLoc.diff()<=0]
+        issueDat.sort_values(['filename','IndexTripStartInCleanData','stop_sequence'],inplace=True)
+        Mask= issueDat[['filename','IndexTripStartInCleanData']].duplicated(['filename','IndexTripStartInCleanData'])
+        issueDat1 = issueDat.loc[~Mask,['filename','IndexTripStartInCleanData']]
+        issueDat1.loc[:,'delCol'] = True
+        DatStopSnapping =DatStopSnapping.merge(issueDat1,how='left')
+        DatStopSnapping = DatStopSnapping.query('delCol!=True').drop(columns='delCol')
+    DatLastStop = DatStopSnapping
+    DatLastStop.loc[:,"tempCol"]= DatStopSnapping.groupby(['filename','IndexTripStartInCleanData']).stop_sequence.transform(max)
+    DatLastStop = DatLastStop.query('stop_sequence==tempCol').reset_index(drop=True).drop(columns='tempCol')
+    
     DatLastStop = DatLastStop[['filename','IndexTripStartInCleanData','IndexLoc',
-                               'distNearestPointFromStop','stop_sequence','stop_name',
-                               'stop_lat','stop_lon']].\
+                                'distNearestPointFromStop','stop_sequence','stop_name',
+                                'stop_lat','stop_lon']].\
         rename(columns={'IndexLoc':'UpperBoundLoc','distNearestPointFromStop':"distFromLastStop",
                         'stop_sequence':'lastStopSequence','stop_name':'last_stopNm',
                         'stop_lat':'LastStop_lat','stop_lon':'LastStop_lon'})
-    DatFirstStop = DatStopSnapping.query('stop_sequence==1')
+    # DatFirstStop =  DatStopSnapping.groupby(['filename', 'IndexTripStartInCleanData']).\
+    #     apply(lambda g: g[g['stop_sequence'] == g['stop_sequence'].min()]).reset_index(drop=True)        
+    # TODO: change apply to other efficient function
+    DatFirstStop = DatStopSnapping
+    DatFirstStop.loc[:,"tempCol"]= DatFirstStop.groupby(['filename','IndexTripStartInCleanData']).stop_sequence.transform(min)
+    DatFirstStop = DatFirstStop.query('stop_sequence==tempCol').reset_index(drop=True).drop(columns='tempCol')
     DatFirstStop.rename(columns ={'IndexLoc':"LowerBoundLoc",'distNearestPointFromStop':"distFromFirstStop",
-                                  'stop_sequence':'firstStopSequence','stop_lat':'StartStop_lat','stop_lon':'StartStop_lon'},inplace=True)
-    DatFirstStop.drop(columns=['Lat', 'Long','stop_name'],inplace=True)
+                                  'stop_sequence':'firstStopSequence','stop_lat':'StartStop_lat',
+                                  'stop_lon':'StartStop_lon','stop_name':'first_stopNm'},inplace=True)
+    DatFirstStop.drop(columns=['Lat', 'Long'],inplace=True)
     DatFirstLastStops = DatFirstStop.merge(DatLastStop,on=['filename','IndexTripStartInCleanData'],how='left')
     DatFirstLastStops.drop(columns=['geometry'],inplace=True)
-    return(DatStopSnapping,DatFirstLastStops)
+    print(f'Total number of trips/ rows removed during cleaning : {SumDat_.shape[0]-DatFirstLastStops.shape[0]}')
+    return(DatStopSnapping,DatFirstLastStops, issueDat)
 ###################################################################################################################################
 
 # PlotRawnavTrajWithGTFS
