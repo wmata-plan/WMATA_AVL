@@ -264,7 +264,7 @@ def GetSummaryGTFSdata(FinDat_, SumDat_,DatFirstLastStops_):
 
 # mergeStopsGTFSrawnav
 ###################################################################################################################################
-def mergeStopsGTFSrawnav(StopsGTFS, rawnavDat, useDirId=False):
+def mergeStopsGTFSrawnav(StopsGTFS, rawnavDat, useAllStopId=False):
     '''
     Parameters
     ----------
@@ -288,16 +288,16 @@ def mergeStopsGTFSrawnav(StopsGTFS, rawnavDat, useDirId=False):
     #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
     gdA.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
     gdB.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
-    if useDirId:
-        TripGroups = gdB.groupby(['filename','IndexTripStartInCleanData','route','direction_id']) # Group rawnav data
-        GTFS_groups = gdA.groupby(['route_id','direction_id']) # Group GTFS data       
+    if useAllStopId:
+        TripGroups = gdB.groupby(['filename','IndexTripStartInCleanData','route','all_stops']) # Group rawnav data
+        GTFS_groups = gdA.groupby(['route_id','all_stops']) # Group GTFS data       
     else:
         TripGroups = gdB.groupby(['filename','IndexTripStartInCleanData','route']) # Group rawnav data
         GTFS_groups = gdA.groupby('route_id') # Group GTFS data
     NearestRawnavOnGTFS =pd.DataFrame()
     for name, groupRawnav in TripGroups:
         #print(name)
-        if useDirId:
+        if useAllStopId:
             GTFS_RelevantRouteDat = GTFS_groups.get_group((name[2],name[3])) #Get the relevant group in GTFS corresponding to rawnav.
         else:
             GTFS_RelevantRouteDat = GTFS_groups.get_group(name[2]) #Get the relevant group in GTFS corresponding to rawnav.
@@ -352,14 +352,17 @@ def GetCorrectDirGTFS(Dat1stStop,SumDat_):
     #TODO: Write Documentation
     # Get Correct Direction
     #######################################################
-    Dat1stStop = Dat1stStop.query('distNearestPointFromStop<5280') # Get trips that have the closest rawnav point within 5280 ft. of 1nd stop
+    # Tried 200 ft. but it is causing incorrect matching. Need to use a big number.
+    # 
+    OneMi = 5280
+    Dat1stStop = Dat1stStop.query('distNearestPointFromStop<@OneMi') # Get trips that have the closest rawnav point within 1 mi. of 1nd stop
     Dat1stStop.sort_values(['filename','IndexTripStartInCleanData',
                                       'direction_id','stop_sequence'],inplace=True)
     Dat1stStop.loc[:,"tempCol"]= Dat1stStop.groupby(['filename','IndexTripStartInCleanData']).IndexLoc.transform(min)
     Dat1stStop = Dat1stStop.query('IndexLoc==tempCol').reset_index().drop(columns='tempCol')
     assert(Dat1stStop.duplicated(['filename','IndexTripStartInCleanData']).sum()==0)
     print(f"Removed {SumDat_.shape[0] - Dat1stStop.shape[0]} trips from {SumDat_.shape[0]} with closest rawnav point > 1 mi. from the GTFS 1st stop")
-    Dat1stStop = Dat1stStop[['filename', 'IndexTripStartInCleanData','direction_id','stop_name']]
+    Dat1stStop = Dat1stStop[['filename', 'IndexTripStartInCleanData','direction_id','stop_name','all_stops']]
     Dat1stStop.rename(columns={'stop_name':'1st_stopNm'},inplace=True)
     return(Dat1stStop)
 ###################################################################################################################################    
@@ -369,9 +372,14 @@ def GetCorrectDirGTFS(Dat1stStop,SumDat_):
 def FindStopOnRoute(DatStopSnapping, SumDat_):
     # Find stops on route
     #######################################################
+    DatStopSnappingTemp = DatStopSnapping.copy()
     print(f"Removing {DatStopSnapping.query('distNearestPointFromStop>200').shape[0]} from {DatStopSnapping.shape[0]} stops/ rows where the nearest rawnav point from a stop is over 200 ft.")
     # Remove long route stops from a short route trip
     DatStopSnapping =DatStopSnapping.query('distNearestPointFromStop<200') # Remove stops where nearest rawnav point is more than 200 ft. away
+    DatStopSnapping.sort_values(['filename','IndexTripStartInCleanData',
+                                      'direction_id','stop_sequence'],inplace=True)
+    DatStopSnapping.loc[:,"tempCol"]= DatStopSnapping.groupby(['filename','IndexTripStartInCleanData','stop_sequence']).IndexLoc.transform(min)
+
     #Tie breaker for short and long route which where a given stop sequence can be for 2 different stop locations
     #Inefficient method: DatStopSnapping = DatStopSnapping.groupby(['filename','IndexTripStartInCleanData','stop_sequence']).apply(lambda  g: g[g['IndexLoc'] == g['IndexLoc'].min()]).reset_index(drop=True)
     DatStopSnapping.loc[:,"tempCol"]= DatStopSnapping.groupby(['filename','IndexTripStartInCleanData','stop_sequence']).IndexLoc.transform(min)
@@ -394,6 +402,9 @@ def FindStopOnRoute(DatStopSnapping, SumDat_):
         issueDat1.loc[:,'delCol'] = True
         DatStopSnapping =DatStopSnapping.merge(issueDat1,how='left')
         DatStopSnapping = DatStopSnapping.query('delCol!=True').drop(columns='delCol')
+        issueDat1 = issueDat1.merge(DatStopSnappingTemp)
+        issueDat1.sort_values(['filename','IndexTripStartInCleanData','stop_sequence'],inplace=True)
+
     DatLastStop = DatStopSnapping
     DatLastStop.loc[:,"tempCol"]= DatStopSnapping.groupby(['filename','IndexTripStartInCleanData']).stop_sequence.transform(max)
     DatLastStop = DatLastStop.query('stop_sequence==tempCol').reset_index(drop=True).drop(columns='tempCol')

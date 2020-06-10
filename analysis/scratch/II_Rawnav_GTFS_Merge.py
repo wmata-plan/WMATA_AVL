@@ -77,7 +77,7 @@ print("*"*100)
 ###########################################################################################################################################################
 print(f"Run Section 2 Analyze Route ---Subset RawNav Data...")
 begin_time = datetime.now() ##
-analysis_days = ['Monday','Tuesday','Wednesday']
+analysis_days = ['Monday']
 DaysOfWeek = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
 assert(len(set(DaysOfWeek)-set(analysis_days))> 0), print("""
                                                     analysis_days is a subset of following days: 
@@ -110,29 +110,40 @@ FirstStopDat1_rte, CheckFirstStop, CheckFirstStop1 = wr.get1ststop(GtfsData,Anal
 LastStopDat1_rte, CheckLastStop, CheckLastStop1 = wr.getlaststop(GtfsData,AnalysisRoutes)
 wr.debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckLastStop1,path_processed_data)
 
+GtfsData.sort_values(['trip_id','stop_sequence'],inplace=True)
+GtfsData.stop_id = GtfsData.stop_id.astype(str)
+GtfsData_tripDef= GtfsData.groupby(['trip_id']).agg({'stop_id':lambda x:"_".join(x)})
+GtfsData_tripDef = GtfsData_tripDef[~GtfsData_tripDef.duplicated('stop_id')].reset_index().rename(columns={'stop_id':"all_stops"})
+GtfsData_tripDef = GtfsData_tripDef.merge(GtfsData,on="trip_id")
+temp = GtfsData_tripDef.groupby('trip_id').stop_sequence.transform('idxmin').values
+GtfsData_tripDef.loc[:,'1st_stopNm'] = GtfsData_tripDef.loc[temp,'stop_name'].values
 
 # 3.1 Merge 1st stops to rawnav data---Find correct direction
 ############################################
-GtfsData_1stStops = GtfsData[~GtfsData.duplicated(['route_id','direction_id','stop_sequence','stop_name'],keep='first')].query('stop_sequence==1')
+GtfsData_1stStops = GtfsData_tripDef[~GtfsData_tripDef.duplicated(['route_id','direction_id','stop_sequence','stop_name'],keep='first')].query('stop_sequence==1')
 NearestRawnavOnGTFS_1stStop = wr.mergeStopsGTFSrawnav(GtfsData_1stStops, FinDat)
-NearestRawnavOnGTFS_1stStop = NearestRawnavOnGTFS
 # Find Correct Dir
-DatCorDir = wr.GetCorrectDirGTFS(NearestRawnavOnGTFS_1stStop,FinSummaryDat)
-FinDat = FinDat.merge(DatCorDir,on =['filename', 'IndexTripStartInCleanData'],how='right')
+# TODO Change name to Dat1stStopAndDir
+DatCorDir1stStp = wr.GetCorrectDirGTFS(NearestRawnavOnGTFS_1stStop,FinSummaryDat)
+assert(sum(DatCorDir1stStp.groupby(['filename', 'IndexTripStartInCleanData']).all_stops.count()!=1)==0) ,"might fail when long and short route start from the same 1st stop"
+# It looks like all the queue jump routes have unique starting location. Just finding correct 1st stop from GTFS can tell us if a trip is long or short
+# If more routes are added then we would also need to test the last stop to find if the trip is short or long. This would have happen if on 
+# a route a trip starts from the same location but ends on two different stops.
+FinDat = FinDat.merge(DatCorDir1stStp,on =['filename', 'IndexTripStartInCleanData'],how='right')
 # 3.2 Merge all stops to rawnav data
 ############################################
 # Get all stops on a bus route irrespective of short and long or direction. Will figure out the direction later.
-GtfsData_UniqueStops = GtfsData[~GtfsData.duplicated(['route_id','direction_id','stop_sequence','stop_name'],keep='first')]
-GtfsData_UniqueStops.sort_values(by=['route_id','direction_id','stop_sequence','stop_name'],inplace=True)
-useDirId = True
-NearestRawnavOnGTFS = wr.mergeStopsGTFSrawnav(GtfsData_UniqueStops, FinDat,useDirId)
+# GtfsData_UniqueStops = GtfsData_tripDef[~GtfsData_tripDef.duplicated(['route_id','direction_id','stop_sequence','stop_name'],keep='first')]
+# GtfsData_UniqueStops.sort_values(by=['route_id','direction_id','stop_sequence','stop_name'],inplace=True)
+useAllStopId = True
+NearestRawnavOnGTFS = wr.mergeStopsGTFSrawnav(GtfsData_tripDef, FinDat,useAllStopId)
 NearestRawnavOnGTFS = NearestRawnavOnGTFS[['filename','IndexTripStartInCleanData','direction_id'
-                                           ,'stop_sequence','IndexLoc','route_id',
-                                           'trip_headsign','stop_lat','stop_lon','stop_name'
-                                           ,'Lat','Long','distNearestPointFromStop','geometry']]
+                                           ,'stop_sequence','IndexLoc','route_id','all_stops',
+                                           'trip_headsign','stop_lat','stop_lon','stop_name',
+                                           'Lat','Long','distNearestPointFromStop','geometry']]
 NearestRawnavOnGTFS.sort_values(['filename','IndexTripStartInCleanData',
                                  'direction_id','stop_sequence'],inplace=True)
-#Get data with correct direction
+#Get data with correct stops
 DatRawnavGTFS_CorDir, DatFirstLastStops, DatRawnavGTFS_issue = wr.FindStopOnRoute(NearestRawnavOnGTFS,FinSummaryDat)
 SumDatWithGTFS= wr.GetSummaryGTFSdata(FinDat,FinSummaryDat,DatFirstLastStops)
 SumDatWithGTFS.set_index(['fullpath','filename','file_id','wday','StartDateTime','EndDateTime','IndexTripStartInCleanData','taglist','route_pattern','route','pattern'],inplace=True,drop=True) 
@@ -181,7 +192,7 @@ trackerUsableRte = collections.Counter()
 for name, grp in GroupsTemp:
     Pattern = grp["pattern"].values[0]
     trackerUsableRte[f"{name[2]}_{Pattern}"]+= 1 
-    
+print(trackerUsableRte)
 STOP = 5
 tracker = collections.Counter()
 
@@ -195,9 +206,9 @@ for name, RawNavGrp in RawnavGrps:
     else: continue
     # if int(Pattern)!= 4: 
     #     continue
-    print(name, Pattern)
     tracker[f"{name[2]}_{Pattern}"]+=1 
     if tracker[f"{name[2]}_{Pattern}"]>=STOP: continue
+    print(name, Pattern)
     wday = StopDat1["wday"].values[0]
     Hour = StopDat1.StartDateTime.values[0].split(" ")[1].split(":")[0]
     SaveFile= f"{wday}_{Hour}_{name[2]}_{Pattern}_{name[0]}_Row{int(name[1])}.html"
@@ -224,7 +235,7 @@ trackerRteIssues = collections.Counter()
 for name, grp in GroupsTempIssue:
     Pattern = grp["pattern"].values[0]
     trackerRteIssues[f"{name[2]}_{Pattern}"]+= 1 
-    
+print(trackerRteIssues)
 tracker = collections.Counter()
 for name, RawNavGrp in RawnavGrps:
     Pattern = RawNavGrp["pattern"].values[0]
