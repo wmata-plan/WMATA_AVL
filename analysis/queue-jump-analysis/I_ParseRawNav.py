@@ -55,7 +55,7 @@ else:
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
-restrict_n = None
+restrict_n = 1000
 #AnalysisRoutes = ['S9','70','79'] # Ran
 # AnalysisRoutes = ['S1','S2','S4','64'] # Ran
 #AnalysisRoutes = ['G8','D32','H1','H2','H3','H4'] #Ran
@@ -74,12 +74,12 @@ import wmatarawnav as wr
 executionTime= str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 1 Import Libraries and Set Global Parameters : {executionTime}")
 
-#2 Indentify Relevant Files for Analysis Routes
+#2 Identify Relevant Files for Analysis Routes
 ###########################################################################################################################################################
 begin_time = datetime.now() ##
 #Extract parent zipped folder and get the zipped files path
 ZippedFilesDirParent = os.path.join(path_source_data, ZipParentFolderName)
-ZippedFilesDirs = glob.glob(os.path.join(path_source_data,ZipParentFolderName,'Vehicles *.zip'))
+ZippedFilesDirs = glob.glob(os.path.join(ZippedFilesDirParent,'Vehicles *.zip'))
 #Can use the unzipped files directly:
 #UnZippedFilesDir =  glob.glob(os.path.join(path_source_data,ZippedFilesDirParent,'Vehicles*[0-9]'))
 FileUniverse = wr.GetZippedFilesFromZipDir(ZippedFilesDirs,ZippedFilesDirParent) 
@@ -101,7 +101,7 @@ if (len(rawnav_inventory_filtered) ==0):
 rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath','filename']).line_num.min().reset_index()
 
 executionTime= str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 2 Indentify Relevant Files for Analysis Routes : {executionTime}")
+print(f"Run Time Section 2 Identify Relevant Files for Analysis Routes : {executionTime}")
 # 3 Load Raw RawNav Data
 ###########################################################################################################################################################
 begin_time = datetime.now() ##
