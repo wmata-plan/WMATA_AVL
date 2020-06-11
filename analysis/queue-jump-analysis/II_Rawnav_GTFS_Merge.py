@@ -85,10 +85,18 @@ assert(len(set(DaysOfWeek)-set(analysis_days))> 0), print("""
                                                 """)
 # 2.1 Rawnav Data
 ############################################
-FinDat = wr.readProcessedRawnav(AnalysisRoutes,path_processed_route_data,None,analysis_days)
+FinDat = wr.readProcessedRawnav(
+    AnalysisRoutes_=AnalysisRoutes,
+    path_processed_route_data=path_processed_route_data,
+    restrict=restrict_n,
+    analysis_days=analysis_days)
 # 2.2 Summary Data
 ############################################
-FinSummaryDat, issueDat = wr.readSummaryRawnav(AnalysisRoutes,path_processed_route_data,None,analysis_days)
+FinSummaryDat, issueDat = wr.readSummaryRawnav(
+    AnalysisRoutes_=AnalysisRoutes,
+    path_processed_route_data=path_processed_route_data,
+    restrict=restrict_n,
+    analysis_days=analysis_days)
 Subset = FinSummaryDat[['filename','IndexTripStartInCleanData']]
 # 2.3 Merge Processed and Summary Data
 ############################################
