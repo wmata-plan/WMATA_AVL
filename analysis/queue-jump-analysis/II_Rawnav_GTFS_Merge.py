@@ -63,7 +63,11 @@ else:
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
 restrict_n = None
-AnalysisRoutes = ['S9','S1','H4']
+MasterRouteList = ['S1','S2','S4','S9','70','79','64','G8','D32','H1','H2','H3','H4','H8','W47'] # 16 Gb RAM can't handle all these at one go
+# AnalysisRoutes = ['S1','S9','H4','G8','64']
+AnalysisRoutes = ['70','64','D32','H8','S2']
+#AnalysisRoutes = ['S2','S4','H1','H2','H3','79','W47']]
+
 ZipParentFolderName = "October 2019 Rawnav"
 
 # 1.3 Import User-Defined Package
@@ -117,20 +121,39 @@ GtfsData_tripDef = GtfsData_tripDef[~GtfsData_tripDef.duplicated('stop_id')].res
 GtfsData_tripDef = GtfsData_tripDef.merge(GtfsData,on="trip_id")
 temp = GtfsData_tripDef.groupby('trip_id').stop_sequence.transform('idxmin').values
 GtfsData_tripDef.loc[:,'1st_stopNm'] = GtfsData_tripDef.loc[temp,'stop_name'].values
-
-# 3.1 Merge 1st stops to rawnav data---Find correct direction
+ 
+# 3.2 Merge 1st stops to rawnav data
 ############################################
-GtfsData_1stStops = GtfsData_tripDef[~GtfsData_tripDef.duplicated(['route_id','direction_id','stop_sequence','stop_name'],keep='first')].query('stop_sequence==1')
+GtfsData_1stStops = GtfsData_tripDef.query('route_id in @MasterRouteList & stop_sequence==1')
+NeedLastStop = GtfsData_1stStops.groupby(['route_id','direction_id','stop_name']).filter(lambda x: x['trip_id'].count()==2)
 NearestRawnavOnGTFS_1stStop = wr.mergeStopsGTFSrawnav(GtfsData_1stStops, FinDat)
-# Find Correct Dir
-# TODO Change name to Dat1stStopAndDir
-DatCorDir1stStp = wr.GetCorrectDirGTFS(NearestRawnavOnGTFS_1stStop,FinSummaryDat)
-assert(sum(DatCorDir1stStp.groupby(['filename', 'IndexTripStartInCleanData']).all_stops.count()!=1)==0) ,"might fail when long and short route start from the same 1st stop"
-# It looks like all the queue jump routes have unique starting location. Just finding correct 1st stop from GTFS can tell us if a trip is long or short
-# If more routes are added then we would also need to test the last stop to find if the trip is short or long. This would have happen if on 
+
+# 3.3 Merge last stops to rawnav data---Find correct direction---Handle route G8 and S9: Have the same start point but different end points.
+############################################
+# Just finding correct 1st stop from GTFS cannot tell us if a trip is long or short
+# We also need to test the last stop to find if the trip is short or long. This would have happen if on 
 # a route a trip starts from the same location but ends on two different stops.
-FinDat = FinDat.merge(DatCorDir1stStp,on =['filename', 'IndexTripStartInCleanData'],how='right')
-# 3.2 Merge all stops to rawnav data
+SubsetRoutes = NeedLastStop.route_id.unique()
+GtfsData_LastStops = GtfsData_tripDef.query('route_id in @SubsetRoutes')
+temp = GtfsData_LastStops.groupby('trip_id').stop_sequence.transform(max)
+GtfsData_LastStops = GtfsData_LastStops[GtfsData_LastStops.stop_sequence==temp]
+FinDat2= FinDat.query('route in @SubsetRoutes')
+if FinDat2.shape[0]!=0:
+    NearestRawnavOnGTFS_LastStop = wr.mergeStopsGTFSrawnav(GtfsData_LastStops, FinDat2)
+    # routeNoUnique1stStp = SubsetRoutes
+    # SumDat_ = FinSummaryDat
+    # Dat1stStop = NearestRawnavOnGTFS_1stStop
+    # DatLastStop = NearestRawnavOnGTFS_LastStop 
+    # 3.4 Find correct direction
+    ############################################
+    # Find Correct Dir
+    # TODO Change name to Dat1stStopAndDir
+    
+Dat1stStopAndDir = wr.GetCorrectDirGTFS(NearestRawnavOnGTFS_1stStop,NearestRawnavOnGTFS_LastStop, FinSummaryDat, SubsetRoutes)
+assert(sum(Dat1stStopAndDir.groupby(['filename', 'IndexTripStartInCleanData']).all_stops.count()!=1)==0) ,"might fail when long and short route start from the same 1st stop"
+FinDat = FinDat.merge(Dat1stStopAndDir,on =['filename', 'IndexTripStartInCleanData'],how='right')
+
+# 3.5 Merge all stops to rawnav data
 ############################################
 # Get all stops on a bus route irrespective of short and long or direction. Will figure out the direction later.
 # GtfsData_UniqueStops = GtfsData_tripDef[~GtfsData_tripDef.duplicated(['route_id','direction_id','stop_sequence','stop_name'],keep='first')]
@@ -147,12 +170,12 @@ NearestRawnavOnGTFS.sort_values(['filename','IndexTripStartInCleanData',
 DatRawnavGTFS_CorDir, DatFirstLastStops, DatRawnavGTFS_issue = wr.FindStopOnRoute(NearestRawnavOnGTFS,FinSummaryDat)
 SumDatWithGTFS= wr.GetSummaryGTFSdata(FinDat,FinSummaryDat,DatFirstLastStops)
 SumDatWithGTFS.set_index(['fullpath','filename','file_id','wday','StartDateTime','EndDateTime','IndexTripStartInCleanData','taglist','route_pattern','route','pattern'],inplace=True,drop=True) 
-# 3.3 Output Summary Files
+# 3.6 Output Summary Files
 ############################################
 OutFiSum = os.path.join(path_processed_data,f'GTFSTripSummaries.xlsx')
 SumDatWithGTFS.to_excel(OutFiSum,merge_cells=False)
 
-# 3.4 Output GTFS+Rawnav Merged Files
+# 3.7 Output GTFS+Rawnav Merged Files
 ############################################
 # TODO: output files
 
@@ -243,6 +266,8 @@ for name, RawNavGrp in RawnavGrps:
         StopDat1 = GroupsTempIssue.get_group(name)   
     else: continue
     tracker[f"{name[2]}_{Pattern}"]+= 1 
+    tracker[f"{name[2]}_{Pattern}"]+=1 
+    if tracker[f"{name[2]}_{Pattern}"]>=STOP: continue
     print(name, Pattern)
     wday = StopDat1["wday"].values[0]
     Hour = StopDat1.StartDateTime.values[0].split(" ")[1].split(":")[0]
