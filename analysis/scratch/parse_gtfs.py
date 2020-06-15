@@ -14,47 +14,6 @@ from scipy.spatial import cKDTree
 import numpy as np
 import folium
 from folium import plugins
-import pyarrow.parquet as pq
-
-
-# readProcessedRawnav
-###################################################################################################################################
-def readProcessedRawnav(AnalysisRoutes_,path_processed_route_data, restrict, analysis_days):
-    tempList= []
-    FinDat= pd.DataFrame()
-    for analysisRte in AnalysisRoutes_:
-        filterParquet = [[('wday','=',day)] for day in analysis_days]
-        tempDat = pq.read_table(source =os.path.join(path_processed_route_data,f"Route{analysisRte}_Restrict{restrict}.parquet")\
-        ,filters =filterParquet).to_pandas()
-        tempDat.route = tempDat.route.astype('str')
-        tempDat.drop(columns=['Blank','LatRaw','LongRaw','SatCnt','__index_level_0__'],inplace=True)
-        #Check for duplicate IndexLoc
-        assert(tempDat.groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
-        tempList.append(tempDat)
-    FinDat = pd.concat(tempList)
-    return(FinDat)
-
-# readSummaryRawnav
-###################################################################################################################################
-def readSummaryRawnav(AnalysisRoutes_,path_processed_route_data, restrict,analysis_days):
-    tempList= []
-    issueList =[]
-    FinIssueDat = pd.DataFrame()
-    FinSummaryDat= pd.DataFrame()
-    for analysisRte in AnalysisRoutes_:
-        tempSumDat = pd.read_csv(os.path.join(path_processed_route_data,f'TripSummaries_Route{analysisRte}_Restrict{restrict}.csv'))
-        tempSumDat.IndexTripStartInCleanData = tempSumDat.IndexTripStartInCleanData.astype('int32')
-        tempSumDat  = tempSumDat.query('wday in @analysis_days')
-        if tempSumDat.shape[0]==0: raise ValueError(f"No trips on any of the analysis_days ({analysis_days})")
-        issueDat = tempSumDat.query('TripDurFromSec < 600 | DistOdomMi < 2') # Trip should be atleast 5 min and 2 mile long
-        tempSumDat =tempSumDat .query('not (TripDurFromSec < 600 | DistOdomMi < 2)')
-        print(f'Removing {issueDat.shape[0]} out of {tempSumDat.shape[0]} trips/ rows with TripDurFromSec < 600 seconds or DistOdomMi < 2 miles from route {analysisRte}')
-        tempList.append(tempSumDat)
-        issueList.append(issueDat)
-    FinSummaryDat = pd.concat(tempList)
-    FinIssueDat = pd.concat(issueList)
-    return(FinSummaryDat,FinIssueDat)
-
 
 
 
