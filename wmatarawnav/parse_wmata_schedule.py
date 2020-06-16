@@ -4,6 +4,7 @@ Create by: abibeka, wytimmerman
 Created on Tue Apr 28 15:07:59 2020
 Purpose: Functions for processing rawnav & wmata_schedule data
 """
+import os
 import inflection
 import pandas as pd
 import geopandas as gpd
@@ -14,6 +15,60 @@ from scipy.spatial import cKDTree
 import numpy as np
 import folium
 from folium import plugins
+
+
+def read_wmata_schedule(wmata_schedule_data_file):
+    wmata_schedule_dat = pd.read_csv(wmata_schedule_data_file, index_col=0).reset_index(drop=True)
+    wmata_schedule_dat.rename(columns={'cd_route': 'route', 'cd_variation': 'pattern',
+                                       'longitude': 'stop_lon', 'latitude': 'stop_lat',
+                                       'stop_dist': 'dist_from_previous_stop'}, inplace=True)
+    return(wmata_schedule_dat)
+
+
+def parent_merge_rawnav_wmata_schedule(analysis_route_, analysis_day_, rawnav_dat_,rawnav_sum_dat_,wmata_schedule_dat_):
+    rawnav_subset_dat = rawnav_dat_.query('route==@analysis_route_ & wday==@analysis_day_')
+    rawnav_sum_subset_dat = rawnav_sum_dat_.query('route==@analysis_route_ & wday==@analysis_day_')
+    doesnt_have_data = rawnav_sum_subset_dat.shape[0]==0
+    if doesnt_have_data: return None, None
+    nearest_rawnav_point_to_wmata_schedule_dat = \
+        merge_stops_wmata_schedule_rawnav(
+            wmata_schedule_dat=wmata_schedule_dat_,
+            rawnav_dat=rawnav_subset_dat)
+    nearest_rawnav_point_to_wmata_schedule_dat.rename(columns={'heading': 'stop_heading'}, inplace=True)
+    nearest_rawnav_point_to_wmata_schedule_dat = \
+        remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat)
+    # Assert and clean stop data
+    nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat = \
+        assert_clean_stop_order_increase_with_odom(nearest_rawnav_point_to_wmata_schedule_dat)
+
+    wmata_schedule_based_sum_dat = include_wmata_schedule_based_summary(
+        rawnav_q_dat=rawnav_subset_dat,
+        rawnav_sum_dat=rawnav_sum_subset_dat,
+        nearest_stop_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
+    )
+    wmata_schedule_based_sum_dat. \
+        set_index(['fullpath', 'filename', 'file_id', 'wday', 'start_date_time', 'end_date_time',
+                   'index_trip_start_in_clean_data', 'taglist', 'route_pattern', 'route', 'pattern'], inplace=True,
+                  drop=True)
+    return wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
+
+
+def output_rawnav_wmata_schedule(analysis_route_, analysis_day_, wmata_schedule_based_sum_dat_,
+                                 rawnav_wmata_schedule_dat,path_processed_data_):
+    save_dir1 = os.path.join(path_processed_data_, 'wmata_schedule_based_sum_dat')
+    save_dir2 = os.path.join(save_dir1,str(analysis_route_))
+    save_dir3 = os.path.join(save_dir2,analysis_day_)
+    if not os.path.exists(save_dir1): os.makedirs(save_dir1)
+    if not os.path.exists(save_dir2): os.makedirs(save_dir2)
+    if not os.path.exists(save_dir3): os.makedirs(save_dir3)
+    # Output Summary Files
+    sum_out_file = os.path.join(save_dir3, f'wmata_schedule_trip_summaries-{analysis_route_}_{analysis_day_}.xlsx')
+    wmata_schedule_based_sum_dat_.to_excel(sum_out_file, merge_cells=False)
+    # Output GTFS+Rawnav Merged Files
+    wmata_schedule_rawnav_out_file = os.path.join(save_dir3,
+                                  f'wmata_schedule_stop_locations_inventory-{analysis_route_}_{analysis_day_}.xlsx')
+    rawnav_wmata_schedule_dat.to_excel(wmata_schedule_rawnav_out_file)
+    return None
 
 
 # Eventually will clean the parse_rawnav.py functions to get these updated column names.
@@ -178,7 +233,8 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
     rawnav_q_stop_dat = rawnav_q_stop_dat.query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
     rawnav_q_stop_dat = \
         rawnav_q_stop_dat[['filename','index_trip_start_in_clean_data','lat','long','heading','odomt_ft','sec_past_st'
-                           ,'first_stop_dist_nearest_point','trip_length','route_text']]
+                           ,'first_stop_dist_nearest_point','trip_length','route_text','pattern_name','direction',
+                           'pattern_destination','direction_id']]
     Map1 = lambda x: max(x)-min(x)
     rawnav_q_stop_sum_dat =\
         rawnav_q_stop_dat.groupby(['filename','index_trip_start_in_clean_data']).\
@@ -188,14 +244,20 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
                  'long':['first','last'],
                  'first_stop_dist_nearest_point':['first'],
                  'trip_length':['first'],
-                 'route_text':['first']})
+                 'route_text':['first'],
+                 'pattern_name':['first'],
+                 'direction':['first'],
+                 'pattern_destination':['first'],
+                 'direction_id':['first']})
     rawnav_q_stop_sum_dat.columns = ['start_odom_ft_wmata_schedule','end_odom_ft_wmata_schedule',
                                      'trip_dist_mi_odom_and_wmata_schedule','start_sec_wmata_schedule',
                                      'end_sec_wmata_schedule','trip_dur_sec_wmata_schedule',
                                      'start_lat_wmata_schedule','end_lat_wmata_schedule',
                                      'start_long_wmata_schedule','end_long_wmata_schedule',
                                      'dist_first_stop_wmata_schedule','trip_length_mi_direct_wmata_schedule',
-                                     'route_text_wmata_schedule']
+                                     'route_text_wmata_schedule','pattern_name_wmata_schedule',
+                                     'direction_wmata_schedule','pattern_destination_wmata_schedule',
+                                     'direction_id_wmata_schedule']
     rawnav_q_stop_sum_dat.loc[:,['trip_dist_mi_odom_and_wmata_schedule']] =\
         rawnav_q_stop_sum_dat.loc[:,['trip_dist_mi_odom_and_wmata_schedule']]/5280
     rawnav_q_stop_sum_dat.loc[:,['trip_length_mi_direct_wmata_schedule']] =\

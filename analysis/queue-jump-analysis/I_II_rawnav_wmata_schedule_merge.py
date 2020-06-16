@@ -67,10 +67,9 @@ restrict_n = None
 q_jump_route_list = ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
                      'H8','W47']  # 16 Gb RAM can't handle all these at one go
 analysis_routes = q_jump_route_list
-# analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
-#analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
-# analysis_routes = ['G8']
-# analysis_routess = ['S2','S4','H1','H2','H3','79','W47']
+analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
+# analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
+# analysis_routes = ['S2','S4','H1','H2','H3','79','W47']
 
 # 1.3 Import User-Defined Package
 ############################################
@@ -112,6 +111,10 @@ rawnav_summary_keys_col = rawnav_summary_dat[['filename','index_trip_start_in_cl
 ############################################
 rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col,on=['filename','index_trip_start_in_clean_data'],how='right')
 rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
+# Having issues with route "70" and "64"---Getting read as int instead of str
+rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
+rawnav_summary_dat.route = rawnav_summary_dat.route.astype(str)
+
 set(rawnav_qjump_dat.index_trip_start_in_clean_data.unique()) -set(rawnav_summary_dat.index_trip_start_in_clean_data.unique())
 executionTime= str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 2 Analyze Route ---Subset RawNav Data : {executionTime}")
@@ -119,60 +122,46 @@ print("*"*100)
 
 # 3 Read, analyze and summarize GTFS Data
 ########################################################################################################################
-print(f"Run Section 3 Read, analyze and summarize WMATA schedule Data...")
+print(f"Run Section 3 Read, analyze and summarize WMATA schedule data...")
 begin_time = datetime.now() ##
-# 3.1 Read the Wmata_Schedule Data
-############################################
-wmata_schedule_data_file = os.path.join(path_wmata_schedule_data,'wmata_schedule_data_q_jump_routes.csv')
-wmata_schedule_dat = pd.read_csv(wmata_schedule_data_file,index_col=0).reset_index(drop=True)
-wmata_schedule_dat.rename(columns = {'cd_route':'route','cd_variation':'pattern',
-                                      'longitude':'stop_lon','latitude':'stop_lat',
-                                     'stop_dist':'dist_from_previous_stop'},inplace=True)
 
-# 3.2 Merge all stops to rawnav data
-############################################
-# import importlib
-# importlib.reload(wr)
-# import inspect
-# print(inspect.getsource(wr.include_wmata_schedule_based_summary))
+# Read the Wmata_Schedule Data
+wmata_schedule_data_file = os.path.join(path_wmata_schedule_data, 'wmata_schedule_data_q_jump_routes.csv')
+wmata_schedule_dat = wr.read_wmata_schedule(wmata_schedule_data_file = wmata_schedule_data_file)
 
 
-nearest_rawnav_point_to_wmata_schedule_dat = \
-    wr.merge_stops_wmata_schedule_rawnav(
-        wmata_schedule_dat = wmata_schedule_dat ,
-        rawnav_dat =rawnav_qjump_dat
-)
-nearest_rawnav_point_to_wmata_schedule_dat.rename(columns = {'heading':'stop_heading'},inplace=True)
-nearest_rawnav_point_to_wmata_schedule_dat = \
-    wr.remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat)
-# Assert and clean stop data
-nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat =\
-    wr.assert_clean_stop_order_increase_with_odom(nearest_rawnav_point_to_wmata_schedule_dat)
+for analysis_route in analysis_routes:
+    print("*" * 100)
+    print(f'Processing analysis route {analysis_route}')
+    for analysis_day in analysis_days:
+        print(f'Processing {analysis_day}')
+        data_exist_dir = \
+            os.path.join(path_processed_data, 'wmata_schedule_based_sum_dat', str(analysis_route),analysis_day)
+        if os.path.isdir(data_exist_dir):
+            print(f'Skipping analysis route {analysis_route} for {analysis_day}: already processed')
+            continue
+        print("*" * 50)
+        print(f'Processing analysis route {analysis_route} for {analysis_day}...')
+        wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat=\
+            wr.parent_merge_rawnav_wmata_schedule(
+                analysis_route_ =analysis_route,
+                analysis_day_ = analysis_day,
+                rawnav_dat_ =rawnav_qjump_dat,
+                rawnav_sum_dat_=rawnav_summary_dat,
+                wmata_schedule_dat_=wmata_schedule_dat)
+        if type(wmata_schedule_based_sum_dat)== type(None):
+            print(f'No data on analysis route {analysis_route} for {analysis_day}')
+            continue
 
-wmata_schedule_based_sum_dat= wr.include_wmata_schedule_based_summary(
-    rawnav_q_dat = rawnav_qjump_dat,
-    rawnav_sum_dat = rawnav_summary_dat,
-    nearest_stop_dat =nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
-)
-wmata_schedule_based_sum_dat.\
-    set_index(['fullpath','filename','file_id','wday','start_date_time','end_date_time',
-               'index_trip_start_in_clean_data','taglist','route_pattern','route','pattern'],inplace=True,drop=True)
+        wr.output_rawnav_wmata_schedule(
+            analysis_route_=analysis_route,
+            analysis_day_=analysis_day,
+            wmata_schedule_based_sum_dat_=wmata_schedule_based_sum_dat,
+            rawnav_wmata_schedule_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat,
+            path_processed_data_= path_processed_data)
 
-# 3.6 Output Summary Files
-############################################
-sum_out_file = os.path.join(path_processed_data,f'wmata_schedule_trip_summaries.xlsx')
-wmata_schedule_based_sum_dat.to_excel(sum_out_file,merge_cells=False)
 
-# 3.7 Output GTFS+Rawnav Merged Files
-############################################
-wmata_schedule_rawnav_out_file = os.path.join(path_processed_data,f'wmata_schedule_stop_locations_inventory.parquet')
-nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat.drop(columns='geometry',inplace=True)
-table_from_pandas = pa.Table.from_pandas(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat)
-while os.path.isdir(wmata_schedule_rawnav_out_file):
-    shutil.rmtree(wmata_schedule_rawnav_out_file, ignore_errors=True)  # Remove data from RemFolder before writing
-pq.write_to_dataset(table_from_pandas, root_path= wmata_schedule_rawnav_out_file, \
-                    partition_cols=['filename','index_trip_start_in_clean_data'])
 executionTime= str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 3 Read, analyze and summarize GTFS Data : {executionTime}")
+print(f"Run Time Section 3 Read, analyze and summarize WMATA schedule data : {executionTime}")
 print("*"*100)
 

@@ -110,66 +110,74 @@ rawnav_summary_keys_col = rawnav_summary_dat[['filename','index_trip_start_in_cl
 ############################################
 rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col,on=['filename','index_trip_start_in_clean_data'],how='right')
 rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
+# Having issues with route "70" and "64"---Getting read as int instead of str
+rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
+rawnav_summary_dat.route = rawnav_summary_dat.route.astype(str)
 set(rawnav_qjump_dat.index_trip_start_in_clean_data.unique()) -set(rawnav_summary_dat.index_trip_start_in_clean_data.unique())
 executionTime= str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 2 Analyze Route ---Subset RawNav Data : {executionTime}")
 print("*"*100)
 
 
-# 3 Read, analyze and summarize wmata schedule Data
+# 3 Read, analyze and summarize GTFS Data
 ########################################################################################################################
-print(f"Run Section 3 Read, analyze and summarize WMATA schedule Data...")
+print(f"Run Section 3 Read, analyze and summarize WMATA schedule data...")
 begin_time = datetime.now() ##
-# 3.1 Read the Wmata_Schedule Data
-############################################
-wmata_schedule_data_file = os.path.join(path_wmata_schedule_data,'wmata_schedule_data_q_jump_routes.csv')
-wmata_schedule_dat = pd.read_csv(wmata_schedule_data_file,index_col=0).reset_index(drop=True)
-wmata_schedule_dat.rename(columns = {'cd_route':'route','cd_variation':'pattern',
-                                      'longitude':'stop_lon','latitude':'stop_lat',
-                                     'stop_dist':'dist_from_previous_stop'},inplace=True)
 
-# 3.2 Merge all stops to rawnav data
-############################################
-# import importlib
-# importlib.reload(wr)
-# import inspect
-# print(inspect.getsource(wr.include_wmata_schedule_based_summary))
+# Read the Wmata_Schedule Data
+wmata_schedule_data_file = os.path.join(path_wmata_schedule_data, 'wmata_schedule_data_q_jump_routes.csv')
+wmata_schedule_dat = wr.read_wmata_schedule(wmata_schedule_data_file = wmata_schedule_data_file)
 
+analysis_route = analysis_routes[0]
+analysis_day = analysis_days[0]
+wmata_schedule_based_sum_dat_list = []
+nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat_list = []
 
-nearest_rawnav_point_to_wmata_schedule_dat = \
-    wr.merge_stops_wmata_schedule_rawnav(
-        wmata_schedule_dat = wmata_schedule_dat ,
-        rawnav_dat =rawnav_qjump_dat
-)
-nearest_rawnav_point_to_wmata_schedule_dat.rename(columns = {'heading':'stop_heading'},inplace=True)
-nearest_rawnav_point_to_wmata_schedule_dat = \
-    wr.remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat)
-# Assert and clean stop data
-nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat =\
-    wr.assert_clean_stop_order_increase_with_odom(nearest_rawnav_point_to_wmata_schedule_dat)
+for analysis_route in analysis_routes:
+    print("*" * 100)
+    print(f'Processing analysis route {analysis_route}')
+    for analysis_day in analysis_days:
+        print(f'Processing {analysis_day}')
+        data_exist_dir = \
+            os.path.join(path_processed_data, 'wmata_schedule_based_sum_dat', str(analysis_route),analysis_day)
+        if os.path.isdir(data_exist_dir):
+            print(f'Skipping analysis route {analysis_route} for {analysis_day}: already processed')
+            continue
+        print("*" * 50)
+        print(f'Processing analysis route {analysis_route} for {analysis_day}...')
+        wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat=\
+            wr.parent_merge_rawnav_wmata_schedule(
+                analysis_route_ =analysis_route,
+                analysis_day_ = analysis_day,
+                rawnav_dat_ =rawnav_qjump_dat,
+                rawnav_sum_dat_=rawnav_summary_dat,
+                wmata_schedule_dat_=wmata_schedule_dat)
+        if type(wmata_schedule_based_sum_dat)== type(None):
+            print(f'No data on analysis route {analysis_route} for {analysis_day}')
+            continue
 
-wmata_schedule_based_sum_dat= wr.include_wmata_schedule_based_summary(
-    rawnav_q_dat = rawnav_qjump_dat,
-    rawnav_sum_dat = rawnav_summary_dat,
-    nearest_stop_dat =nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
-)
+        wr.output_rawnav_wmata_schedule(
+            analysis_route_=analysis_route,
+            analysis_day_=analysis_day,
+            wmata_schedule_based_sum_dat_=wmata_schedule_based_sum_dat,
+            rawnav_wmata_schedule_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat,
+            path_processed_data_= path_processed_data)
 
-wmata_schedule_based_sum_dat.\
-    set_index(['fullpath','filename','file_id','wday','start_date_time','end_date_time',
-               'index_trip_start_in_clean_data','taglist','route_pattern','route','pattern'],inplace=True,drop=True)
+        wmata_schedule_based_sum_dat_list.append(wmata_schedule_based_sum_dat)
+        nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat_list.\
+            append(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat)
 
-# 3.6 Output Summary Files
-############################################
-sum_out_file = os.path.join(path_processed_data,f'wmata_schedule_trip_summaries.xlsx')
-wmata_schedule_based_sum_dat.to_excel(sum_out_file,merge_cells=False)
-
-# 3.7 Output GTFS+Rawnav Merged Files
-############################################
-# TODO: output files
+nearest_rawnav_wmata_schedule_all_routes_days = \
+    pd.concat(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat_list)
+wmata_schedule_based_sum_dat_all_routes_days = pd.concat(wmata_schedule_based_sum_dat_list)
 
 executionTime= str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 3 Read, analyze and summarize GTFS Data : {executionTime}")
+print(f"Run Time Section 3 Read, analyze and summarize WMATA schedule data : {executionTime}")
 print("*"*100)
+
+
+
+
 
 # 4 Plot Rawnav Trace and Nearest Stops
 ###########################################################################################################################################################
@@ -178,21 +186,23 @@ begin_time = datetime.now()  ##
 # 4.1 Add Summary data to Stop data from Plotting
 ############################################
 subset_wmata_schedule_rawnav_dat = \
-    nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat[['filename', 'index_trip_start_in_clean_data',
+    nearest_rawnav_wmata_schedule_all_routes_days[['filename', 'index_trip_start_in_clean_data',
                                                                    'route_key','dist_from_previous_stop',
                                                                    'pattern_name', 'stop_sort_order', 'index_loc',
                                                                    'stop_lat', 'stop_lon','stop_heading',
                                                                    'dist_nearest_point_from_stop', 'geometry',
                                                                    'geo_description']]
-wmata_schedule_based_sum_dat.reset_index(inplace=True)
+wmata_schedule_based_sum_dat_all_routes_days.reset_index(inplace=True)
 subset_wmata_schedule_rawnav_dat = \
-    subset_wmata_schedule_rawnav_dat.merge(wmata_schedule_based_sum_dat,
+    subset_wmata_schedule_rawnav_dat.merge(wmata_schedule_based_sum_dat_all_routes_days,
                                            on=['filename', 'index_trip_start_in_clean_data'],
                                            how='left')
 subset_wmata_schedule_rawnav_dat = \
     subset_wmata_schedule_rawnav_dat[
         ['index_loc','filename', 'wday', 'start_date_time', 'end_date_time', 'route_pattern', 'route', 'pattern',
-         'stop_sort_order','geo_description','route_text_wmata_schedule','route_key','dist_from_previous_stop',
+         'stop_sort_order','geo_description','route_text_wmata_schedule','pattern_name_wmata_schedule',
+         'direction_wmata_schedule','pattern_destination_wmata_schedule',
+         'direction_id_wmata_schedule','route_key','dist_from_previous_stop',
          'stop_heading','stop_lat', 'stop_lon', 'index_trip_start_in_clean_data',
          'index_trip_end_in_clean_data','dist_nearest_point_from_stop',
          'start_odom_ft_wmata_schedule', 'end_odom_ft_wmata_schedule',
