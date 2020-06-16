@@ -14,47 +14,6 @@ from scipy.spatial import cKDTree
 import numpy as np
 import folium
 from folium import plugins
-import pyarrow.parquet as pq
-
-
-# readProcessedRawnav
-###################################################################################################################################
-def readProcessedRawnav(AnalysisRoutes_,path_processed_route_data, restrict, analysis_days):
-    tempList= []
-    FinDat= pd.DataFrame()
-    for analysisRte in AnalysisRoutes_:
-        filterParquet = [[('wday','=',day)] for day in analysis_days]
-        tempDat = pq.read_table(source =os.path.join(path_processed_route_data,f"Route{analysisRte}_Restrict{restrict}.parquet")\
-        ,filters =filterParquet).to_pandas()
-        tempDat.route = tempDat.route.astype('str')
-        tempDat.drop(columns=['Blank','LatRaw','LongRaw','SatCnt','__index_level_0__'],inplace=True)
-        #Check for duplicate IndexLoc
-        assert(tempDat.groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
-        tempList.append(tempDat)
-    FinDat = pd.concat(tempList)
-    return(FinDat)
-
-# readSummaryRawnav
-###################################################################################################################################
-def readSummaryRawnav(AnalysisRoutes_,path_processed_route_data, restrict,analysis_days):
-    tempList= []
-    issueList =[]
-    FinIssueDat = pd.DataFrame()
-    FinSummaryDat= pd.DataFrame()
-    for analysisRte in AnalysisRoutes_:
-        tempSumDat = pd.read_csv(os.path.join(path_processed_route_data,f'TripSummaries_Route{analysisRte}_Restrict{restrict}.csv'))
-        tempSumDat.IndexTripStartInCleanData = tempSumDat.IndexTripStartInCleanData.astype('int32')
-        tempSumDat  = tempSumDat.query('wday in @analysis_days')
-        if tempSumDat.shape[0]==0: raise ValueError(f"No trips on any of the analysis_days ({analysis_days})")
-        issueDat = tempSumDat.query('TripDurFromSec < 600 | DistOdomMi < 2') # Trip should be atleast 5 min and 2 mile long
-        tempSumDat =tempSumDat .query('not (TripDurFromSec < 600 | DistOdomMi < 2)')
-        print(f'Removing {issueDat.shape[0]} out of {tempSumDat.shape[0]} trips/ rows with TripDurFromSec < 600 seconds or DistOdomMi < 2 miles from route {analysisRte}')
-        tempList.append(tempSumDat)
-        issueList.append(issueDat)
-    FinSummaryDat = pd.concat(tempList)
-    FinIssueDat = pd.concat(issueList)
-    return(FinSummaryDat,FinIssueDat)
-
 
 
 
@@ -348,7 +307,7 @@ def ckdnearest(gdA, gdB):
 
 # GetCorrectDirGTFS
 ###################################################################################################################################
-def GetCorrectDirGTFS(Dat1stStop,SumDat_):
+def GetCorrectDirGTFS(Dat1stStop,DatLastStop,SumDat_,routeNoUnique1stStp):
     #TODO: Write Documentation
     # Get Correct Direction
     #######################################################
@@ -359,11 +318,31 @@ def GetCorrectDirGTFS(Dat1stStop,SumDat_):
     Dat1stStop.sort_values(['filename','IndexTripStartInCleanData',
                                       'direction_id','stop_sequence'],inplace=True)
     Dat1stStop.loc[:,"tempCol"]= Dat1stStop.groupby(['filename','IndexTripStartInCleanData']).IndexLoc.transform(min)
-    Dat1stStop = Dat1stStop.query('IndexLoc==tempCol').reset_index().drop(columns='tempCol')
+    Dat1stStop = Dat1stStop.query('IndexLoc==tempCol').reset_index(drop=True).drop(columns='tempCol')
+    DatProbRoutes = Dat1stStop.query('route_id in @routeNoUnique1stStp')
+    Dat1stStop = Dat1stStop.query('route_id not in @routeNoUnique1stStp')
     assert(Dat1stStop.duplicated(['filename','IndexTripStartInCleanData']).sum()==0)
-    print(f"Removed {SumDat_.shape[0] - Dat1stStop.shape[0]} trips from {SumDat_.shape[0]} with closest rawnav point > 1 mi. from the GTFS 1st stop")
+    ############################################################
+    DatLastStop = DatLastStop[['filename','IndexTripStartInCleanData','direction_id','IndexLoc','distNearestPointFromStop','all_stops','trip_id','stop_sequence']]
+    DatLastStop.rename(columns={'IndexLoc':'IndexLocLastStop','distNearestPointFromStop':'distLastStop'},inplace=True)
+    DatLastStop = DatLastStop.query('distLastStop<@OneMi') # Get trips that have the closest rawnav point within 1 mi. of 1nd stop
+    DatLastStop.sort_values(['filename','IndexTripStartInCleanData',
+                                      'direction_id','stop_sequence'],inplace=True)
+    DatLastStop.loc[:,"tempCol"]= DatLastStop.groupby(['filename','IndexTripStartInCleanData']).IndexLocLastStop.transform(max)
+    DatLastStop = DatLastStop.query('IndexLocLastStop==tempCol').reset_index(drop=True).drop(columns='tempCol')
+
+    DatLastStop = DatLastStop[['filename','IndexTripStartInCleanData','direction_id','all_stops','IndexLocLastStop']]
+    # Inner merge to find trips where we got a match in Dat1stStop and Dat1stStop: uniquely identify a trip
+    DatProbRoutes =DatProbRoutes.merge(DatLastStop, on=['filename','IndexTripStartInCleanData','direction_id','all_stops'],how='inner')
+    assert(DatProbRoutes.duplicated(['filename','IndexTripStartInCleanData']).sum()==0)
+    Dat1stStop= pd.concat([Dat1stStop,DatProbRoutes])
+    print(f"Removed {SumDat_.shape[0] - Dat1stStop.shape[0]} trips from {SumDat_.shape[0]}")
     Dat1stStop = Dat1stStop[['filename', 'IndexTripStartInCleanData','direction_id','stop_name','all_stops']]
     Dat1stStop.rename(columns={'stop_name':'1st_stopNm'},inplace=True)
+    SumDat_.loc[:,"tempIndex"] = SumDat_.filename+SumDat_.IndexTripStartInCleanData.astype(str)
+    # Debug data:
+    # tempIndex = Dat1stStop.filename+Dat1stStop.IndexTripStartInCleanData.astype(str)
+    # tempDat = SumDat_.query('tempIndex not in @tempIndex')
     return(Dat1stStop)
 ###################################################################################################################################    
 
