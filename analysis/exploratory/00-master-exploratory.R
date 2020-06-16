@@ -46,7 +46,7 @@ mapviewOptions(basemaps = c("CartoDB.Positron",
                             "Esri.WorldImagery"))
 # mapviewOptions(viewer.suppress = TRUE) #if needed for full screen
 
-wgs84CRS <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+wgs84CRS <- 4326L
 DCCRS <- 2893L #using Maryland's, unit is usft
 
 # Graphics ----------------------------------------------------------------
