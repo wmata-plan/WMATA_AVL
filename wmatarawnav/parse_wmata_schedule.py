@@ -10,7 +10,6 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
 from shapely.geometry import LineString
-from shapely.ops import nearest_points
 from scipy.spatial import cKDTree
 import numpy as np
 import folium
