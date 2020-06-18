@@ -11,6 +11,61 @@ from zipfile import BadZipfile
 import geopandas as gpd
 from shapely.geometry import Point
 from pandas.io.parsers import ParserError
+import pyarrow.parquet as pq
+
+# Rawnav WMATA Schedule Merging---Input Functions
+########################################################################################################################
+
+
+def read_processed_rawnav(analysis_routes_,path_processed_route_data, restrict, analysis_days):
+    rawnav_temp_list= []
+    rawnav_dat = pd.DataFrame()
+    for analysis_route in analysis_routes_:
+        filter_parquet = [[('wday','=',day)] for day in analysis_days]
+        rawnav_temp_dat = \
+            pq.read_table(source =os.path.join(path_processed_route_data,
+            f"Route{analysis_route}_Restrict{restrict}.parquet"),
+            filters =filter_parquet).to_pandas()
+        rawnav_temp_dat.route = rawnav_temp_dat.route.astype('str')
+        rawnav_temp_dat.drop(columns=['Blank','LatRaw','LongRaw','SatCnt','__index_level_0__'],inplace=True)
+        #Check for duplicate IndexLoc
+        assert(rawnav_temp_dat
+               .groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
+        rawnav_temp_list.append(rawnav_temp_dat)
+    rawnav_dat = pd.concat(rawnav_temp_list)
+    return rawnav_dat
+
+
+def read_summary_rawnav(analysis_routes_,path_processed_route_data, restrict,analysis_days):
+    rawnav_temp_list= []
+    rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_list= []
+    rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat = pd.DataFrame()
+    rawnav_summary_dat = pd.DataFrame()
+    for analysis_route in analysis_routes_:
+        temp_rawnav_sum_dat = \
+            pd.read_csv(os.path.join(path_processed_route_data,
+            f'TripSummaries_Route{analysis_route}_Restrict{restrict}.csv'))
+        total_rows_read = temp_rawnav_sum_dat.shape[0]
+        temp_rawnav_sum_dat.IndexTripStartInCleanData = temp_rawnav_sum_dat.IndexTripStartInCleanData.astype('int32')
+        temp_rawnav_sum_dat  = temp_rawnav_sum_dat.query('wday in @analysis_days')
+        if temp_rawnav_sum_dat.shape[0]==0:
+            raise ValueError(f"No trips on any of the analysis_days ({analysis_days})")
+        temp_rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat = \
+            temp_rawnav_sum_dat.query('TripDurFromSec < 600 | DistOdomMi < 2')
+        temp_rawnav_sum_dat = temp_rawnav_sum_dat.query('not (TripDurFromSec < 600 | DistOdomMi < 2)')
+        rows_removed_in_above_query = temp_rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat.shape[0]
+        print(f'Removing {rows_removed_in_above_query} out of {total_rows_read} trips/ rows with TripDurFromSec < 600'
+              f' seconds or DistOdomMi < 2 miles from route {analysis_route}')
+        rawnav_temp_list.append(temp_rawnav_sum_dat)
+        rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_list.append(
+            temp_rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat)
+    rawnav_summary_dat = pd.concat(rawnav_temp_list)
+    rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat = \
+        pd.concat(rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_list)
+    return rawnav_summary_dat, rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat
+
+
+# FIXME : Change all functions below to snake_case---refactor code
 #Parent Functions
 ###########################################################################################################################################################################################
 # GetZippedFilesFromZipDir
@@ -223,37 +278,6 @@ def subset_rawnav_trip(RawnavDataDict_, rawnav_inventory_filtered_, AnalysisRout
     except KeyError as keyerr:
         print('Route {AnalysisRoutes_} not found. Error. {keyerr}')
     return(FinDat)
-###################################################################################################################################
-
-# subset_summary_data
-###################################################################################################################################
-def subset_summary_data(FinSummaryDat_, AnalysisRoutes_):
-    '''
-    Parameters
-    ----------
-    FinSummaryDat_ : pd.DataFrame
-        Summary data that has columns on trip start and end lat-longs.
-    AnalysisRoutes_ : list
-        list of routes that need to be subset.
-    Returns
-    -------
-    SumData:pd.DataFrame
-        Subset of summary data with analysis routes only. 
-    SumData_StartGpd : gpd.GeoDataFrame
-            Subset of summary data with analysis routes only and start point used for geometry column. 
-    SumData_EndGpd : gpd.GeoDataFrame
-        Subset of summary data with analysis routes only and end point used for geometry column. 
-    '''
-    SumData = FinSummaryDat_.query("route in @AnalysisRoutes_")
-    SumData.reset_index(drop=True,inplace=True)
-    tempDf = SumData[['filename','IndexTripStartInCleanData','LatStart', 'LongStart','route']]
-    geometryStart = [Point(xy) for xy in zip(tempDf.LongStart, tempDf.LatStart)]
-    SumData_StartGpd=gpd.GeoDataFrame(tempDf, geometry=geometryStart,crs={'init':'epsg:4326'})
-    tempDf=None
-    tempDf = SumData[['filename','IndexTripStartInCleanData','LatEnd', 'LongEnd','route']]
-    geometryEnd = [Point(xy) for xy in zip(tempDf.LongEnd, tempDf.LatEnd)]
-    SumData_EndGpd=gpd.GeoDataFrame(tempDf, geometry=geometryEnd,crs={'init':'epsg:4326'})
-    return(SumData,SumData_StartGpd,SumData_EndGpd)
 ###################################################################################################################################
 
 #Nested Functions
