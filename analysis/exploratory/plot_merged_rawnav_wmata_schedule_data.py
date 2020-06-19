@@ -38,11 +38,11 @@ if os.getlogin() == "WylieTimmerman":
     os.chdir(os.path.join(path_working))
     sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
     path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
-    # Source Data
+    # Source data
     # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
     path_source_data = r"C:\Downloads"
     path_wmata_schedule_data = os.path.join(path_working, "data", "02-processed")
-    # Processed Data
+    # Processed data
     path_processed_data = os.path.join(path_sp, r"Client Shared Folder\data\02-processed")
     path_processed_route_data = os.path.join(path_processed_data, "RouteData")
 elif os.getlogin() == "abibeka":
@@ -50,10 +50,10 @@ elif os.getlogin() == "abibeka":
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
     os.chdir(os.path.join(path_working))
     sys.path.append(path_working)
-    # Source Data
+    # Source data
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
     path_wmata_schedule_data = os.path.join(path_working, "data", "02-processed")
-    # Processed Data
+    # Processed data
     path_processed_data = os.path.join(path_source_data, "ProcessedData")
     path_processed_route_data = os.path.join(path_processed_data, "RouteData")
 else:
@@ -77,7 +77,7 @@ executionTime= str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 1 Import Libraries and Set Global Parameters : {executionTime}")
 print("*"*100)
 
-# 2 Analyze Route ---Subset RawNav Data.
+# 2 Analyze Route ---Subset RawNav data.
 ########################################################################################################################
 print(f"Run Section 2 Analyze Route ---Subset RawNav Data...")
 begin_time = datetime.now()
@@ -87,7 +87,7 @@ assert(len(set(day_of_week)-set(analysis_days))>=0), print("""
                                                     analysis_days is a subset of following days: 
                                                     ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
                                                 """)
-# 2.1 Rawnav Data
+# 2.1 Rawnav data
 ############################################
 rawnav_dat = wr.read_processed_rawnav(
     analysis_routes_=analysis_routes,
@@ -96,7 +96,7 @@ rawnav_dat = wr.read_processed_rawnav(
     analysis_days=analysis_days)
 rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
 
-# 2.2 Summary Data
+# 2.2 Summary data
 ############################################
 rawnav_summary_dat, rawnav_trips_less_than_600sec_or_2miles = wr.read_summary_rawnav(
     analysis_routes_=analysis_routes,
@@ -106,7 +106,7 @@ rawnav_summary_dat, rawnav_trips_less_than_600sec_or_2miles = wr.read_summary_ra
 rawnav_summary_dat = wr.fix_rawnav_names(rawnav_summary_dat)
 rawnav_summary_keys_col = rawnav_summary_dat[['filename','index_trip_start_in_clean_data']]
 
-# 2.3 Merge Processed and Summary Data
+# 2.3 Merge Processed and Summary data
 ############################################
 rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col,on=['filename','index_trip_start_in_clean_data'],how='right')
 rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
@@ -119,12 +119,12 @@ print(f"Run Time Section 2 Analyze Route ---Subset RawNav Data : {executionTime}
 print("*"*100)
 
 
-# 3 Read, analyze and summarize GTFS Data
+# 3 Read, analyze and summarize GTFS data
 ########################################################################################################################
 print(f"Run Section 3 Read, analyze and summarize WMATA schedule data...")
 begin_time = datetime.now() ##
 
-# Read the Wmata_Schedule Data
+# Read the Wmata_Schedule data
 wmata_schedule_data_file = os.path.join(path_wmata_schedule_data, 'wmata_schedule_data_q_jump_routes.csv')
 wmata_schedule_dat = wr.read_wmata_schedule(wmata_schedule_data_file = wmata_schedule_data_file)
 

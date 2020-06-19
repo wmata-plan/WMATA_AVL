@@ -5,7 +5,7 @@ Created on Thu Mar 26 10:09:45 2020
 Purpose: Functions for processing rawnav data
 """
 
-import zipfile,re,numpy as np, pandas as pd, io, os, shutil, glob
+import zipfile, re, numpy as np, pandas as pd, io, os, shutil, glob
 import pandasql as ps
 from zipfile import BadZipfile
 import geopandas as gpd
@@ -13,42 +13,43 @@ from shapely.geometry import Point
 from pandas.io.parsers import ParserError
 import pyarrow.parquet as pq
 
+
 # Rawnav WMATA Schedule Merging---Input Functions
 ########################################################################################################################
 
 
-def read_processed_rawnav(analysis_routes_,path_processed_route_data, restrict, analysis_days):
-    rawnav_temp_list= []
+def read_processed_rawnav(analysis_routes_, path_processed_route_data, restrict, analysis_days):
+    rawnav_temp_list = []
     rawnav_dat = pd.DataFrame()
     for analysis_route in analysis_routes_:
-        filter_parquet = [[('wday','=',day)] for day in analysis_days]
+        filter_parquet = [[('wday', '=', day)] for day in analysis_days]
         rawnav_temp_dat = \
-            pq.read_table(source =os.path.join(path_processed_route_data,
-            f"Route{analysis_route}_Restrict{restrict}.parquet"),
-            filters =filter_parquet).to_pandas()
+            pq.read_table(source=os.path.join(path_processed_route_data,
+                                              f"Route{analysis_route}_Restrict{restrict}.parquet"),
+                          filters=filter_parquet).to_pandas()
         rawnav_temp_dat.route = rawnav_temp_dat.route.astype('str')
-        rawnav_temp_dat.drop(columns=['Blank','LatRaw','LongRaw','SatCnt','__index_level_0__'],inplace=True)
-        #Check for duplicate IndexLoc
-        assert(rawnav_temp_dat
-               .groupby(['filename','IndexTripStartInCleanData','IndexLoc'])['IndexLoc'].count().values.max()==1)
+        rawnav_temp_dat.drop(columns=['Blank', 'LatRaw', 'LongRaw', 'SatCnt', '__index_level_0__'], inplace=True)
+        # Check for duplicate IndexLoc
+        assert (rawnav_temp_dat
+                .groupby(['filename', 'IndexTripStartInCleanData', 'IndexLoc'])['IndexLoc'].count().values.max() == 1)
         rawnav_temp_list.append(rawnav_temp_dat)
     rawnav_dat = pd.concat(rawnav_temp_list)
     return rawnav_dat
 
 
-def read_summary_rawnav(analysis_routes_,path_processed_route_data, restrict,analysis_days):
-    rawnav_temp_list= []
-    rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_list= []
+def read_summary_rawnav(analysis_routes_, path_processed_route_data, restrict, analysis_days):
+    rawnav_temp_list = []
+    rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_list = []
     rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat = pd.DataFrame()
     rawnav_summary_dat = pd.DataFrame()
     for analysis_route in analysis_routes_:
         temp_rawnav_sum_dat = \
             pd.read_csv(os.path.join(path_processed_route_data,
-            f'TripSummaries_Route{analysis_route}_Restrict{restrict}.csv'))
+                                     f'TripSummaries_Route{analysis_route}_Restrict{restrict}.csv'))
         total_rows_read = temp_rawnav_sum_dat.shape[0]
         temp_rawnav_sum_dat.IndexTripStartInCleanData = temp_rawnav_sum_dat.IndexTripStartInCleanData.astype('int32')
-        temp_rawnav_sum_dat  = temp_rawnav_sum_dat.query('wday in @analysis_days')
-        if temp_rawnav_sum_dat.shape[0]==0:
+        temp_rawnav_sum_dat = temp_rawnav_sum_dat.query('wday in @analysis_days')
+        if temp_rawnav_sum_dat.shape[0] == 0:
             raise ValueError(f"No trips on any of the analysis_days ({analysis_days})")
         temp_rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat = \
             temp_rawnav_sum_dat.query('TripDurFromSec < 600 | DistOdomMi < 2')
@@ -66,24 +67,23 @@ def read_summary_rawnav(analysis_routes_,path_processed_route_data, restrict,ana
 
 
 # FIXME : Change all functions below to snake_case---refactor code
-#Parent Functions
-###########################################################################################################################################################################################
-# GetZippedFilesFromZipDir
-###################################################################################################################################
-def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent,globSearch = "*.zip"):
+# Parent Functions
+########################################################################################################################
+
+def get_zipped_files_from_zip_dir(zip_dir_list, zipped_files_dir_parent, glob_search="*.zip"):
     '''
     Get the list of files to read from Zipped folder. Also Unzip the parent folder.
     Will Unzip only once. Can also pass a list of paths to unzipped folders
     to achieve the same result.
     Parameters
     ----------
-    ZipDirList : List or str, 
+    zip_dir_list : List or str,
         List of zipped directories with Rawnav data
         or a single zipped directory with Rawnav data.
-    ZippedFilesDirParent: str
+    zipped_files_dir_parent: str
         Parent folder where list of zipped directories with Rawnav data is kept.
         List of zipped directories with Rawnav data would be unzipped to this parent folder.
-    globSearch: str
+    glob_search: str
         Default value of "*.zip" will search for all .zip files. Can specify a pariticular file
         name pattern for debugging. 
     Raises
@@ -95,30 +95,28 @@ def GetZippedFilesFromZipDir(ZipDirList,ZippedFilesDirParent,globSearch = "*.zip
     -------
     List of Trip files (zipped) that need to be read.
     '''
-    if isinstance(ZipDirList, list): 
+    if isinstance(zip_dir_list, list):
         'do nothing'
-    elif isinstance(ZipDirList,str):
-        ZipDirList = [ZipDirList]
+    elif isinstance(zip_dir_list, str):
+        zip_dir_list = [zip_dir_list]
     else:
-        raise IOError("ZipDirList should be a string or a List of directory")
-    FileUniverse = []
-    for ZipDir in ZipDirList: 
+        raise IOError("zip_dir_list should be a string or a List of directory")
+    file_universe = []
+    for ZipDir in zip_dir_list:
         if not os.path.exists(ZipDir.split('.zip')[0]):
-            with zipfile.ZipFile(ZipDir,'r') as zip:
-                zip.extractall(ZippedFilesDirParent)
-        ZipDir1 = ZipDir.split('.zip')[0] #Will work even for Unzipped folders
-        listFiles = glob.glob(os.path.join(ZipDir1,globSearch))
-        FileUniverse.extend(listFiles)
-    return(FileUniverse)
-###################################################################################################################################
+            with zipfile.ZipFile(ZipDir, 'r') as zip:
+                zip.extractall(zipped_files_dir_parent)
+        zip_dir1 = ZipDir.split('.zip')[0]  # Will work even for Unzipped folders
+        list_files = glob.glob(os.path.join(zip_dir1, glob_search))
+        file_universe.extend(list_files)
+    return file_universe
 
-#find_rawnav_routes
-###################################################################################################################################           
-def find_rawnav_routes(FileUniverse, nmax = None, quiet = True): 
+
+def find_rawnav_routes(file_universe, nmax=None, quiet=True):
     '''   
     Parameters
     ----------
-    FileUniverse : str
+    file_universe : str
         Path to zipped folder with rawnav text file. 
         i.e., rawnav02164191003.txt.zip
         Assumes that included text file has the same name as the zipped file,
@@ -133,38 +131,39 @@ def find_rawnav_routes(FileUniverse, nmax = None, quiet = True):
     -------
     ReturnDict.
     '''
-    FileUniverseSet = FileUniverse[0:nmax]
+    file_universe_set = file_universe[0:nmax]
     # Setup dataframe for iteration
-    FileUniverseDF = pd.DataFrame({'fullpath' : FileUniverseSet})
-    FileUniverseDF['filename'] = FileUniverseDF['fullpath'].str.extract('(rawnav\d+.txt)')
-    FileUniverseDF['file_busid'] = FileUniverseDF['fullpath'].str.extract('rawnav(\d{5})\S+.txt')
-    FileUniverseDF['file_id'] = FileUniverseDF['fullpath'].str.extract('rawnav(\d+).txt')
-    FileUniverseDF['file_busid'] = pd.to_numeric(FileUniverseDF['file_busid'])
+    file_universe_df = pd.DataFrame({'fullpath': file_universe_set})
+    file_universe_df['filename'] = file_universe_df['fullpath'].str.extract('(rawnav\d+.txt)')
+    file_universe_df['file_busid'] = file_universe_df['fullpath'].str.extract('rawnav(\d{5})\S+.txt')
+    file_universe_df['file_id'] = file_universe_df['fullpath'].str.extract('rawnav(\d+).txt')
+    file_universe_df['file_busid'] = pd.to_numeric(file_universe_df['file_busid'])
     # Get Tags and Reformat
-    FileUniverseDF['taglist'] = [FindAllTags(path, quiet = quiet) for path in FileUniverseDF['fullpath']]
-    FileUniverseDF = FileUniverseDF.explode('taglist')
-    FileUniverseDF[['line_num','route_pattern','tag_busid','tag_date','tag_time','Unk1','CanBeMiFt']] = FileUniverseDF['taglist'].str.split(',', expand = True)
-    FileUniverseDF[['route','pattern']] = FileUniverseDF['route_pattern'].str.extract('^(?:\s*)(?:(?!PO))(?:(?!PI))(?:(?!DH))(\S+)(\d{2})$')
+    file_universe_df['taglist'] = [find_all_tags(path, quiet=quiet) for path in file_universe_df['fullpath']]
+    file_universe_df = file_universe_df.explode('taglist')
+    file_universe_df[['line_num', 'route_pattern', 'tag_busid', 'tag_date', 'tag_time', 'Unk1', 'CanBeMiFt']] = \
+        file_universe_df['taglist'].str.split(',', expand=True)
+    file_universe_df[['route', 'pattern']] = \
+        file_universe_df['route_pattern'].str.extract('^(?:\s*)(?:(?!PO))(?:(?!PI))(?:(?!DH))(\S+)(\d{2})$')
     # Convert Column Types and Create new ones
     # Note that we leave line_num as text, as integer values don't support
     # NAs in Pandas
-    FileUniverseDF['tag_busid'] = pd.to_numeric(FileUniverseDF['tag_busid'])
-    FileUniverseDF['tag_datetime'] = FileUniverseDF['tag_date'] + ' ' + FileUniverseDF['tag_time']
-    FileUniverseDF['tag_datetime'] = pd.to_datetime(FileUniverseDF['tag_datetime'], infer_datetime_format=True, errors = 'coerce')
-    FileUniverseDF['tag_starthour'] = FileUniverseDF['tag_time'].str.extract('^(?:\s*)(\d{2}):')
-    FileUniverseDF['tag_starthour'] = pd.to_numeric(FileUniverseDF['tag_starthour'])
-    FileUniverseDF['tag_date'] = pd.to_datetime(FileUniverseDF['tag_date'], infer_datetime_format=True)
-    FileUniverseDF['wday'] = FileUniverseDF['tag_date'].dt.day_name()
-    return(FileUniverseDF)
-###################################################################################################################################
+    file_universe_df['tag_busid'] = pd.to_numeric(file_universe_df['tag_busid'])
+    file_universe_df['tag_datetime'] = file_universe_df['tag_date'] + ' ' + file_universe_df['tag_time']
+    file_universe_df['tag_datetime'] = pd.to_datetime(file_universe_df['tag_datetime'],
+                                                      infer_datetime_format=True, errors='coerce')
+    file_universe_df['tag_starthour'] = file_universe_df['tag_time'].str.extract('^(?:\s*)(\d{2}):')
+    file_universe_df['tag_starthour'] = pd.to_numeric(file_universe_df['tag_starthour'])
+    file_universe_df['tag_date'] = pd.to_datetime(file_universe_df['tag_date'], infer_datetime_format=True)
+    file_universe_df['wday'] = file_universe_df['tag_date'].dt.day_name()
+    return file_universe_df
 
-# load_rawnav_data
-###################################################################################################################################
-def load_rawnav_data(ZipFolderPath, skiprows): 
+
+def load_rawnav_data(zip_folder_path, skiprows):
     '''
     Parameters
     ----------
-    ZipFolderPath : str
+    zip_folder_path : str
         Path to the zipped rawnav.txt file..
     skiprows : int
         Number of rows with metadata.
@@ -176,193 +175,195 @@ def load_rawnav_data(ZipFolderPath, skiprows):
     -------
     pd.DataFrame with the file info.
     '''
-    zf = zipfile.ZipFile(ZipFolderPath)
+    zf = zipfile.ZipFile(zip_folder_path)
     # Get Filename
-    namepat = re.compile('(rawnav\d+\.txt)') 
-    ZipFileName = namepat.search(ZipFolderPath).group(1)     
+    namepat = re.compile('(rawnav\d+\.txt)')
+    zip_file_name = namepat.search(zip_folder_path).group(1)
     try:
-        RawData = pd.read_csv(zf.open(ZipFileName),skiprows = skiprows, header =None)
+        raw_data = pd.read_csv(zf.open(zip_file_name), skiprows=skiprows, header=None)
     except ParserError as parseerr:
-        print("*"*100)
-        print(f"More number of ',' in a file {ZipFileName}. pandas has issue with tokenizing data. Error: {parseerr}")
-        print("*"*100)
-        RawData =None 
-    return(RawData)
-###################################################################################################################################
+        print("*" * 100)
+        print(f"More number of ',' in a file {zip_file_name}. pandas has issue with tokenizing data. Error: {parseerr}")
+        print("*" * 100)
+        raw_data = None
+    return raw_data
 
-# clean_rawnav_data
-###################################################################################################################################
-def clean_rawnav_data(DataDict, filename): 
+
+def clean_rawnav_data(data_dict, filename):
     '''
     Parameters
     ----------
-    DataDict : dict
+    filename: rawnav file name
+    data_dict : dict
         dict of raw data and the data on tag lines.
     Returns
     -------
     Cleaned data without any tags.
-    '''    
-    rawnavdata = DataDict['RawData']
-    taglineData = DataDict['tagLineInfo']
-    # Check the location of taglines from taglineData data match the locations in rawnavdata
+    '''
+    rawnavdata = data_dict['RawData']
+    tagline_data = data_dict['tagLineInfo']
+    # Check the location of taglines from tagline_data data match the locations in rawnavdata
     try:
-        Temp = taglineData.NewLineNo.values.flatten()
-        TagIndices= np.delete(Temp, np.where(Temp==-1))
-        if(len(TagIndices))!=0:
-            CheckTagLineData = rawnavdata.loc[TagIndices,:]
-            CheckTagLineData[[1,4,5]] = CheckTagLineData[[1,4,5]].astype(int)
-            CheckTagLineData.loc[:,'taglist']=(CheckTagLineData[[0,1,2,3,4,5]].astype(str)+',').sum(axis=1).str.rsplit(",",1,expand=True)[0]
-            CheckTagLineData.loc[:,'taglist']= CheckTagLineData.loc[:,'taglist'].str.strip()
-            infopat ='^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
-            assert((~CheckTagLineData.taglist.str.match(infopat, re.S)).sum()==0)
+        temp = tagline_data.NewLineNo.values.flatten()
+        tag_indices = np.delete(temp, np.where(temp == -1))
+        if (len(tag_indices)) != 0:
+            check_tag_line_data = rawnavdata.loc[tag_indices, :]
+            check_tag_line_data[[1, 4, 5]] = check_tag_line_data[[1, 4, 5]].astype(int)
+            check_tag_line_data.loc[:, 'taglist'] = \
+                (check_tag_line_data[[0, 1, 2, 3, 4, 5]].astype(str) + ',').sum(axis=1).str.rsplit(",", 1, expand=True)[
+                    0]
+            check_tag_line_data.loc[:, 'taglist'] = check_tag_line_data.loc[:, 'taglist'].str.strip()
+            infopat = '^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
+            assert ((~check_tag_line_data.taglist.str.match(infopat, re.S)).sum() == 0)
     except:
         print(f"TagLists Did not match in file {filename}")
-    #Keep index references. Will use later
-    rawnavdata.reset_index(inplace=True); rawnavdata.rename(columns = {"index":"IndexLoc"},inplace=True)
-    #Get End of route Info
-    taglineData, deleteIndices1 = AddEndRouteInfo(rawnavdata, taglineData)
-    rawnavdata = rawnavdata[~rawnavdata.index.isin(np.append(TagIndices,deleteIndices1))]
-    #Remove APC and CAL labels and keep APC locations. Can merge_asof later.
-    rawnavdata, APCTagLoc = RemoveAPC_CAL_Tags(rawnavdata)
-    #CheckDat = rawnavdata[~rawnavdata.apply(CheckValidDataEntry,axis=1)]
-    #Remove the other remaining tags. 
-    #Pat = re.compile('.*/\s*(((\d{2}:\d{2}:\d{2})\s*(Buswares.*SHUTDOWN|bwrawnav collection.*))|collection stopped.*)',re.S|re.I) 
-    #assert(sum(~(CheckDat[0].str.match(Pat)))==0), print(f"Did not handle some additional lines in CheckDat. Check file {filename}")
-    #Removing this assertion. Not able to handle unexpected data format.
-    rawnavdata = rawnavdata[rawnavdata.apply(CheckValidDataEntry,axis=1)]
-    #Add the APC tag to the rawnav data to identify stops
-    APClocDat = pd.Series(APCTagLoc,name='APCTagLoc')
-    APClocDat = pd.merge_asof(APClocDat,rawnavdata[["IndexLoc"]],left_on = "APCTagLoc",right_on="IndexLoc") # default direction is backward
-    rawnavdata.loc[:,'RowBeforeAPC'] = False
-    rawnavdata.loc[APClocDat.IndexLoc,'RowBeforeAPC'] = True
-    taglineData.rename(columns={'NewLineNo':"IndexTripStart"},inplace=True)
-    #Get trip summary
-    SummaryData = GetTripSummary(data= rawnavdata,taglineData = taglineData)
-    ColumnNmMap = {0:'Lat',1:'Long',2:'Heading',3:'DoorState',4:'VehState',5:'OdomtFt',6:'SecPastSt',7:'SatCnt',
-                   8:'StopWindow',9:'Blank',10:'LatRaw',11:'LongRaw'}
-    rawnavdata.rename(columns =ColumnNmMap,inplace=True )
-    #Add composite key to the data
-    rawnavdata = AddTripDividers(rawnavdata,SummaryData )
-    rawnavdata.loc[:,"filename"] = filename
-    returnDict = {'rawnavdata':rawnavdata,'SummaryData':SummaryData}
-    return(returnDict)
-###################################################################################################################################
+    # Keep index references. Will use later
+    rawnavdata.reset_index(inplace=True);
+    rawnavdata.rename(columns={"index": "IndexLoc"}, inplace=True)
+    # Get End of route Info
+    tagline_data, delete_indices1 = add_end_route_info(rawnavdata, tagline_data)
+    rawnavdata = rawnavdata[~rawnavdata.index.isin(np.append(tag_indices, delete_indices1))]
+    # Remove APC and CAL labels and keep APC locations. Can merge_asof later.
+    rawnavdata, apc_tag_loc = remove_apc_cal_tags(rawnavdata)
+    rawnavdata = rawnavdata[rawnavdata.apply(check_valid_data_entry, axis=1)]
+    # Add the APC tag to the rawnav data to identify stops
+    apc_loc_dat = pd.Series(apc_tag_loc, name='apc_tag_loc')
+    apc_loc_dat = \
+        pd.merge_asof(apc_loc_dat, rawnavdata[["IndexLoc"]], left_on="apc_tag_loc", right_on="IndexLoc")
+    # default direction is backward
+    rawnavdata.loc[:, 'RowBeforeAPC'] = False
+    rawnavdata.loc[apc_loc_dat.IndexLoc, 'RowBeforeAPC'] = True
+    tagline_data.rename(columns={'NewLineNo': "IndexTripStart"}, inplace=True)
+    # Get trip summary
+    summary_data = get_trip_summary(data=rawnavdata, tagline_data=tagline_data)
+    column_nm_map = {0: 'Lat', 1: 'Long', 2: 'Heading', 3: 'DoorState', 4: 'VehState', 5: 'OdomtFt', 6: 'SecPastSt',
+                     7: 'SatCnt',
+                     8: 'StopWindow', 9: 'Blank', 10: 'LatRaw', 11: 'LongRaw'}
+    rawnavdata.rename(columns=column_nm_map, inplace=True)
+    # Add composite key to the data
+    rawnavdata = add_trip_dividers(rawnavdata, summary_data)
+    rawnavdata.loc[:, "filename"] = filename
+    return_dict = {'rawnavdata': rawnavdata, 'summary_data': summary_data}
+    return return_dict
 
-# subset_rawnav_trip1
-###################################################################################################################################
-def subset_rawnav_trip(RawnavDataDict_, rawnav_inventory_filtered_, AnalysisRoutes_):
+
+def subset_rawnav_trip(rawnav_data_dict_, rawnav_inventory_filtered_, analysis_routes_):
     '''
     Subset data for analysis routes
     Parameters
     ----------
-    RawnavDataDict_ : dict
+    rawnav_data_dict_ : dict
         Cleaned data without any tags. filename is the dictionary key.
     rawnav_inventory_filtered_ : pd.DataFrame
         DataFrame with file details to any file including at least one of our analysis routes 
         Note that other non-analysis routes will be included here, but information about these routes
         is currently necessary to split the rawnav file correctly.
-    AnalysisRoutes_ : list
+    analysis_routes_ : list
         list of routes that need to be subset.
     Returns
     -------
-    FinDat : pd.DataFrame
+    fin_dat : pd.DataFrame
         Concatenated data for an analysis route. 
     '''
-    FinDat = pd.DataFrame()
-    SearchDF = rawnav_inventory_filtered_[['route','filename']].set_index('route')
+    fin_dat = pd.DataFrame()
+    search_df = rawnav_inventory_filtered_[['route', 'filename']].set_index('route')
     try:
-        RouteFiles = np.unique((SearchDF.loc[AnalysisRoutes_,:].values).flatten())
-        FinDat = pd.concat([RawnavDataDict_[file] for file in RouteFiles])
-        FinDat.reset_index(drop=True,inplace=True)
-        FinDat = FinDat.query("route in @AnalysisRoutes_")
-    except KeyError as keyerr:
-        print('Route {AnalysisRoutes_} not found. Error. {keyerr}')
-    return(FinDat)
-###################################################################################################################################
+        route_files = np.unique(search_df.loc[analysis_routes_, :].values.flatten())
+        fin_dat = pd.concat([rawnav_data_dict_[file] for file in route_files])
+        fin_dat.reset_index(drop=True, inplace=True)
+        fin_dat = fin_dat.query("route in @analysis_routes_")
+    except KeyError as kerr:
+        print(f'Route {analysis_routes_} not found. Error. {kerr}')
+    return fin_dat
 
-#Nested Functions
-###########################################################################################################################################################################################
-# AddTripDividers
-###################################################################################################################################
-def AddTripDividers(data, SummaryData):
+
+# Nested Functions
+########################################################################################################################
+
+def add_trip_dividers(data, summary_data):
     '''
     Parameters
     ----------
     data : pd.DataFrame
         rawnav data without tags.
-    SummaryData : pd.DataFrame
+    summary_data : pd.DataFrame
         Tagline data.
     Returns
     -------
     rawnav data with composite keys.
 
     '''
-    SummaryData.columns
-    TagsTemp = SummaryData[['route_pattern','route', 'pattern','IndexTripStartInCleanData','IndexTripEndInCleanData']]
-    q1  = '''SELECT data.IndexLoc,data.Lat,data.Long,data.Heading,data.DoorState,data.VehState,data.OdomtFt,data.SecPastSt,
-        data.SatCnt,data.StopWindow,data.Blank,data.LatRaw,data.LongRaw,data.RowBeforeAPC,
-        TagsTemp.route_pattern,TagsTemp.route,TagsTemp.pattern,TagsTemp.IndexTripStartInCleanData,TagsTemp.IndexTripEndInCleanData
-        FROM data LEFT JOIN TagsTemp on data.IndexLoc BETWEEN  TagsTemp.IndexTripStartInCleanData and TagsTemp.IndexTripEndInCleanData
+    summary_data.columns
+    tags_temp = summary_data[
+        ['route_pattern', 'route', 'pattern', 'IndexTripStartInCleanData', 'IndexTripEndInCleanData']]
+    q1 = '''SELECT data.IndexLoc,data.Lat,data.Long,data.Heading,data.DoorState,data.VehState,data.OdomtFt,
+    data.SecPastSt,data.SatCnt,data.StopWindow,data.Blank,data.LatRaw,data.LongRaw,data.RowBeforeAPC,
+    tags_temp.route_pattern,tags_temp.route,tags_temp.pattern,tags_temp.IndexTripStartInCleanData,
+    tags_temp.IndexTripEndInCleanData
+    FROM data LEFT JOIN tags_temp on data.IndexLoc 
+    BETWEEN  tags_temp.IndexTripStartInCleanData and tags_temp.IndexTripEndInCleanData
     '''
     data = ps.sqldf(q1, locals())
-    return(data)    
-###################################################################################################################################   
+    return data
 
-# GetTripSummary
-###################################################################################################################################
-def GetTripSummary(data, taglineData):
+
+def get_trip_summary(data, tagline_data):
     '''
     Parameters
     ----------
     data : pd.DataFrame
         rawnav data without tags.
-    taglineData : pd.DataFrame
+    tagline_data : pd.DataFrame
         Tagline data.
     Returns
     -------
     Summary data : pd.DataFrame
-        Data with trip level summary. 
+        data with trip level summary.
     '''
-    temp = taglineData[['IndexTripStart','IndexTripEnd']]
+    temp = tagline_data[['IndexTripStart', 'IndexTripEnd']]
     temp = temp.astype('int32')
-    rawDaCpy = data[['IndexLoc',0,1,5,6]].copy()
-    rawDaCpy[['IndexLoc',5,6]]= rawDaCpy[['IndexLoc',5,6]].astype('int32')
-    rawDaCpy.rename(columns={0:'Lat',1:'Long',5:'OdomtFt',6:'SecPastSt'},inplace=True)
-    #Get rows with trip start from rawDaCpy
-    temp = pd.merge_asof(temp,rawDaCpy,left_on = "IndexTripStart",right_on ="IndexLoc" , direction='forward')
-    temp.rename(columns = {'Lat':"LatStart",'Long':"LongStart",
-                           'OdomtFt': "OdomFtStart",'SecPastSt':"SecStart","IndexLoc":"IndexTripStartInCleanData"},inplace=True)
-    #Get rows with trip end from rawDaCpy
-    temp = pd.merge_asof(temp,rawDaCpy,left_on = "IndexTripEnd",right_on ="IndexLoc" , direction='backward')
-    temp.rename(columns = {'Lat':"LatEnd",'Long':"LongEnd",'OdomtFt': "OdomFtEnd",'SecPastSt':"SecEnd",
-                           "IndexLoc":"IndexTripEndInCleanData"},inplace=True)
-    temp.loc[:,"TripDurFromSec"] = temp.SecEnd - temp.SecStart
+    raw_da_cpy = data[['IndexLoc', 0, 1, 5, 6]].copy()
+    raw_da_cpy[['IndexLoc', 5, 6]] = raw_da_cpy[['IndexLoc', 5, 6]].astype('int32')
+    raw_da_cpy.rename(columns={0: 'Lat', 1: 'Long', 5: 'OdomtFt', 6: 'SecPastSt'}, inplace=True)
+    # Get rows with trip start from raw_da_cpy
+    temp = pd.merge_asof(temp, raw_da_cpy, left_on="IndexTripStart", right_on="IndexLoc", direction='forward')
+    temp.rename(columns={'Lat': "LatStart", 'Long': "LongStart",
+                         'OdomtFt': "OdomFtStart", 'SecPastSt': "SecStart", "IndexLoc": "IndexTripStartInCleanData"},
+                inplace=True)
+    # Get rows with trip end from raw_da_cpy
+    temp = pd.merge_asof(temp, raw_da_cpy, left_on="IndexTripEnd", right_on="IndexLoc", direction='backward')
+    temp.rename(columns={'Lat': "LatEnd", 'Long': "LongEnd", 'OdomtFt': "OdomFtEnd", 'SecPastSt': "SecEnd",
+                         "IndexLoc": "IndexTripEndInCleanData"}, inplace=True)
+    temp.loc[:, "TripDurFromSec"] = temp.SecEnd - temp.SecStart
     temp.eval("""
               TripDurFromSec = SecEnd-SecStart
               DistOdomMi = (OdomFtEnd - OdomFtStart)/ 5280
               SpeedOdomMPH = (DistOdomMi/ TripDurFromSec) * 3600
-              """,inplace=True)
-    temp[["LatStart","LongStart","LatEnd","LongEnd"]] = temp[["LatStart","LongStart","LatEnd","LongEnd"]].astype(float)
-    #Get distance b/w trip start and end lat-longs
-    temp.loc[:,'CrowFlyDistLatLongMi'] = GetDistanceLatLong_mi(temp,"LatStart","LongStart","LatEnd","LongEnd")
-    SummaryDat = taglineData.merge(temp,on= ['IndexTripStart','IndexTripEnd'],how ='left')
-    SummaryDat.tag_date = SummaryDat.tag_date.astype(str)
-    SummaryDat.loc[:,"StartDateTime"] = pd.to_datetime(SummaryDat['tag_date']+" "+SummaryDat['TripStartTime'])
-    SummaryDat.loc[:,"EndDateTime"] = pd.to_datetime(SummaryDat['tag_date']+" "+SummaryDat['TripEndTime'], errors='coerce')
-    SummaryDat.loc[:,"TripDurationFromTags"] = pd.to_timedelta(SummaryDat.loc[:,"EndDateTime"]- SummaryDat.loc[:,"StartDateTime"])
-    SummaryDat.loc[:,"SpeedTripTagMPH"] = round(3600 * SummaryDat.DistOdomMi / SummaryDat.TripDurationFromTags.dt.total_seconds(),2)
-    SummaryDat = SummaryDat[['fullpath', 'filename', 'file_busid', 'file_id', 'taglist','route_pattern', 'tag_busid',
-                             'route', 'pattern', 'wday',
-                             'StartDateTime','EndDateTime','IndexTripStart','IndexTripStartInCleanData','IndexTripEnd','IndexTripEndInCleanData','SecStart',
-                 'OdomFtStart','SecEnd','OdomFtEnd',"TripDurFromSec","TripDurationFromTags",
-                 "DistOdomMi", "SpeedOdomMPH", "SpeedTripTagMPH","CrowFlyDistLatLongMi"
-                 ,"LatStart","LongStart","LatEnd","LongEnd"]]
-    return(SummaryDat)
-###################################################################################################################################
+              """, inplace=True)
+    temp[["LatStart", "LongStart", "LatEnd", "LongEnd"]] = temp[["LatStart", "LongStart", "LatEnd", "LongEnd"]].astype(
+        float)
+    # Get distance b/w trip start and end lat-longs
+    temp.loc[:, 'CrowFlyDistLatLongMi'] = get_distance_latlong_mi(temp, "LatStart", "LongStart", "LatEnd", "LongEnd")
+    summary_dat = tagline_data.merge(temp, on=['IndexTripStart', 'IndexTripEnd'], how='left')
+    summary_dat.tag_date = summary_dat.tag_date.astype(str)
+    summary_dat.loc[:, "StartDateTime"] = pd.to_datetime(summary_dat['tag_date'] + " " + summary_dat['TripStartTime'])
+    summary_dat.loc[:, "EndDateTime"] = pd.to_datetime(summary_dat['tag_date'] + " " + summary_dat['TripEndTime'],
+                                                       errors='coerce')
+    summary_dat.loc[:, "TripDurationFromTags"] = pd.to_timedelta(
+        summary_dat.loc[:, "EndDateTime"] - summary_dat.loc[:, "StartDateTime"])
+    summary_dat.loc[:, "SpeedTripTagMPH"] = round(
+        3600 * summary_dat.DistOdomMi / summary_dat.TripDurationFromTags.dt.total_seconds(), 2)
+    summary_dat = summary_dat[['fullpath', 'filename', 'file_busid', 'file_id', 'taglist', 'route_pattern', 'tag_busid',
+                               'route', 'pattern', 'wday',
+                               'StartDateTime', 'EndDateTime', 'IndexTripStart', 'IndexTripStartInCleanData',
+                               'IndexTripEnd', 'IndexTripEndInCleanData', 'SecStart',
+                               'OdomFtStart', 'SecEnd', 'OdomFtEnd', "TripDurFromSec", "TripDurationFromTags",
+                               "DistOdomMi", "SpeedOdomMPH", "SpeedTripTagMPH", "CrowFlyDistLatLongMi"
+        , "LatStart", "LongStart", "LatEnd", "LongEnd"]]
+    return summary_dat
 
-# RemoveAPC_CAL_Tags
-###################################################################################################################################
-def RemoveAPC_CAL_Tags(data):
+
+def remove_apc_cal_tags(data):
     '''
     Parameters
     ----------
@@ -372,94 +373,92 @@ def RemoveAPC_CAL_Tags(data):
     -------
     data : pd.DataFrame
         data without APC and CAL tags. 
-    APCTagLoc : np.array
+    apc_tag_loc : np.array
         Location of APC tags. Used to create a new column about bus door open status. 
     '''
-    #Remove all rows with "CAL" label
-    MaskCal = data.loc[:,0].str.upper().str.strip() =="CAL"
-    data = data[~MaskCal]
-    #Remove APC tag and store tag location
-    MaskAPC = data.loc[:,0].str.upper().str.strip() =="APC"
-    APCTagLoc = np.array(data[MaskAPC].index)
-    data = data[~MaskAPC]
-    return(data, APCTagLoc)
-###################################################################################################################################
+    # Remove all rows with "CAL" label
+    mask_cal = data.loc[:, 0].str.upper().str.strip() == "CAL"
+    data = data[~mask_cal]
+    # Remove APC tag and store tag location
+    mask_apc = data.loc[:, 0].str.upper().str.strip() == "APC"
+    apc_tag_loc = np.array(data[mask_apc].index)
+    data = data[~mask_apc]
+    return data, apc_tag_loc
 
-# AddEndRouteInfo
-###################################################################################################################################
-def AddEndRouteInfo(data, taglineData):
+
+def add_end_route_info(data, tagline_data):
     '''
     Parameters
     ----------
     data : pd.DataFrame
         Unclean data with info on end of route.
-    taglineData : pd.DataFrame
+    tagline_data : pd.DataFrame
         Tagline data.
     Returns
     -------
-    taglineData : pd.DataFrame
+    tagline_data : pd.DataFrame
         Tagline data with trip end time adjusted based on
         "Busware navigation reported end of route..." or
         "Buswares is now using route zero" tags.
     deleteIndices : np.array
         indices to delete from raw data.
     '''
-    Pat = re.compile('^\s*/\s*(?P<TripEndTime>\d{2}:\d{2}:\d{2})\s*(?:Buswares navigation reported end of route|Buswares is now using route zero)',re.S) 
-    data.loc[:,'TripEndTime']= data[0].str.extract(Pat)
-    EndOfRoute = data[['IndexLoc','TripEndTime']]
-    EndOfRoute = EndOfRoute[~(EndOfRoute.TripEndTime.isna())]
-    deleteIndices = EndOfRoute.IndexLoc.values
-    EndOfRoute.rename(columns={'IndexLoc':'IndexTripEnd'},inplace=True)
-    EndOfRoute.IndexTripEnd = EndOfRoute.IndexTripEnd.astype('int32')
-    taglineData.NewLineNo = taglineData.NewLineNo.astype('int32')
-    EndOfRoute = pd.merge_asof(EndOfRoute,taglineData[['tag_time','NewLineNo']],left_on="IndexTripEnd",right_on='NewLineNo',direction='backward')
-    EndOfRoute = EndOfRoute[~(EndOfRoute.duplicated(subset=['NewLineNo','tag_time'],keep='first'))]
-    taglineData = taglineData.merge(EndOfRoute,on=['NewLineNo','tag_time'],how='left')
-    taglineData.loc[:,'tempLine'] = taglineData['NewLineNo'].shift(-1)
-    taglineData.loc[:,'tempTime'] = taglineData['tag_time'].shift(-1)
-    taglineData.loc[taglineData.TripEndTime.isna(),['IndexTripEnd','TripEndTime']] = taglineData.loc[taglineData.TripEndTime.isna(),['tempLine','tempTime']].values
-    if(np.isnan(taglineData.iloc[-1]['IndexTripEnd'])):
-        taglineData.loc[taglineData.index.max(), 'IndexTripEnd'] = max(data.IndexLoc)
-    taglineData.rename(columns={'tag_time':"TripStartTime"},inplace=True)
-    return(taglineData, deleteIndices)
-################################################################################################################################### 
+    pat = re.compile(
+        '^\s*/\s*(?P<TripEndTime>\d{2}:\d{2}:\d{2})\s*(?:Buswares navigation reported end of route|Buswares is now using route zero)',
+        re.S)
+    data.loc[:, 'TripEndTime'] = data[0].str.extract(pat)
+    end_of_route = data[['IndexLoc', 'TripEndTime']]
+    end_of_route = end_of_route[~(end_of_route.TripEndTime.isna())]
+    delete_indices = end_of_route.IndexLoc.values
+    end_of_route.rename(columns={'IndexLoc': 'IndexTripEnd'}, inplace=True)
+    end_of_route.IndexTripEnd = end_of_route.IndexTripEnd.astype('int32')
+    tagline_data.NewLineNo = tagline_data.NewLineNo.astype('int32')
+    end_of_route = pd.merge_asof(end_of_route, tagline_data[['tag_time', 'NewLineNo']], left_on="IndexTripEnd",
+                                 right_on='NewLineNo', direction='backward')
+    end_of_route = end_of_route[~(end_of_route.duplicated(subset=['NewLineNo', 'tag_time'], keep='first'))]
+    tagline_data = tagline_data.merge(end_of_route, on=['NewLineNo', 'tag_time'], how='left')
+    tagline_data.loc[:, 'tempLine'] = tagline_data['NewLineNo'].shift(-1)
+    tagline_data.loc[:, 'tempTime'] = tagline_data['tag_time'].shift(-1)
+    tagline_data.loc[tagline_data.TripEndTime.isna(), ['IndexTripEnd', 'TripEndTime']] = tagline_data.loc[
+        tagline_data.TripEndTime.isna(), ['tempLine', 'tempTime']].values
+    if np.isnan(tagline_data.iloc[-1]['IndexTripEnd']):
+        tagline_data.loc[tagline_data.index.max(), 'IndexTripEnd'] = max(data.IndexLoc)
+    tagline_data.rename(columns={'tag_time': "TripStartTime"}, inplace=True)
+    return tagline_data, delete_indices
 
-# GetDistanceLatLong_mi
-###################################################################################################################################
-def GetDistanceLatLong_mi(Data,Lat1,Long1,Lat2,Long2):
+
+def get_distance_latlong_mi(data, lat1, long1, lat2, long2):
     '''
     Parameters
     ----------
-    Data : pd.DataFrame
+    data : pd.DataFrame
         Any dataframe.
-    Lat1 : str
+    lat1 : str
         1st lat column.
-    Long1 : str
+    long1 : str
         1st long column.
-    Lat2 : str
+    lat2 : str
         2nd lat column.
-    Long2 : str
+    long2 : str
         2nd long column.
     Returns
     -------
     DistanceMi: np.array
-        distances in mile between (Lat1,Long1) and (Lat2,Long2) columns in Data.
+        distances in mile between (Lat1,long1) and (Lat2,long2) columns in Data.
         same size as number of rows in Data.
     '''
-    geometry1 = [Point(xy) for xy in zip(Data[Long1], Data[Lat1])]
-    gdf=gpd.GeoDataFrame(geometry=geometry1,crs={'init':'epsg:4326'})
-    gdf.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
-    geometry2 = [Point(xy) for xy in zip(Data[Long2], Data[Lat2])]
-    gdf2=gpd.GeoDataFrame(geometry=geometry2,crs={'init':'epsg:4326'})
-    gdf2.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
-    #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
-    DistanceMi = gdf.geometry.distance(gdf2) * 0.000621371 # meters to miles    
-    return(DistanceMi.values)
-###################################################################################################################################
+    geometry1 = [Point(xy) for xy in zip(data[long1], data[lat1])]
+    gdf = gpd.GeoDataFrame(geometry=geometry1, crs={'init': 'epsg:4326'})
+    gdf.to_crs(epsg=3310, inplace=True)  # Distance in meters---Default is in degrees!
+    geometry2 = [Point(xy) for xy in zip(data[long2], data[lat2])]
+    gdf2 = gpd.GeoDataFrame(geometry=geometry2, crs={'init': 'epsg:4326'})
+    gdf2.to_crs(epsg=3310, inplace=True)  # Distance in meters---Default is in degrees!
+    # https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
+    distance_mi = gdf.geometry.distance(gdf2) * 0.000621371  # meters to miles
+    return distance_mi.values
 
-# GetDistanceLatLong_ft_fromGeom
-###################################################################################################################################
-def GetDistanceLatLong_ft_fromGeom(geometry1, geometry2):
+
+def get_distance_latlong_ft_from_geom(geometry1, geometry2):
     '''
     Parameters
     ----------
@@ -472,22 +471,20 @@ def GetDistanceLatLong_ft_fromGeom(geometry1, geometry2):
     distances in feet between each points in geometry1 and geometry2.
     same size as geometry1 or geometry2. 
     '''
-    gdf=gpd.GeoDataFrame(geometry=geometry1,crs={'init':'epsg:4326'})
-    gdf.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
-    gdf2=gpd.GeoDataFrame(geometry=geometry2,crs={'init':'epsg:4326'})
-    gdf2.to_crs(epsg=3310,inplace=True) # Distance in meters---Default is in degrees!
-    #https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
-    DistanceFt = gdf.geometry.distance(gdf2) * 3.28084 # meters to feet    
-    return(DistanceFt.values)
-###################################################################################################################################
+    gdf = gpd.GeoDataFrame(geometry=geometry1, crs={'init': 'epsg:4326'})
+    gdf.to_crs(epsg=3310, inplace=True)  # Distance in meters---Default is in degrees!
+    gdf2 = gpd.GeoDataFrame(geometry=geometry2, crs={'init': 'epsg:4326'})
+    gdf2.to_crs(epsg=3310, inplace=True)  # Distance in meters---Default is in degrees!
+    # https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
+    distance_ft = gdf.geometry.distance(gdf2) * 3.28084  # meters to feet
+    return (distance_ft.values)
 
-# FindAllTags
-###################################################################################################################################
-def FindAllTags(ZipFolderPath, quiet = True):
+
+def find_all_tags(zip_folder_path, quiet=True):
     '''
     Parameters
     ----------
-    ZipFolderPath: str
+    zip_folder_path: str
         Path to zipped folder with rawnav text file. 
         i.e., rawnav02164191003.txt.zip
         Assumes that included text file has the same name as the zipped file,
@@ -499,79 +496,75 @@ def FindAllTags(ZipFolderPath, quiet = True):
         List of Character strings including line number, pattern, vehicle,
         date, and time
     '''
-    if quiet != True: 
-        print("Searching for tags in: " + ZipFolderPath)
+    if quiet != True:
+        print("Searching for tags in: " + zip_folder_path)
     try:
-        zf = zipfile.ZipFile(ZipFolderPath)
+        zf = zipfile.ZipFile(zip_folder_path)
         # Get Filename
-        namepat = re.compile('(rawnav\d+\.txt)') 
-        ZipFileName = namepat.search(ZipFolderPath).group(1) 
+        namepat = re.compile('(rawnav\d+\.txt)')
+        zip_file_name = namepat.search(zip_folder_path).group(1)
         # Get Info
-        infopat ='^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
-        TagLineElements = []
-        TagLineNum = 1
-        with io.TextIOWrapper(zf.open(ZipFileName, 'r'),encoding="utf-8") as input_file:
+        infopat = '^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
+        tag_line_elements = []
+        tag_line_num = 1
+        with io.TextIOWrapper(zf.open(zip_file_name, 'r'), encoding="utf-8") as input_file:
             for current_line in input_file:
                 for match in re.finditer(infopat, current_line, re.S):
                     # Turns out we don't really need capture groups
                     # with string split approach, but leaving in for possible
                     # future changes
-                    returnvals = str(TagLineNum) + "," + match.group()
-                    TagLineElements.append(returnvals)
-                TagLineNum = TagLineNum + 1
-        if len(TagLineElements) == 0:
-             TagLineElements.append(',,,,,,')
+                    returnvals = str(tag_line_num) + "," + match.group()
+                    tag_line_elements.append(returnvals)
+                tag_line_num = tag_line_num + 1
+        if len(tag_line_elements) == 0:
+            tag_line_elements.append(',,,,,,')
     except BadZipfile as BadZipEr:
-        print("*"*100)
-        print(f"Issue with opening zipped file: {ZipFolderPath}. Error: {BadZipEr}")
-        print("*"*100)
-        TagLineElements = []
-        TagLineElements.append(',,,,,,')
+        print("*" * 100)
+        print(f"issue with opening zipped file: {zip_folder_path}. Error: {BadZipEr}")
+        print("*" * 100)
+        tag_line_elements = []
+        tag_line_elements.append(',,,,,,')
     except KeyError as keyerr:
-        print("*"*100)
-        print(f"Text file name doesn't match parent zip folder for': {ZipFolderPath}. Error: {keyerr}")
-        print("*"*100)
-        TagLineElements = []
-        TagLineElements.append(',,,,,,')
-    return(TagLineElements)
-###################################################################################################################################
+        print("*" * 100)
+        print(f"Text file name doesn't match parent zip folder for': {zip_folder_path}. Error: {keyerr}")
+        print("*" * 100)
+        tag_line_elements = []
+        tag_line_elements.append(',,,,,,')
+    return tag_line_elements
 
-# MoveEmptyIncorrectLabelFiles
-###################################################################################################################################   
-def MoveEmptyIncorrectLabelFiles(File, path_source_data, Issue='EmptyFiles'):
+
+def move_empty_incorrect_label_files(file, path_source_data, issue='EmptyFiles'):
     '''
     Parameters
     ----------
-    File : str
+    file : str
         Rawnav files with empty or incorrect BusID
     path_source_data : str
         Sending the file "File" to a directory in path_source_data.
-    Issue : str, optional
+    issue : str, optional
         Type of issue with the file: missing/Empty. The default is 'EmptyFiles'.
     Returns
     -------
     None.
     '''
     # Copy empty files to another directory for checking.
-    pat  = re.compile('.*(Vehicles\s*[0-9]*-[0-9]*)') 
-    VehNos =pat.search(File).group(1)
-    MoveFolderName = "EmptyMissClassFiles//" + VehNos
-    MoveDir = os.path.join(path_source_data,MoveFolderName,Issue)
-    pat  = re.compile('(rawnav.*.txt)') 
+    pat = re.compile('.*(Vehicles\s*[0-9]*-[0-9]*)')
+    veh_nos = pat.search(file).group(1)
+    move_folder_name = "EmptyMissClassFiles//" + veh_nos
+    move_dir = os.path.join(path_source_data, move_folder_name, issue)
+    pat = re.compile('(rawnav.*.txt)')
     try:
-        if not os.path.exists(MoveDir):
-            os.makedirs(MoveDir)
+        if not os.path.exists(move_dir):
+            os.makedirs(move_dir)
     except:
         print('Error Dir creation')
-    shutil.copy(File,MoveDir)  #Will change it to "move" later
-    return(None)
-###################################################################################################################################
+    shutil.copy(file, move_dir)  # Will change it to "move" later
+    return None
 
-# is_numeric
-###################################################################################################################################
+
 def is_numeric(s):
     '''
-    Check if Lat/Long is a String. Data has tags like APC : Automatic passenger count
+    Check if Lat/Long is a String. data has tags like APC : Automatic passenger count
     CAL, Tags about Trip start and End. Find the location of these tags.
     '''
     try:
@@ -579,32 +572,25 @@ def is_numeric(s):
         return True
     except(ValueError, TypeError):
         return False
-###################################################################################################################################
 
-# CheckValidDataEntry
-###################################################################################################################################
-def CheckValidDataEntry(row):
+
+def check_valid_data_entry(row):
     '''
     row: Pandas DataFrame Row
     Check if a row is valid i.e. has
     lat, long, heading, DoorState, VehinMotion, Odometer and TimeSec data.
     Also validate the data range.
     '''
-    IsValidEntry = False
+    is_valid_entry = False
     try:
-        Lat = float(row[0])
-        Long = float(row[1])
-        Heading = float(row[2])
-        DoorState = row[3]
-        VehinMotion = row[4]
-        OdoMet = int(row[5])
-        TimeSec = int(row[6])
-        if((-90<=Lat<=90)&(-180<=Long<=180)&(0<=Heading<=360)&
-           (DoorState in ['O','C'])& (VehinMotion in['M','S'])):
-            IsValidEntry = True
-    except: ""
-    return(IsValidEntry)
-###################################################################################################################################
-
-###################################################################################################################################
-###################################################################################################################################
+        lat = float(row[0])
+        long = float(row[1])
+        heading = float(row[2])
+        door_state = row[3]
+        veh_in_motion = row[4]
+        if ((-90 <= lat <= 90) & (-180 <= long <= 180) & (0 <= heading <= 360) &
+                (door_state in ['O', 'C']) & (veh_in_motion in ['M', 'S'])):
+            is_valid_entry = True
+    except:
+        ""
+    return is_valid_entry

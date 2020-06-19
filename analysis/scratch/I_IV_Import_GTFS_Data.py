@@ -24,14 +24,14 @@ if os.getlogin() == "WylieTimmerman":
     sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
     path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
     
-    # Source Data
+    # Source data
     # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
     path_source_data = r"C:\Downloads\Vehicles 0-2999\Vehicles 0-2999"
     GTFS_Dir = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\wmata-2019-05-18 dl20200205gtfs")
     ZippedFilesLoc = path_source_data
-    # Processed Data
+    # Processed data
     
-    # Processed Data
+    # Processed data
     path_processed_data = os.path.join(path_sp,r"Client Shared Folder\data\02-processed")
     
 else:
@@ -41,18 +41,18 @@ else:
     os.chdir(os.path.join(path_working))
     sys.path.append(path_working) 
     
-    # Source Data
+    # Source data
     path_source_data = r"C:\Downloads\Vehicles 0-2999\Vehicles 0-2999"
     GTFS_Dir = "./google_transit"
     ZippedFilesLoc = './October 2019 Rawnav/Vehicles 0-2999'
     
-    # Processed Data
+    # Processed data
     path_processed_data = os.path.join("somethinggoeshere")
 
 
 import rawnavparser as rp
 
-#2 Read the GTFS Data
+#2 Read the GTFS data
 ########################################################################################
 
 StopsDat= pd.read_csv(os.path.join(GTFS_Dir,"stops.txt"))
@@ -107,7 +107,7 @@ CheckLastStop1 = LastStopDat.groupby(['route_id','direction_id','trip_headsign',
                                     .agg({'last_sLat':['count','first'],
                                           'last_sLon':'first' ,'arrival_time':to_set,'departure_time':to_set})
 First_Last_Stop = CheckFirstStop.merge(CheckLastStop,left_index=True,right_index=True,how='left')
-#Check stops Data
+#Check stops data
 #########################################
 OutFi = os.path.join(path_processed_data,'First_Last_Stop.xlsx')
 writer = pd.ExcelWriter(OutFi)
@@ -133,7 +133,7 @@ LastStopDat1.to_csv(os.path.join(path_processed_data,'LastStopGTFS.csv'))
 
 
 TripInventory = pd.read_excel(os.path.join(path_processed_data,'TripSummaries_Veh0_2999.xlsx'),\
-                              'SummaryData', \
+                              'summary_data', \
                               converters = {'Tag':str})
 TripInventory.loc[:,'route_id'] = TripInventory.Tag.str[0:2].str.upper()
 TripInventory.columns
@@ -176,7 +176,7 @@ rte_id = '79'
 for key,TestData in RawNavDataDict[rte_id].items():
     FirstTag = FirstTagDict[key]['FirstTagLine']
     FirstTag = [0] + FirstTag
-    #3 Data Cleaning
+    #3 data Cleaning
     #****************************************************************************************************************
     
     #3.1 Remove "APC" and "CAL" Labels
@@ -186,7 +186,7 @@ for key,TestData in RawNavDataDict[rte_id].items():
     #3.2 Get the Rows with Tags
     #****************************************************************************************************************
     TestData.reset_index(inplace=True); TestData.rename(columns = {"index":"IndexLoc"},inplace=True)
-    TagsData = TestData[~TestData.apply(rp.CheckValidDataEntry,axis=1)]
+    TagsData = TestData[~TestData.apply(rp.check_valid_data_entry, axis=1)]
     TripTags,EndOfRoute1 = rp.GetTagInfo(TagsData,FirstTag)
     #Remove rows with tags and rows that have no value in the 3rd column
     # Might need to look back at the 3rd column
@@ -194,7 +194,7 @@ for key,TestData in RawNavDataDict[rte_id].items():
     RemoveRows = np.setdiff1d(RemoveRows,np.array([0])) #1st row should not be deleted. 
     #1st tag would at position 0 but it doesn't affect the data.
     TestData = TestData[~TestData.IndexLoc.isin(RemoveRows)]
-    TestData=  TestData[TestData.apply(rp.CheckValidDataEntry,axis=1)]
+    TestData=  TestData[TestData.apply(rp.check_valid_data_entry, axis=1)]
     #check if 1st and 2nd column only has lat long 
     try:
         TestData.loc[:,[0,1]] = TestData.loc[:,[0,1]].applymap(lambda x: float(x))#It would not work we All Tags are not removed from the data
@@ -281,7 +281,7 @@ FinSumDat.to_excel(os.path.join(path_processed_data,'Route79_TrimSum.xlsx'))
 
     
     
-# X---Misc Subset Data for Route 79
+# X---Misc Subset data for Route 79
 # Rewrite later !!!
 ########################################################################################
 

@@ -43,12 +43,12 @@ if os.getlogin() == "WylieTimmerman":
     sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
     path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
     
-    # Source Data
+    # Source data
     # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
     path_source_data = r"C:\Downloads"
     GTFS_Dir = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\wmata-2019-05-18 dl20200205gtfs")
 
-    # Processed Data
+    # Processed data
     path_processed_data = os.path.join(path_sp,r"Client Shared Folder\data\02-processed")
 elif os.getlogin()=="abibeka":
     # Working Paths
@@ -56,13 +56,13 @@ elif os.getlogin()=="abibeka":
     os.chdir(os.path.join(path_working))
     sys.path.append(path_working) 
     
-    # Source Data
+    # Source data
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
     GTFS_Dir = os.path.join(path_source_data, "google_transit")   
-    # Processed Data
+    # Processed data
     path_processed_data = os.path.join(path_source_data,"ProcessedData")
 else:
-    raise FileNotFoundError("Define the path_working, path_source_data, GTFS_Dir, \
+    raise FileNotFoundError("Define the path_working, path_source_data, gtfs_dir, \
                             ZippedFilesloc, and path_processed_data in a new elif block")
 
 # User-Defined Package
@@ -71,7 +71,7 @@ import wmatarawnav as wr
 AnalysisRoutes = ['79']
 ZipParentFolderName = "October 2019 Rawnav"
 
-#1 Analyze Route ---Subset RawNav Data. 
+#1 Analyze Route ---Subset RawNav data.
 ########################################################################################
 FinDat = pq.read_table(source =os.path.join(path_processed_data,"Route79_Partition.parquet")).to_pandas()
 FinDat.route = FinDat.route.astype('str')
@@ -84,7 +84,7 @@ FinDat.loc[:,"Count"] = FinDat.groupby(['filename','IndexTripStartInCleanData','
 FinDatCheck = FinDat[FinDat.Count>1] # Check what is happening with the file here :'rawnav06435191012.txt' on Friday.
 FinDatCheck.filename.unique()
 FinDat = FinDat.query("Count==1")
-# 1.1 Summary Data
+# 1.1 Summary data
 ########################################################################################
 FinSummaryDat = pd.read_csv(os.path.join(path_processed_data,'TripSummaries.csv'))
 FinSummaryDat.IndexTripStartInCleanData = FinSummaryDat.IndexTripStartInCleanData.astype('int32')

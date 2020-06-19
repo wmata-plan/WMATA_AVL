@@ -75,7 +75,7 @@ ZipFileDict = dict((x.replace('\\', '/'),os.path.basename(x.split('.zip')[0])) f
 
 if len(ZipFiles) == 0:
     raise Exception ("No Zip Files found at {}".format(path_source_data))
-# 1 Read Data
+# 1 Read data
 #****************************************************************************************************************
 RawDataDict = {}
 FirstTagDict = {}
@@ -121,7 +121,7 @@ for key in NoDataDict.keys():
                 os.path.join(path_processed_data,'Veh0_2999_NoData'))
     
     
-# os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data')
+# os.chdir(r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\data')
 # for file in os.listdir('./RawData'):
 #     file1 = os.path.join('./RawData',file)
 #     pat  = re.compile('rawnav(.*).txt') 
@@ -148,7 +148,7 @@ for key,TestData in RawDataDict.items():
         continue
     FirstTag = FirstTagDict[key]['FirstTagLine']
     FirstTag = [0] + FirstTag
-    #3 Data Cleaning
+    #3 data Cleaning
     #****************************************************************************************************************
     
     #3.1 Remove "APC" and "CAL" Labels
@@ -193,7 +193,7 @@ for key,TestData in RawDataDict.items():
                                'TripDurationFromTags','TripDurationFromRawData',   \
                                'DistanceMi','TripSpeed_Tags','TripSpeed_RawData',  \
                                'SecPastSt','StartFt','StartLat','StartLong','EndLat','EndLong']]
-    #3.4 Work with Raw Data    
+    #3.4 Work with Raw data
     #****************************************************************************************************************
     #Divde the Raw data by Trip End time tags 
     TestData1.rename(columns=ColumnNmMap,inplace=True)
@@ -208,7 +208,7 @@ for key,TestData in RawDataDict.items():
    #ProcessedRawDataDict[key] = TestData1 # Do not store this data. Save as independent files!
 
 
-#4 Write Summary to File
+#4 Write Summary to file
 #****************************************************************************************************************
 os.getcwd()
 OutFi = os.path.join(path_processed_data,"TripSummaries_Veh0_2999.xlsx")
@@ -241,7 +241,7 @@ if len(NoData_da) > 0:
 if len(WrongBusID_da) > 0:
     WrongBusID_da.set_index('FileNm',inplace=True)
 
-FinDat.to_excel(writer,"SummaryData",index=False)
+FinDat.to_excel(writer,"summary_data",index=False)
 FinDat2.to_excel(writer,"DebugSummaryData",index=True)
 FinRemoveData.to_excel(writer,"RemovedRows",index=True)
 NoData_da.to_excel(writer,"NoDataFiles",index=True)

@@ -34,12 +34,12 @@ if os.getlogin() == "WylieTimmerman":
     sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
     path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
     
-    # Source Data
+    # Source data
     # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
     path_source_data = r"C:\Downloads"
     GTFS_Dir = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\wmata-2019-05-18 dl20200205gtfs")
 
-    # Processed Data
+    # Processed data
     path_processed_data = os.path.join(path_sp,r"Client Shared Folder\data\02-processed")
     #TODO: Might need to edit following:
     path_processed_route_data = os.path.join(path_processed_data,"RouteData")
@@ -48,15 +48,15 @@ elif os.getlogin()=="abibeka":
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
     os.chdir(os.path.join(path_working))
     sys.path.append(path_working) 
-    # Source Data
+    # Source data
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
     GTFS_Dir = os.path.join(path_source_data, "google_transit")   
-    # Processed Data
+    # Processed data
     path_processed_data = os.path.join(path_source_data,"ProcessedData")
     path_processed_route_data = os.path.join(path_processed_data,"RouteData")
 
 else:
-    raise FileNotFoundError("Define the path_working, path_source_data, GTFS_Dir, \
+    raise FileNotFoundError("Define the path_working, path_source_data, gtfs_dir, \
                             ZippedFilesloc, and path_processed_data in a new elif block")
 
 # Globals
@@ -64,9 +64,9 @@ else:
 # For all cases, use None 
 restrict_n = None
 MasterRouteList = ['S1','S2','S4','S9','70','79','64','G8','D32','H1','H2','H3','H4','H8','W47'] # 16 Gb RAM can't handle all these at one go
-# AnalysisRoutes = ['S1','S9','H4','G8','64']
-AnalysisRoutes = ['70','64','D32','H8','S2']
-#AnalysisRoutes = ['S2','S4','H1','H2','H3','79','W47']]
+# analysis_routes = ['S1','S9','H4','G8','64']
+analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
+#analysis_routes = ['S2','S4','H1','H2','H3','79','W47']]
 
 ZipParentFolderName = "October 2019 Rawnav"
 
@@ -77,7 +77,7 @@ import wmatarawnav as wr
 executionTime= str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 1 Import Libraries and Set Global Parameters : {executionTime}")
 print("*"*100)
-# 2 Analyze Route ---Subset RawNav Data. 
+# 2 Analyze Route ---Subset RawNav data.
 ###########################################################################################################################################################
 print(f"Run Section 2 Analyze Route ---Subset RawNav Data...")
 begin_time = datetime.now() ##
@@ -87,22 +87,22 @@ assert(len(set(DaysOfWeek)-set(analysis_days))> 0), print("""
                                                     analysis_days is a subset of following days: 
                                                     ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
                                                 """)
-# 2.1 Rawnav Data
+# 2.1 Rawnav data
 ############################################
 FinDat = wr.readProcessedRawnav(
-    AnalysisRoutes_=AnalysisRoutes,
+    AnalysisRoutes_=analysis_routes,
     path_processed_route_data=path_processed_route_data,
     restrict=restrict_n,
     analysis_days=analysis_days)
-# 2.2 Summary Data
+# 2.2 Summary data
 ############################################
 FinSummaryDat, issueDat = wr.readSummaryRawnav(
-    AnalysisRoutes_=AnalysisRoutes,
+    AnalysisRoutes_=analysis_routes,
     path_processed_route_data=path_processed_route_data,
     restrict=restrict_n,
     analysis_days=analysis_days)
 Subset = FinSummaryDat[['filename','IndexTripStartInCleanData']]
-# 2.3 Merge Processed and Summary Data
+# 2.3 Merge Processed and Summary data
 ############################################
 FinDat = FinDat.merge(Subset,on=['filename','IndexTripStartInCleanData'],how='right')
 set(FinDat.IndexTripStartInCleanData.unique()) -set(FinSummaryDat.IndexTripStartInCleanData.unique())
@@ -111,15 +111,15 @@ set(FinDat.filename.unique()) -set(FinSummaryDat.filename.unique())
 executionTime= str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 2 Analyze Route ---Subset RawNav Data : {executionTime}")
 print("*"*100)
-# 3 Read, analyze and summarize GTFS Data
+# 3 Read, analyze and summarize GTFS data
 ###########################################################################################################################################################
 print(f"Run Section 3 Read, analyze and summarize GTFS Data...")
 begin_time = datetime.now() ##
-# 3.1 Read the GTFS Data
+# 3.1 Read the GTFS data
 ############################################
 GtfsData = wr.readGTFS(GTFS_Dir)
-FirstStopDat1_rte, CheckFirstStop, CheckFirstStop1 = wr.get1ststop(GtfsData,AnalysisRoutes)
-LastStopDat1_rte, CheckLastStop, CheckLastStop1 = wr.getlaststop(GtfsData,AnalysisRoutes)
+FirstStopDat1_rte, CheckFirstStop, CheckFirstStop1 = wr.get1ststop(GtfsData, analysis_routes)
+LastStopDat1_rte, CheckLastStop, CheckLastStop1 = wr.getlaststop(GtfsData, analysis_routes)
 wr.debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckLastStop1,path_processed_data)
 
 GtfsData.sort_values(['trip_id','stop_sequence'],inplace=True)
@@ -149,7 +149,7 @@ FinDat2= FinDat.query('route in @SubsetRoutes')
 if FinDat2.shape[0]!=0:
     NearestRawnavOnGTFS_LastStop = wr.mergeStopsGTFSrawnav(GtfsData_LastStops, FinDat2)
     # routeNoUnique1stStp = SubsetRoutes
-    # SumDat_ = FinSummaryDat
+    # SumDat_ = fin_summary_dat
     # Dat1stStop = NearestRawnavOnGTFS_1stStop
     # DatLastStop = NearestRawnavOnGTFS_LastStop 
     # 3.4 Find correct direction
@@ -211,12 +211,12 @@ NearestRawnavOnGTFS_appxDir[[ 'filename','wday', 'StartDateTime', 'EndDateTime',
 NearestRawnavOnGTFS_appxDir.rename(columns = {'IndexLoc':'ClosestIndexLocInRawnavTraj'},inplace=True)
 # TODO : identify why the following na values are being added
 # issueDat = NearestRawnavOnGTFS_appxDir[NearestRawnavOnGTFS_appxDir.route_pattern.isna()]
-# issueDat = issueDat[['filename','IndexTripStartInCleanData']].merge(FinSummaryDat,on = ['filename','IndexTripStartInCleanData'])
+# issueDat = issueDat[['filename','IndexTripStartInCleanData']].merge(fin_summary_dat,on = ['filename','IndexTripStartInCleanData'])
 # issueDat[~issueDat.duplicated(['filename','IndexTripStartInCleanData'])]
 # 4.2 Plot Trajectories
 ############################################
 GroupsTemp =  NearestRawnavOnGTFS_appxDir.groupby(['filename','IndexTripStartInCleanData','route'])
-FinDat = FinDat.query("route in @AnalysisRoutes")
+FinDat = FinDat.query("route in @analysis_routes")
 RawnavGrps = FinDat.groupby(['filename','IndexTripStartInCleanData','route'])
 
 trackerUsableRte = collections.Counter()
@@ -259,7 +259,7 @@ print("*"*100)
 ###########################################################################################################################################################
 TestPlots = DatRawnavGTFS_issue.merge(FinSummaryDat,on = ['filename','IndexTripStartInCleanData'],how='left')
 GroupsTempIssue =  TestPlots.groupby(['filename','IndexTripStartInCleanData','route'])
-FinDat = FinDat.query("route in @AnalysisRoutes")
+FinDat = FinDat.query("route in @analysis_routes")
 RawnavGrps = FinDat.groupby(['filename','IndexTripStartInCleanData','route'])
 
 trackerRteIssues = collections.Counter()

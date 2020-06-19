@@ -17,7 +17,7 @@ for key, datadict in RouteRawTagDictShort.items():
     #CleanDataDict[key] = wr.clean_rawnav_data(datadict)
     Temp2 = wr.clean_rawnav_data(datadict, key)
     RawnavDataDictTest[key] = Temp2['rawnavdata']
-    SummaryDataDictTest[key] = Temp2['SummaryData']
+    SummaryDataDictTest[key] = Temp2['summary_data']
     
 # now this errors with 'ValueError: The column label 'IndexTripEnd' is not unique.'
     
@@ -36,7 +36,7 @@ for key, datadict in RouteRawTagDictShort.items():
     #CleanDataDict[key] = wr.clean_rawnav_data(datadict)
     Temp2 = wr.clean_rawnav_data(datadict, key)
     RawnavDataDictTest2[key] = Temp2['rawnavdata']
-    SummaryDataDictTest2[key] = Temp2['SummaryData']
+    SummaryDataDictTest2[key] = Temp2['summary_data']
     
 
 # this works first time, but I can't rerun it....
@@ -52,7 +52,7 @@ for key, datadict in RouteRawTagDictShort.items():
     #CleanDataDict[key] = wr.clean_rawnav_data(datadict)
     Temp2 = wr.clean_rawnav_data(datadict, key)
     RawnavDataDictTest[key] = Temp2['rawnavdata']
-    SummaryDataDictTest[key] = Temp2['SummaryData']
+    SummaryDataDictTest[key] = Temp2['summary_data']
     
 wanted_keys = [list(RouteRawTagDict.keys())[350]]
 
@@ -66,4 +66,4 @@ for key, datadict in RouteRawTagDictShort.items():
     #CleanDataDict[key] = wr.clean_rawnav_data(datadict)
     Temp2 = wr.clean_rawnav_data(datadict, key)
     RawnavDataDictTest[key] = Temp2['rawnavdata']
-    SummaryDataDictTest[key] = Temp2['SummaryData']
+    SummaryDataDictTest[key] = Temp2['summary_data']

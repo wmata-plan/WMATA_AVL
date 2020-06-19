@@ -60,9 +60,9 @@ def get1ststop(Merdat,AnalysisRoutes_):
     FirstStopDat1_rte : pd.DataFrame
         Long data with information on unique 1st stops per route. 
     CheckFirstStop : pd.DataFrame
-        Data with unique 1st stops by directions in a set---for debugging
+        data with unique 1st stops by directions in a set---for debugging
     CheckFirstStop1 : pd.DataFrame
-        Data with info on frequency of location, arrival, and departures of different 1st stop on a route---for debugging
+        data with info on frequency of location, arrival, and departures of different 1st stop on a route---for debugging
     '''
     # Get the 1st stops
     ########################################################################################
@@ -80,7 +80,7 @@ def get1ststop(Merdat,AnalysisRoutes_):
     FirstStopDat1 =FirstStopDat.drop(columns=dropCols)        
     FirstStopDat1 = FirstStopDat1.groupby(['route_id','first_stopId','first_stopNm']).first() #For each route get all unique 1st stops
     FirstStopDat1.reset_index(inplace=True)
-    FirstStopDat1_rte = FirstStopDat1.query('route_id in @AnalysisRoutes_') # subset data for analysis routes
+    FirstStopDat1_rte = FirstStopDat1.query('route_id in @analysis_routes_') # subset data for analysis routes
     def to_set(x):
         return set(x)
     # Debugging data
@@ -110,9 +110,9 @@ def getlaststop(Merdat,AnalysisRoutes_):
     LastStopDat1_rte : pd.DataFrame
         Long data with information on unique last stops per route. 
     CheckLastStop : pd.DataFrame
-        Data with unique last stops by directions in a set---for debugging
+        data with unique last stops by directions in a set---for debugging
     CheckLastStop1 : pd.DataFrame
-        Data with info on frequency of location, arrival, and departures of different last stop on a route---for debugging
+        data with info on frequency of location, arrival, and departures of different last stop on a route---for debugging
     '''
     # Get Last stops per trip
     ########################################################################################
@@ -128,7 +128,7 @@ def getlaststop(Merdat,AnalysisRoutes_):
     LastStopDat1 =LastStopDat.drop(columns=dropCols)        
     LastStopDat1 = LastStopDat1.groupby(['route_id','last_stopId','last_stopNm']).first() #For each route get all unique last stops
     LastStopDat1.reset_index(inplace=True)
-    LastStopDat1_rte = LastStopDat1.query('route_id in @AnalysisRoutes_') # subset data for analysis routes
+    LastStopDat1_rte = LastStopDat1.query('route_id in @analysis_routes_') # subset data for analysis routes
     def to_set(x):
         return set(x)
     #get the unique last stops by directions in a set. 
@@ -148,13 +148,13 @@ def debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckL
     Parameters
     ----------
     CheckFirstStop : pd.DataFrame
-        Data with unique 1st stops by directions in a set---for debugging
+        data with unique 1st stops by directions in a set---for debugging
     CheckFirstStop1 : pd.DataFrame
-        Data with info on frequency of location, arrival, and departures of different 1st stop on a route---for debugging
+        data with info on frequency of location, arrival, and departures of different 1st stop on a route---for debugging
     CheckLastStop : pd.DataFrame
-        Data with unique last stops by directions in a set---for debugging
+        data with unique last stops by directions in a set---for debugging
     CheckLastStop1 : pd.DataFrame
-        Data with info on frequency of location, arrival, and departures of different last stop on a route---for debugging
+        data with info on frequency of location, arrival, and departures of different last stop on a route---for debugging
     path_processed_data_ : str
         path for storing the output data.
     Returns
@@ -162,7 +162,7 @@ def debugGTFS1stLastStopData(CheckFirstStop,CheckFirstStop1,CheckLastStop,CheckL
     None.
     '''
     First_Last_Stop = CheckFirstStop.merge(CheckLastStop,left_index=True,right_index=True,how='left')
-    #Check stops Data
+    #Check stops data
     #########################################
     OutFi = os.path.join(path_processed_data_,'First_Last_Stop.xlsx')
     writer = pd.ExcelWriter(OutFi) # excel writer object
