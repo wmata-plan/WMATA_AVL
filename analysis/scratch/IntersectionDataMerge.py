@@ -17,10 +17,10 @@ path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documen
 os.chdir(os.path.join(path_working))
 sys.path.append(path_working) 
 
-# Source Data
+# Source data
 path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
 GTFS_Dir = os.path.join(path_source_data, "google_transit")   
-# Processed Data
+# Processed data
 path_processed_data = os.path.join(path_source_data,"ProcessedData")
 
 IntersectionData = gpd.read_file(os.path.join(path_source_data,'Intersection_Points-shp'))

@@ -9,7 +9,7 @@ Created on Mon May  4 21:41:20 2020
 # Geopandas LineString
 
 CleanDataDict.keys()
-CheckDat = CleanDataDict['rawnav00008191007.txt']['SummaryData']
+CheckDat = CleanDataDict['rawnav00008191007.txt']['summary_data']
 CheckDat.columns
 geometry1 = [Point(xy) for xy in zip(CheckDat.LongStart, CheckDat.LatStart)]
 geometry2 = [Point(xy) for xy in zip(CheckDat.LongEnd, CheckDat.LatEnd)]
