@@ -37,14 +37,13 @@ seg_route_xwalk <-
   tribble(
     ~route_short_name, ~direction_id,                   ~seg_name_id,
                  "79",            1,             "georgia_columbia",
-                 "79",            1,         "georgia_piney_branch",
-                 "70",            1,             "georgia_columbia",
+                 "79",            1,         "georgia_piney_branch_long",
                  "70",            1,               "georgia_irving",
-                 "70",            1,         "georgia_piney_branch",
-                 "S1",            0,                  "sixteenth_u",
-                 "S2",            0,                  "sixteenth_u",
-                 "S4",            0,                  "sixteenth_u",
-                 "S9",            0,                  "sixteenth_u",
+                 "70",            1,         "georgia_piney_branch_shrt",
+                 "S1",            0,                  "sixteenth_u_shrt",
+                 "S2",            0,                  "sixteenth_u_shrt",
+                 "S4",            0,                  "sixteenth_u_shrt",
+                 "S9",            0,                  "sixteenth_u_long",
                  "64",            0,          "eleventh_i_new_york",  
                  "G8",            0,          "eleventh_i_new_york", 
                 "D32",            0,   "irving_fifteenth_sixteenth",
@@ -62,8 +61,10 @@ segments <-
                       ~seg_name_id,    ~seg_dir,     ~peak_time,
                 "georgia_columbia",        "SB",      "AM_Peak",
                   "georgia_irving",        "SB",      "AM_Peak",
-            "georgia_piney_branch",        "SB",      "AM_Peak",
-                     "sixteenth_u",        "NB",      "PM_Peak",
+       "georgia_piney_branch_shrt",        "SB",      "AM_Peak",
+       "georgia_piney_branch_long",        "SB",      "AM_Peak",
+                "sixteenth_u_shrt",        "NB",      "PM_Peak",
+                "sixteenth_u_long",        "NB",      "PM_Peak",
              "eleventh_i_new_york",        "NB",      "PM_Peak",
       "irving_fifteenth_sixteenth",        "EB",      "PM_Peak"
   )
@@ -103,5 +104,5 @@ write_sf(out,
                          "Client Shared Folder",
                          "data",
                          "02-processed",
-                         "stops_by_route_dir_segment.geojson"))
+                         "stops_by_route_dir_segment_v2.geojson"))
 
