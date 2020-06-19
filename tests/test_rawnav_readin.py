@@ -24,50 +24,75 @@ import glob
 import sys
 
 sys.path.append('.')
+sys.path.append('../')
 import wmatarawnav as wr
+
 
 ###############################################################################
 # Load in data for testing
+@pytest.fixture()
+def get_cwd():
+    if os.getcwd().split('\\')[-1]== 'tests':
+        os.chdir('../')
+    return os.getcwd()
 
-zipped_files_dir_parent = os.path.join("data/00-raw/demo_data")
+#change_cwd
+@pytest.fixture
+def get_rawnav_inventory(get_cwd):
+    zipped_files_dir_parent = os.path.join(get_cwd, "data/00-raw/demo_data")
+    file_universe = glob.glob(os.path.join(zipped_files_dir_parent, 'rawnav*.zip'))
+    rawnav_inventory = wr.find_rawnav_routes(file_universe, nmax=None, quiet=True)
+    return rawnav_inventory
 
-file_universe = glob.glob(os.path.join(zipped_files_dir_parent, 'rawnav*.zip'))
 
-rawnav_inventory = wr.find_rawnav_routes(file_universe, nmax=None, quiet=True)
+@pytest.fixture
+def get_rawnav_inv_filt_first(get_rawnav_inventory):
+    rawnav_inventory = get_rawnav_inventory
+    analysis_routes = ['U6']
+    rawnav_inventory_filtered = \
+        rawnav_inventory[
+            rawnav_inventory.groupby('filename')['route'].transform(lambda x: x.isin(analysis_routes).any())]
+    rawnav_inventory_filtered = rawnav_inventory_filtered.astype({"line_num": 'int'})
+    rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath', 'filename']).line_num.min().reset_index()
+    return rawnav_inv_filt_first
 
-analysis_routes = ['U6']
-rawnav_inventory_filtered = \
-    rawnav_inventory[rawnav_inventory.groupby('filename')['route'].transform(lambda x: x.isin(analysis_routes).any())]
-rawnav_inventory_filtered = rawnav_inventory_filtered.astype({"line_num": 'int'})
-rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath', 'filename']).line_num.min().reset_index()
-rawnav_inventory_filtered.head()
 
-route_rawnav_tag_dict = {}
+@pytest.fixture
+def get_route_rawnav_tag_dict(get_rawnav_inventory, get_rawnav_inv_filt_first):
+    rawnav_inventory_filtered = get_rawnav_inventory
+    rawnav_inv_filt_first = get_rawnav_inv_filt_first
+    route_rawnav_tag_dict = {}
+    for index, row in rawnav_inv_filt_first.iterrows():
+        tag_info_line_no = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == row['filename']]
+        tag_info_line_no.line_num = tag_info_line_no.line_num.astype(int)
+        reference = min(tag_info_line_no.line_num)
+        tag_info_line_no.loc[:, "NewLineNo"] = tag_info_line_no.line_num - reference - 1
+        # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
+        temp = wr.load_rawnav_data(zip_folder_path=row['fullpath'], skiprows=row['line_num'])
+        route_rawnav_tag_dict[row['filename']] = {'RawData': temp, 'tagLineInfo': tag_info_line_no}
+    return route_rawnav_tag_dict
 
-for index, row in rawnav_inv_filt_first.iterrows():
-    tag_info_line_no = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == row['filename']]
-    reference = min(tag_info_line_no.line_num)
-    tag_info_line_no.loc[:, "NewLineNo"] = tag_info_line_no.line_num - reference - 1
-    # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
-    temp = wr.load_rawnav_data(zip_folder_path=row['fullpath'], skiprows=row['line_num'])
-    route_rawnav_tag_dict[row['filename']] = {'RawData': temp, 'tagLineInfo': tag_info_line_no}
 
-rawnav_data_dict = {}
-summary_data_dict = {}
-
-for key, datadict in route_rawnav_tag_dict.items():
-    temp = wr.clean_rawnav_data(datadict, key)
-    rawnav_data_dict[key] = temp['rawnavdata']
-    summary_data_dict[key] = temp['summary_data']
+@pytest.fixture
+def get_rawnav_rawnav_summary_dict(get_route_rawnav_tag_dict):
+    route_rawnav_tag_dict = get_route_rawnav_tag_dict
+    rawnav_data_dict = {}
+    summary_data_dict = {}
+    for key, datadict in route_rawnav_tag_dict.items():
+        temp = wr.clean_rawnav_data(datadict, key)
+        rawnav_data_dict[key] = temp['rawnavdata']
+        summary_data_dict[key] = temp['summary_data']
+    return rawnav_data_dict, summary_data_dict
 
 
 ###############################################################################
 # Readin Checks
 
-def test_expect_certain_flags_1():
+def test_expect_certain_flags_1(get_rawnav_inventory):
     # Expect to get certain set of tags from a file
     # We manually reviewed a rawnav file for tags. The inventory return
     # should match this list
+    rawnav_inventory = get_rawnav_inventory
     found_tags = rawnav_inventory.loc[rawnav_inventory['file_id'] == '00008191007', 'taglist'].tolist()
 
     expected_tags = \
@@ -91,39 +116,39 @@ def test_expect_certain_flags_1():
     assert found_tags == expected_tags
 
 
-def test_expect_first_row():
+def test_expect_first_row(get_route_rawnav_tag_dict):
+    route_rawnav_tag_dict = get_route_rawnav_tag_dict
     # expect that first lines are what you would expect
     # Note that we drop the last column, as the NaN's there make for problems
     # in comparison 
     found_first = \
-        route_rawnav_tag_dict.get("rawnav00008191007.txt").get("RawData").head(1).drop(['TripEndTime'], axis=1). \
+        route_rawnav_tag_dict.get("rawnav00008191007.txt").get("RawData").head(1).drop(['TripEndTime'], axis=1,
+                                                                                       errors='ignore'). \
             values.tolist()
-
     expected_first = json.loads(
-        '[[0, "38.921298", -76.969803, "312", "C", "S", 0.0, 0.0, 17.0, "   ", 9.0, 38.921298, -76.969803]]')
-
+        '[["38.921298", -76.969803, "312", "C", "S", 0.0, 0.0, 17.0, "   ", 9.0, 38.921298, -76.969803]]')
     assert found_first == expected_first
 
 
-def test_expect_nlines():
+def test_expect_nlines(get_rawnav_rawnav_summary_dict):
+    rawnav_data_dict, summary_data_dict = get_rawnav_rawnav_summary_dict
     # expect that the number of lines is expected after removing certain rows
     df = rawnav_data_dict.get("rawnav00008191007.txt").head(1)
     found_start_end = df[['IndexTripStartInCleanData', 'IndexTripEndInCleanData']].values.tolist()
-
     # this one indeed ends on 597
     # The value might be confusing though - this is based on index after 
     # read in, not based on index after tags removed
     expected_start_end = [[0.0, 597.0]]
-
     assert found_start_end == expected_start_end
 
 
-def test_summary_match():
+def test_summary_match(get_rawnav_rawnav_summary_dict):
     # Check that the summary file is consistent with the underlying rawnav data
     # for the second trip in rawnav00008191007, starts at python index 599
     # after removing initial lines. has 0 for secs and odom ft
     # this trip ends at python index 1807 after initial lines removed
     # this should match the summary
+    rawnav_data_dict, summary_data_dict = get_rawnav_rawnav_summary_dict
     test_summary = summary_data_dict.get("rawnav00008191007.txt")
 
     found_summary_vals = test_summary[(test_summary.taglist == "608,   U601,8,10/06/19,05:36:41,36476,05280")][

@@ -121,6 +121,7 @@ begin_time = datetime.now()
 route_rawnav_tag_dict = {}
 for index, row in rawnav_inv_filt_first.iterrows():
     tag_info_line_no = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == row['filename']]
+    tag_info_line_no.line_num = tag_info_line_no.line_num.astype(int)
     reference = min(tag_info_line_no.line_num)
     tag_info_line_no.loc[:, "NewLineNo"] = tag_info_line_no.line_num - reference - 1
     # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
