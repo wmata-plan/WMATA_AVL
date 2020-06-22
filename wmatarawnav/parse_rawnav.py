@@ -18,7 +18,25 @@ import pyarrow.parquet as pq
 ########################################################################################################################
 
 
-def read_processed_rawnav(analysis_routes_, path_processed_route_data, restrict, analysis_days):
+def read_cleaned_rawnav(analysis_routes_, path_processed_route_data, restrict, analysis_days):
+    """
+    Parameters
+    ----------
+    analysis_routes_: list,
+        routes for which rawnav data is needed. Should be a subset of following:
+        ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
+                         'H8','W47']
+    path_processed_route_data: str,
+       path where the parquet files for cleaned data is kept
+    restrict: None, if all rawnav files need to be searched
+    analysis_days: list,
+        days of the week for which data is needed. Should be a subset of following:
+        ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    Returns
+    -------
+    rawnav_dat: pd.DataFrame,
+      rawnav data
+    """
     rawnav_temp_list = []
     rawnav_dat = pd.DataFrame()
     for analysis_route in analysis_routes_:
@@ -38,6 +56,26 @@ def read_processed_rawnav(analysis_routes_, path_processed_route_data, restrict,
 
 
 def read_summary_rawnav(analysis_routes_, path_processed_route_data, restrict, analysis_days):
+    """
+    Parameters
+    ----------
+    analysis_routes_: list,
+        routes for which rawnav data is needed. Should be a subset of following:
+        ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
+                         'H8','W47']
+    path_processed_route_data: str,
+       path where the parquet files for cleaned data is kept
+    restrict: None, if all rawnav files need to be searched
+    analysis_days: list,
+        days of the week for which data is needed. Should be a subset of following:
+        ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    Returns
+    -------
+    rawnav_summary_dat: pd.DataFrame
+        rawnav summary data
+    rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat: pd.DataFrame
+        rows that are removed from summary data.
+    """
     rawnav_temp_list = []
     rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_list = []
     rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat = pd.DataFrame()
