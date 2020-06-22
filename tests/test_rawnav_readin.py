@@ -24,20 +24,19 @@ import glob
 import sys
 
 sys.path.append('.')
-sys.path.append('../')
 import wmatarawnav as wr
 
 
 ###############################################################################
 # Load in data for testing
-@pytest.fixture()
+@pytest.fixture(scope="session")
 def get_cwd():
     if os.getcwd().split('\\')[-1]== 'tests':
         os.chdir('../')
     return os.getcwd()
 
 #change_cwd
-@pytest.fixture
+@pytest.fixture(scope="session")
 def get_rawnav_inventory(get_cwd):
     zipped_files_dir_parent = os.path.join(get_cwd, "data/00-raw/demo_data")
     file_universe = glob.glob(os.path.join(zipped_files_dir_parent, 'rawnav*.zip'))
@@ -45,7 +44,7 @@ def get_rawnav_inventory(get_cwd):
     return rawnav_inventory
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def get_rawnav_inv_filt_first(get_rawnav_inventory):
     rawnav_inventory = get_rawnav_inventory
     analysis_routes = ['U6']
@@ -57,7 +56,7 @@ def get_rawnav_inv_filt_first(get_rawnav_inventory):
     return rawnav_inv_filt_first
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def get_route_rawnav_tag_dict(get_rawnav_inventory, get_rawnav_inv_filt_first):
     rawnav_inventory_filtered = get_rawnav_inventory
     rawnav_inv_filt_first = get_rawnav_inv_filt_first
@@ -73,7 +72,7 @@ def get_route_rawnav_tag_dict(get_rawnav_inventory, get_rawnav_inv_filt_first):
     return route_rawnav_tag_dict
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def get_rawnav_rawnav_summary_dict(get_route_rawnav_tag_dict):
     route_rawnav_tag_dict = get_route_rawnav_tag_dict
     rawnav_data_dict = {}
