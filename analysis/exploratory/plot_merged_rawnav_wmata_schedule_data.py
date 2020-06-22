@@ -22,8 +22,7 @@ from datetime import datetime
 print(f"Run Section 1 Import Libraries and Set Global Parameters...")
 begin_time = datetime.now()
 import pandas as pd, os, sys, collections
-# from geopy.distance import geodesic
-from shapely.geometry import Point
+import shapely.wkt
 
 if not sys.warnoptions:
     import warnings
@@ -69,7 +68,10 @@ q_jump_route_list = ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1'
 # analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
 # analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
 #analysis_routes = ['S2','S4','H1','H2','H3','79','W47']
-analysis_routes = ['70']
+analysis_routes = ['H8']
+analysis_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+day_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
 # 1.3 Import User-Defined Package
 ############################################
 import wmatarawnav as wr
@@ -77,16 +79,7 @@ executionTime= str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 1 Import Libraries and Set Global Parameters : {executionTime}")
 print("*"*100)
 
-# 2 Analyze Route ---Subset RawNav data.
-########################################################################################################################
-print(f"Run Section 2 Analyze Route ---Subset RawNav Data...")
-begin_time = datetime.now()
-analysis_days = ['Monday']
-day_of_week = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-assert(len(set(day_of_week)-set(analysis_days))>=0), print("""
-                                                    analysis_days is a subset of following days: 
-                                                    ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
-                                                """)
+
 # 2.1 Rawnav data
 ############################################
 rawnav_dat = wr.read_processed_rawnav(
@@ -113,71 +106,42 @@ rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
 # Having issues with route "70" and "64"---Getting read as int instead of str
 rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
 rawnav_summary_dat.route = rawnav_summary_dat.route.astype(str)
+
 set(rawnav_qjump_dat.index_trip_start_in_clean_data.unique()) -set(rawnav_summary_dat.index_trip_start_in_clean_data.unique())
 executionTime= str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 2 Analyze Route ---Subset RawNav Data : {executionTime}")
 print("*"*100)
 
 
-# 3 Read, analyze and summarize GTFS data
-########################################################################################################################
-print(f"Run Section 3 Read, analyze and summarize WMATA schedule data...")
-begin_time = datetime.now() ##
 
-# Read the Wmata_Schedule data
-wmata_schedule_data_file = os.path.join(path_wmata_schedule_data, 'wmata_schedule_data_q_jump_routes.csv')
-wmata_schedule_dat = wr.read_wmata_schedule(wmata_schedule_data_file = wmata_schedule_data_file)
 
-analysis_route = analysis_routes[0]
-analysis_day = analysis_days[0]
-wmata_schedule_based_sum_dat_list = []
-nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat_list = []
+list_dat = []
+list_summary_dat = []
 
 for analysis_route in analysis_routes:
-    print("*" * 100)
-    print(f'Processing analysis route {analysis_route}')
     for analysis_day in analysis_days:
-        print(f'Processing {analysis_day}')
-        data_exist_dir = \
-            os.path.join(path_processed_data, 'wmata_schedule_based_sum_dat', str(analysis_route),analysis_day)
-        if os.path.isdir(data_exist_dir):
-            print(f'Skipping analysis route {analysis_route} for {analysis_day}: already processed')
-            continue
-        print("*" * 50)
-        print(f'Processing analysis route {analysis_route} for {analysis_day}...')
-        wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat=\
-            wr.parent_merge_rawnav_wmata_schedule(
-                analysis_route_ =analysis_route,
-                analysis_day_ = analysis_day,
-                rawnav_dat_ =rawnav_qjump_dat,
-                rawnav_sum_dat_=rawnav_summary_dat,
-                wmata_schedule_dat_=wmata_schedule_dat)
-        if type(wmata_schedule_based_sum_dat)== type(None):
-            print(f'No data on analysis route {analysis_route} for {analysis_day}')
-            continue
+        try:
+            nearest_rawnav_to_wmata_schedule_file = \
+                os.path.join(path_processed_data, 'wmata_schedule_based_sum_dat', analysis_route, analysis_day,
+                             f'wmata_schedule_stop_locations_inventory-{analysis_route}_{analysis_day}.xlsx')
+            dat = pd.read_excel(nearest_rawnav_to_wmata_schedule_file,index=True)
+            list_dat.append(dat)
 
-        wr.output_rawnav_wmata_schedule(
-            analysis_route_=analysis_route,
-            analysis_day_=analysis_day,
-            wmata_schedule_based_sum_dat_=wmata_schedule_based_sum_dat,
-            rawnav_wmata_schedule_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat,
-            path_processed_data_= path_processed_data)
-
-        wmata_schedule_based_sum_dat_list.append(wmata_schedule_based_sum_dat)
-        nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat_list.\
-            append(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat)
-
-nearest_rawnav_wmata_schedule_all_routes_days = \
-    pd.concat(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat_list)
-wmata_schedule_based_sum_dat_all_routes_days = pd.concat(wmata_schedule_based_sum_dat_list)
-
-executionTime= str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 3 Read, analyze and summarize WMATA schedule data : {executionTime}")
-print("*"*100)
+            wmata_schedule_based_sum_file = \
+                os.path.join(path_processed_data, 'wmata_schedule_based_sum_dat', analysis_route, analysis_day,
+                             f'wmata_schedule_trip_summaries-{analysis_route}_{analysis_day}.xlsx')
+            sum_dat = pd.read_excel(wmata_schedule_based_sum_file,index=True)
+            list_summary_dat.append(sum_dat)
+        except:
+            print(f'route {analysis_route} does not have data on {analysis_day}')
 
 
+nearest_rawnav_wmata_schedule_all_routes_days = pd.concat(list_dat)
+nearest_rawnav_wmata_schedule_all_routes_days.reset_index(inplace=True)
+nearest_rawnav_wmata_schedule_all_routes_days.geometry = \
+    nearest_rawnav_wmata_schedule_all_routes_days.geometry.apply(lambda x: shapely.wkt.loads(x))
 
-
+wmata_schedule_based_sum_dat_all_routes_days= pd.concat(list_summary_dat)
 
 # 4 Plot Rawnav Trace and Nearest Stops
 ###########################################################################################################################################################
@@ -233,7 +197,7 @@ for name, grp in group_rawnav_wmata_schedule:
     Pattern = grp["pattern"].values[0]
     tracker_usable_routes[f"{name[2]}_{Pattern}"] += 1
 print(tracker_usable_routes)
-STOP = 2
+STOP = 20
 tracker = collections.Counter()
 
 len(rawnav_groups.groups.keys())
