@@ -61,7 +61,7 @@ else:
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None 
-restrict_n = 1000
+restrict_n = 500
 # analysis_routes = ['S9','70','79'] # Ran
 # analysis_routes = ['S1','S2','S4','64'] # Ran
 # analysis_routes = ['G8','D32','H1','H2','H3','H4'] #Ran
