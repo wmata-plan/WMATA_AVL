@@ -17,9 +17,6 @@ Created on Mon Jun 22 10:18 2020
 
 import pytest
 import os
-import pandas as pd
-import json
-import glob
 import sys
 
 sys.path.append('.')
@@ -38,7 +35,7 @@ def get_cwd():
 @pytest.fixture(scope="session")
 def get_rawnav_clean_data(get_cwd):
     path_processed_route_data = os.path.join(get_cwd, "data/02-processed/RouteData")
-    rawnav_dat = wr.read_processed_rawnav(
+    rawnav_dat = wr.read_cleaned_rawnav(
         analysis_routes_=["H8"],
         path_processed_route_data=path_processed_route_data,
         restrict=1000,
@@ -182,6 +179,6 @@ def test_stop_order_nearest_point_to_rawnav(get_inventory_nearest_rawnav_point_t
 def test_stop_dist_nearest_point_to_rawnav(get_inventory_nearest_rawnav_point_to_stop_and_extended_trip_summary):
     wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat = \
         get_inventory_nearest_rawnav_point_to_stop_and_extended_trip_summary
-    assert(all(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat.dist_nearest_point_from_stop<=200))
+    assert(all(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat.dist_nearest_point_from_stop<=100))
 
 
