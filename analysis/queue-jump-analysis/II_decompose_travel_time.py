@@ -14,131 +14,124 @@ Note: the sections here are guideposts - this may be better as several scripts
 ####################################################################################################
 
 
-
 # 1.1 Import Python Libraries
 #############################################
 
-
-
+import os, sys
+import pandas as pd
+import geopandas as gpd
 
 # 1.2 Set Global Parameters
 ############################################
 
-
-
+if os.getlogin() == "WylieTimmerman":
+    # Working Paths
+    path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL"
+    os.chdir(os.path.join(path_working))
+    sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
+    path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
+    # Source data
+    # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
+    path_source_data = r"C:\Downloads"
+    gtfs_dir = os.path.join(path_sp, r"Client Shared Folder\data\00-raw\wmata-2019-05-18 dl20200205gtfs")
+    # Processed data
+    path_processed_data = os.path.join(path_sp, r"Client Shared Folder\data\02-processed")
+elif os.getlogin() == "abibeka":
+    # Working Paths
+    path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
+    os.chdir(os.path.join(path_working))
+    sys.path.append(path_working)
+    # Source data
+    path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
+    gtfs_dir = os.path.join(path_source_data, "google_transit")
+    # Processed data
+    path_processed_data = os.path.join(path_source_data, "ProcessedData")
+else:
+    raise FileNotFoundError("Define the path_working, path_source_data, gtfs_dir, \
+                            ZippedFilesloc, and path_processed_data in a new elif block")
 
 # 1.3 Import User-Defined Package
 ############################################
 
+# WT: I can't get out of my R habits, so defining this one for now!
+def tribble(columns, *data):
+    return pd.DataFrame(
+        data=list(zip(*[iter(data)]*len(columns))),
+        columns=columns
+    )
 
-
-# 2 Load Relevant Static Files 
+# 1.4 Reload Relevant Files 
 ####################################################################################################
 
 # 1. load segment-pattern-stop crosswalk 
+# See earlier other script for example
 
-# 1. load segment-pattern crosswalk (could be loaded separately or summarized from above)
+# 2. load segment-pattern crosswalk (could be loaded separately or summarized from above)
 
-# 2. load segment shapes
+# 3. load segment shapes
+# See earlier other script for example
 
-# 2 Merge Additional Geometry
+# 2 Add Additional Metrics to Rawnav Data
 ####################################################################################################
 
-# First, we'd run additional 'merge' style functions that take as input rawnav data (possibly
-#   filtered to a route or day) and other geometry and then return data frames returning the 
-#   index of points nearest to these geometries, beginning with segments.
+# Apoorba, on reflection, i think there are a few columns we should try to add to the rawnav data
+# during the processing phase (I_parse_rawnav.py) that are used repeatedly in the code elsewhere.
+# For now, it may be best to simply add these needed fields here, and then move this chunk of code
+# into I_parse_rawnav.py later.
 
-# Note : could break this into a separate script. 
-    # GTFS merge is in a separate script and this is a similar process, so perhaps that makes sense
-    # Would it make sense to combine any of this with GTFS merge, since we have to convert rawnav
-    #   points to point geometry at that point too? Probably better to keep them untangled, but 
-    #   maybe we need to create a spatially aware rawnav dataset outside of the context of these 
-    #   individual functions (i.e. during the original processing piece?)
+# In particular, I think we need the following (calculated in groups by run)
+#   SecsPastSt_marg (or some better name): The marginal time between the current rawnav ping and the
+#       next one.
+#   OdomFt_marg (or some better name):  The marignal distance between the current rawnav ping and the
+#       next one.
+#   fps_marg (or some better name): The speed between the current rawnav ping and the next one.
 
-# 2.1 Rawnav-Segment ########################
-
-# 2.1.1. Identify points at the start and end of each segment for each run 
-    # Similar approach (if not the exact same!) as the approach used for the GTFS merge. 
-    # Iterate over the runs using function like a wr.parent_merge_rawnav_segment()
-    #   Take care to ensure each run can be associated with several segments. Take care to ensure
-    #   that if multiple variants of a segment were defined during testing (ala a version that starts
-    #   upstream 75 feet from previous intersection vs. 150 feet from previous intersection) we 
-    #   could still make the function work.
-    # Return two dataframes
-        # 1. index of segment start-end and nearest rawnav point for each run 
-            #   results in two rows per run per applicable segment, one observation for start, one for end
-        # 2. segment-run summary table
-            #    one row per run per applicable segment, information on start and end observation and time, dist., etc.
-
-# 2.1.2 After the fact checks on rawnav-segment merge:
-    # I imagine we should do some double-checking that the results are about what we want for each run:
-    #  - Are the points nearest to the end of the segment within ~ X feet?
-    #  - Are the nearest points in order, such that the segment start point has a lower index value than the
-    #    segment end point (checks that the segment was drawn in the right direction and that any
-    #    future bidirectional segment is actually drawn once for every segment)
-    #  -  Are rawnav points continuously within a buffer of ~Y feet around a segment?
-    # At this point, one could further filter the rawnav_run_iteration_frame created in #2 to those 
-    #   meeting certain criteria for quality (e.g., average speed not insanely high or low, total
-    #   travel time or travel distance not crazy).
-             
-# 2.2 Rawnav-Stop Zone Merge ########################
-
-# Essentially, repeat the above steps or those for the schedule merge, but for stop zones. 
-# Likely would build on 
-#   nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat to avoid rework. Because a stop
-#   may be in multiple segments and we may eventually want to define multiple segments for a given
-#   route during testing, we can't add a new column in the rawnav data that says 'stop zone' or 
-#   anything. 
-
-# For each stop, we want to identify a stop zone around the stop defined as a number of feet upstream
-#   and a number of feet downstream. A function wr.parent_merge_rawnav_stop_zone() would include an
-#   argument for the number of feet upstream and downstream from a stop.
-
-# WT: personally, i want to think harder about how it affects the analysis if passenger boarding/
-#   alighting happens much farther away from the stop point, either upstream or downstream.
-
-# An input would be a segment-pattern-stop crosswalk. Some segments will have 
-#   several stops (Columbia/Irving), some stops will have multiple routes, etc. Note that we 
-#   wouldn't want to bother with calculating these zones for every stop, but only QJ stops in our segments.
-#   Eventually we might want to write the function such that it incorporates first or last stops,
-#   but I doubt it.
-    
-# Similar to above, we'd then return two dataframes
-    # 1. index of stop zone start-end and nearest rawnav point for each run 
-        #   results in two rows per run per applicable stop zone, one observation for start, one for end
-    # 2. segment-run summary table
-        #    one row per run per applicable segment, information on start and end observation and time, dist., etc.
-
-# Segments are drawn to end 300 feet up from next stop, but we may at some point want to chekc that
-#   the next downstream stop's zone doesn't extend back into our evaluation segment.
-
-# 3 Calculate Free Flow Speed
+# 3 Filter Out Runs that Appear Problematic
 ####################################################################################################
 
-# Though decomposition will ultimately be produced for individual trips, freeflow is calculated as 
-# an aggregate value at the segment level. Alternatively, we might just substitute a hardcoded value
-# based on the posted speed, so for now, we don't want to incorporate this too too tightly into
-# other code. we will almost certainly need to allow WMATA to incorporate hardcoded values for 
-# routes that don't have many early, late trips. Will also need to make sure this function runs 
-# at the segment level, but the catch is that S9 and 79 trips don't run early enough to get a
-# freeflow speed. But if you try to use speeds from another route (ala S2, S4 or 70), they have too 
-# many stops to be useful for calculating freeflow for a limited stop route.
+# Here, i imagine we'll want to use the summary files created in I_III_rawnav_other_merge.py to 
+#   identify runs that we should not include because . I think you partially did this with 
+#   read_summary_rawnav(), but it may be helpful to punt that to here in case we want to filter
+#   out runs that are incomplete in the middle of a segment or the middle of a stop zone.
 
-# important to filter out any runs that are unrealistically fast or slow or have missing data
-# before running this step.
+# 4 Calculate Free Flow Speed
+####################################################################################################
 
 # NOTE: we may want to skip writing this function until later and substitute a table of hardcoded
-# values in the short-term.
+# values in the short-term, just so we can get the overall decomposition approach running.
+# Regardless of the choice above, while decomposition will ultimately be produced for individual
+# trips, freeflow is calculated as an aggregate value at the segment level. Result will look like
+# this:
+    
+seg_freeflow = tribble(
+             ['seg_name_id',              'spd_freeflow_fps'], 
+              "georgia_irving",                       44.0,
+              "georgia_columbia",                     44.0, 
+              "georgia_piney_branch_shrt",            44.0,
+              "georgia_piney_branch_long",            44.0,
+              "sixteenth_u_shrt",                     44.0,
+              "sixteenth_u_long",                     44.0,
+              "eleventh_i_new_york",                  44.0,
+              "irving_fifteenth_sixteenth",           36.7
+  )
 
-# wr.calc_seg_freeflow() will return a speed in mph calculated from inputs.
-#   idea is that this will be run once for each segment in iteration to create a table 
-#   with one record for every segment and the resulting freeflow speed. This simple table
-#   could be overwritten with values based on the posted speed limit.
+
+# We'll leave open a few options for calculating free flow speed:
+    # 1. Hardcode for each segment using posted speed (would need to be weighted somehow if 
+    #     a segment had multiple posted speeds, not ideal)
+    # 2. Bring in intersection points and calculate speeds between intersections (a little tedious,
+    #     may be hard to execute on short gaps between intersections/stops)
+    # 3. Take the 95th percentile average speed for the segment (doesn't work well for routes where there are few early
+    #     trips or cases where there are many downstream intersections of which most routes catch one)
+    # 4. Take a sort of 95th percentile speed by point (current approach)
+
+# wr.calc_seg_freeflow() will return a speed in feet per second calculated from inputs.
 
 #   Note that we want to use speed instead of time. Because each run may have its nearest rawnav 
 #   observation just ahead or just before the segment end (and we want to avoid the hassle of 
 #   interpolation), we'll calculate a speed here and then use this later to calculate the freeflow
-#   travel time in seconds, which we can use for the decomposition
+#   travel time in seconds, which we can use for the decomposition. We also want to use feet per
+#   second since that's a bit easier to work with downstream.
 
 #   Function Inputs include: 
     # - segment identifier seg_name_id.
@@ -146,118 +139,87 @@ Note: the sections here are guideposts - this may be better as several scripts
     #   a segment will be used for freeflow, such that an S2's run's freeflow speed may be based on
     #   the S4. This could also just be a list of routes, but we'd ahve to be more careful on the
     #   iteration in that case.
-    # - rawnav segment summary produced in Rawnav-Segment Merge (note: would be for multiple routes)
-    # - threshold percentile of travel time (ala 0.05). We may even want to consider the minimum to avoid
-    #   negative values in downstream calcs. Used to define freeflow.
+    # - rawnav data
+    # - threshold percentile of speed (ala 0.95). 
     
 #   Major steps:
-    # - filter segment-pattern crosswalk to routes matching seg_name_id
-    # - filter rawnav-segment merge data to those in the segment-pattern crosswalk
-    # - calculate Xth percentile low travel time. Potentially
-    #   return other values (e.g., mean, median) in other columns for the sake of reporting.
+    # - filter segment-pattern crosswalk to routes matching seg_name_id. We can't vectorize because
+    #   we want to leave open possibility of multiple versions of a segment being defined.
+    # - filter to the rawnav pings beginning at point nearest to the beginning point and before the
+    #   final point.
+    # - For each record in the run, calculate the odometer distance between the current record and the next
+    #   run adn the time between the current record and the next run. Then calc the speed in ft per sec.
+    #   Likely will group by run and then ungroup here.
+    # - calculate Xth percentile speed over all observations.
     
 # Again, output of this section is a simple table with one row for every segment and a value for the
-#   freeflow speed in MPH of the segment.
+#   freeflow speed in feet per second of the segment.
 
-# Currently the merged summary tables are separate for each route and DOW. They would need to be 
-#   combined into a single table before this step.
-
-# 4 Calculate t_stop1 (door open boarding time)
+# 4. Do Basic Decomposition of Travel Time by Run
 ####################################################################################################
+# Goal here is to tease out values that we can use to run the currently proposed t_stop2 process
+#   or other possible decompositions that may arise later.
 
-# t_stop1 is calculated at the run-segment-stop level. 
+# Some complex logic here to implement in a function wr.calc_basic_decomp(). Idea is that we do
+#   a basic decomposition here that will be used to extract t_decel_phase and t_accel_phase for 
+#   use in the approach outlined by Burak to create a a_acc and a_dec in the methodology workshop
+#   Powerpoint. But regardless of how we calculate that, these items are useful. 
 
-# Return a table of door open time within a stop zone for every run-segment-stop combination. This 
-#   table will be taken as an input to the final travel time decomposition functions and (potentially)
-#   used to help calculate the baseline accel/decel profile used for t_stop2. Therefore, because of 
-#   the potential for multiple dependencies, we calculate this outside of a parent travel time 
-#   decomposition function. The simplicity of the calculation also lends itself well to vectorization
-#   over a very large rawnav dataset or if t_stop1 style boarding time is needed for a large number
-#   of stops.
+# Example result table shown in Powerpoint. Field names can vary to match what we already have! 
+#   run_basic_decomp = ...
+# Run identifers, including file, date, and run identifier
+        # seg_name_id = segment identifier (ala "sixteenth_u") 
+        # stop_zone_id = Stop identifier (likely the stop ID) 
+        # t_decel_phase = time from start of segment to zero speed (or door open) (used to estimate adec)
+        # t_l_inital = time from first door open back to beginning of zero speed, if any
+        # t_stop1 = Stop zone door open time defined as first instance of door opening.
+        # t_l_addl = time from first door close to acceleration
+        # t_accel_phase = time from acceleration to exiting stop zone (used to help estimate aacc
+        # t_sz_total = total time in stop zone
 
-# wr.calc_stop_t_stop1() would take as input:
-#   - A rawnav file (pulled from Parquet storage, may include many runs and even multiple routes or segments)
-#   - A table with one record for the start or stop of each stop zone -- rawnav run -- evaluation segment combination
-#   - The segment-pattern-stop crosswalk 
+# Function inputs include:
+    #   - A rawnav file (pulled from Parquet storage, may include many runs and even multiple routes or segments)
+    #   - The index_stop_zone_start_end table with one record for the start or stop of each stop zone -- rawnav run -- evaluation segment combination 
+    #   - The segment-pattern crosswalk (may be moot given the above)
 
-# Major steps:
-#   - Filter to rawnav records in applicable stop zones
+# Major Steps:
+#   - Filter to rawnav records in applicable stop zones (note that because stop zones will not differ
+#       even if several variants of a segment are defined, we don't have to do the segment-by-segment
+#       iteration here).
 #   - Group by run-segment-stop
-#   - Calculate a new column door_state_change that increments every time door_state changes, 
-#     ala R's data.table::rleid() function. 
-#     https://www.rdocumentation.org/packages/data.table/versions/1.12.8/topics/rleid
-#   - Calculate a new column SecsPastSt_lead that is the value of seconds past start for the NEXT
-#     observation. 
-#   - Filter again to the first set of door open values returned in door_state_change.
-#           i.e., door_open == "O" and door_state_change == "2"
-#   - Summarize, picking the earliest (or first) SecPastSt in the group and the latest (or last)
-#       SecsPastSt_lead. This way, the time after the last door open value and the next door closed
-#       time is accounted for.
-#   - Calculate the difference between the two above values.
+#   - Calculate a few new fields:
+    #   - Calculate a new column door_state_change that increments every time door_state changes, 
+    #     ala R's data.table::rleid() function. 
+    #     https://www.rdocumentation.org/packages/data.table/versions/1.12.8/topics/rleid
+    #   - Calculate a new column SecsPastSt_marg that is the marginal number of seconds past start 
+    #       between the current observation and the next observation.
+    #       TODO: this could be calculated earlier - this is a recalculation.
+    #   - Calculate a new indicator for door_state_stop_zone that is:
+    #          - "open" when door_open == "O" and the earliest door_state_change value among door_open records 
+    #          - "closed" otherwise 
+    #   - See mark up of a rawnav table at this location for more pointers on how the rest of hte
+    #       fields above would show up: https://foursquareitp.sharepoint.com/:x:/r/Shared%20Documents/WMATA%20Queue%20Jump%20Analysis/Client%20Shared%20Folder/data/01-interim/run_basic_decomp_example.xlsx?d=w41a23c96379b4187992714719acbc002&csf=1&web=1&e=YfZHo9
+#   - Summarize...
 
-# Again, it would return a table with a record for every run-segment-stop combination and a value
-#   for t_stop1. Again, we may want to future proof by allowing for cases where we test out multiple
-#   segment lengths for the same queue-jump area.
-
-# After the fact checks:
-#   - we should check whether runs have door open time outside of the stop zone. May be worth flagging
-#     these runs should be filtered out before further analysis takes place, for instance.
-#   - flag whether a door open state was observed at the start of the stop zone. In such cases,
-#     we might have missed door open time in a preceeding observation (unlikely that door opened
-#     and bus moved, but rawnav pings could do weird things if position recalibrates after a short delay)
 
 # Calculate Stop-level Baseline Accel-Decel Time (input to t_stop2)
 ####################################################################################################
-#TODO :rephrase function to be broader, possibly incorporate into the above to avoid rework.
+#TODO : Update accordingly following more discussion with Burak.
 
-# How to calculate t_stop2 is still in the air, but several of the considered approaches require the
-#   use of a sort of expected accel/decel time around a stop. This would be based on individual 
-#   observations or hardcoded through the use of TCQSM methods. Though the details are still being 
-#   worked out, we'll want to return a table that includes the accel/decel time around each stop.
-#   (To accomodate the fact that rawnav pings will occur just inside/outside of stop area boundaries
-#   we may want to return a sort of speed isntead of travel time here, but will deal with that later).  
-#   Because each segment could include multiple stops (see Columbia/Irving), this must be done at 
-#   the stop level. 
+# Would require additional filtering of runs meeting or not meeting certain criteria.
 
-# wr.calc_stop_accel_decel_baseline() would return a value for the stop-zone door-closed travel time based 
-#   on the following inputs:
-# 
-#   Function Inputs include: 
-    #   - Rawnav data
-    #   - t_stop1 results by run-segment-stop
-    #   - A table with one record for the start or stop of each stop zone -- rawnav run -- evaluation segment combination
-    #   - segment-pattern-stop crosswalk, identifying what routes run on a segment. Any route running on 
-    #     a segment will be used for freeflow, such that an S2's run's freeflow speed may be based on
-    #     the S4. This could also just be a list of routes, but we'd ahve to be more careful on the
-    #     iteration in that case.
+# wr.calc_stop_accel_decel_baseline()
 
-#   Major steps include:
-    #   - Filter to rawnav records in applicable stop zones
-    #   - Group by run-segment-stop
-    #   - Summarize the first/earliest timestamp and the last/latest timestamp of rawnav records in the stop zones
-    #   - Calculate the time interval from the above values. This is the totla time in the stop zone
-    #   - Join the t_stop1 values calculated earlier and subtract form the above. This is the total
-    #       door closed time in the stop zone (including repeated door openings in the closed door time).
-    #   - TODO: finish documenting this step
+# Calculate t_stop2
+####################################################################################################
 
-# Returns a table with one record for every run-segment-stop combination and a value for the 
-#   total stop zone time and total door closed time 
+# TODO: write the wr.calc_tstop2s() function
 
-# again, the output of this section is a simple table with one row for every segment-stop-combination
-#   and a value for the door-closed accel/decel time in that stop segment. this will allow for the
-#   use of both a rawnav-derived approach and a hardcoded TCQSM-style approach. 
-
-#NOTE: we may want to write this function later and start with a set of hardcoded/arbitrary values
-#   just to make sure the data is in the right 'shape' before we start to write a bunch of code. It's 
-#   also going to be more complicated to incorporate t_stop1 results and the results of multiple
-#   routes on the same segment, so we'd better make sure our other approaches are working before
-#   going in depth on this.
 
 # 3 Travel Time decomposition
 ####################################################################################################
 
-# Setup iteration over each of the run-segment records used for iteration 
-    # Here, we would call a wr.decompose_traveltime() function. I imagine this would take as input
+# Here, we would call a wr.decompose_traveltime() function. I imagine this would take as input
 
 # TODO: write the wr.decompose_traveltime() function
  
