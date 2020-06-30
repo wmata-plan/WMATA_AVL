@@ -10,8 +10,8 @@ geopandas==0.7.0
 geopy==1.22.0
 mkl-service==2.3.0
 munch==2.5.0
-numpy==1.18.4
-pandas==1.0.4
+numpy~=1.18.5
+pandas~=1.0.5
 pandasql==0.7.3
 pyarrow==0.17.1
 pyproj==2.6.1.post1
@@ -23,3 +23,9 @@ Shapely==1.7.0
 six==1.15.0
 SQLAlchemy==1.3.17
 wincertstore==0.2
+
+pytest~=5.4.3
+folium~=0.11.0
+ipython~=7.15.0
+inflection~=0.3.1
+plotly~=4.8.1
