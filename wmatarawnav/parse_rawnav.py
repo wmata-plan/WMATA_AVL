@@ -41,11 +41,12 @@ def read_cleaned_rawnav(analysis_routes_, path_processed_route_data, restrict, a
     # Parameter Checks
     # TODO: reindentation
     day_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    assert (len(set(day_of_week) - set(analysis_days)) >= 0), print("""
+    assert (set(analysis_days).issubset(set(day_of_week))), print("""
                                                     analysis_days is a subset of following days: 
                                                     ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
                                                 """)
-    
+    assert (len(analysis_days) == len(set(analysis_days))),\
+        print("analysis_days entries cannot be duplicated")     
     # Function Body
     rawnav_temp_list = []
     rawnav_dat = pd.DataFrame()
@@ -56,7 +57,8 @@ def read_cleaned_rawnav(analysis_routes_, path_processed_route_data, restrict, a
                                               f"Route{analysis_route}_Restrict{restrict}.parquet"),
                           filters=filter_parquet).to_pandas()
         rawnav_temp_dat.route = rawnav_temp_dat.route.astype('str')
-        rawnav_temp_dat.drop(columns=['Blank', 'LatRaw', 'LongRaw', 'SatCnt', '__index_level_0__'], inplace=True)
+        rawnav_temp_dat.drop(columns=['Blank', 'LatRaw', 'LongRaw', 'SatCnt', '__index_level_0__'], 
+                             inplace=True)
         # Check for duplicate IndexLoc
         assert (rawnav_temp_dat
                 .groupby(['filename', 'IndexTripStartInCleanData', 'IndexLoc'])['IndexLoc'].count().values.max() == 1)
@@ -89,10 +91,12 @@ def read_summary_rawnav(analysis_routes_, path_processed_route_data, restrict, a
     # Parameter Checks
     # TODO: reindentation
     day_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    assert (len(set(day_of_week) - set(analysis_days)) >= 0), print("""
+    assert (set(analysis_days).issubset(set(day_of_week))), print("""
                                                     analysis_days is a subset of following days: 
                                                     ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
                                                 """)
+    assert (len(analysis_days) == len(set(analysis_days))),\
+        print("analysis_days entries cannot be duplicated")                                    
     
     # Function Body
     
