@@ -249,10 +249,10 @@
     },
     "dplyr": {
       "Package": "dplyr",
-      "Version": "1.0.0",
+      "Version": "0.8.3",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "4011f62581a34080e44105d4aa05a97f"
+      "Hash": "c426258a806b7e69613432b197b9954d"
     },
     "dtplyr": {
       "Package": "dtplyr",
@@ -606,10 +606,10 @@
     },
     "mapview": {
       "Package": "mapview",
-      "Version": "2.7.8",
+      "Version": "2.7.0",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "6f42b604b5a1b6ef540593d807be4fbc"
+      "Hash": "a7dbcb7c4f0c3f152491715e5c9ed7e2"
     },
     "markdown": {
       "Package": "markdown",
@@ -701,6 +701,13 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "b6b150cd4709e0c0c9b5d51ac4376282"
+    },
+    "plogr": {
+      "Package": "plogr",
+      "Version": "0.2.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "09eb987710984fc2905c7129c7d85e65"
     },
     "plotly": {
       "Package": "plotly",

@@ -210,7 +210,7 @@ df <-
     wday) %>%
   summarize() %>%
   ungroup() %>%
-  count(tag_starthour, wday) %>%
+  count(tag_starthour, wday, .drop = TRUE) %>%
   collect() %>%
   #factors aren't playing well with dtplyr, doing this again
   mutate(wday = factor(wday,
@@ -426,6 +426,8 @@ map$sizingPolicy$knitr$figure <- FALSE
 map
 ```
 
+# Segment-level Speeds
+
 To keep it simple, let's collapse now to the first and last point, calculate the odometer distance and time differences, and get some speeds.
 
 ```{r}
@@ -461,7 +463,7 @@ The distribution of trip speeds is shown below.
 ggplot(rawnav79_segs_run_sum_2) +
   geom_histogram(aes(x = mph)) +
   facet_grid(rows = vars(name)) +  
-  labs(x = "Average Segment Speed (mph)", y = "Count of Trips")
+  labs(x = "Average Segment Speed (mph)", y = "Count of Trips") + 
   FITP_Theme
 ```
 
@@ -474,5 +476,29 @@ rawnav79_segs_run_sum_2 %>%
   group_by(name) %>%
   summarize(distr = list(quantile(mph, probs = c(.02,.05,.1,.25,.5,.75,.9,.95,.98)))) %>%
   unnest_wider(col = distr)
+```
+
+# Ping-to-Ping Speeds
+
+As an alternative, lets look at the nth percentile of speed for each ping. This gets us closer to the posted speed limit in terms of speed distributions.
+
+```{r}
+rawnav79_segs_add_speed <-
+  rawnav79_segs %>%
+  group_by(name, filename,IndexTripStartInCleanData) %>%
+  mutate(next_odo_feet_marginal = lead(OdomtFt, default = NA) - OdomtFt,
+         next_seconds_marginal = lead(SecPastSt, default = NA) - SecPastSt,
+         next_tot_seconds = lead(SecPastSt, default = NA),
+         next_mph = (next_odo_feet_marginal / 5280) / (next_seconds_marginal / 3600))
+
+ping_to_ping_distr <-
+  rawnav79_segs_add_speed %>%
+  filter(!is.infinite(next_mph)) %>%
+  group_by(name) %>%
+  summarize(next_mph_distr = list(quantile(next_mph, probs = c(.02,.05,.1,.25,.5,.75,.9,.95,.98), na.rm = TRUE))) %>%
+  unnest_wider(col = next_mph_distr) %>%
+  select(-geometry)
+
+ping_to_ping_distr
 ```
 
