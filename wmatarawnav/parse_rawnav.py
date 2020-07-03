@@ -37,6 +37,16 @@ def read_cleaned_rawnav(analysis_routes_, path_processed_route_data, restrict, a
     rawnav_dat: pd.DataFrame,
       rawnav data
     """
+    
+    # Parameter Checks
+    # TODO: reindentation
+    day_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    assert (len(set(day_of_week) - set(analysis_days)) >= 0), print("""
+                                                    analysis_days is a subset of following days: 
+                                                    ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
+                                                """)
+    
+    # Function Body
     rawnav_temp_list = []
     rawnav_dat = pd.DataFrame()
     for analysis_route in analysis_routes_:
@@ -76,6 +86,16 @@ def read_summary_rawnav(analysis_routes_, path_processed_route_data, restrict, a
     rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat: pd.DataFrame
         rows that are removed from summary data.
     """
+    # Parameter Checks
+    # TODO: reindentation
+    day_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    assert (len(set(day_of_week) - set(analysis_days)) >= 0), print("""
+                                                    analysis_days is a subset of following days: 
+                                                    ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
+                                                """)
+    
+    # Function Body
+    
     rawnav_temp_list = []
     rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_list = []
     rawnav_tripdur_less_than_600sec_dist_odom_less_than_2mi_dat = pd.DataFrame()

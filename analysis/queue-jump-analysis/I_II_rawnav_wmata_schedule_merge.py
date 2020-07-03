@@ -81,11 +81,7 @@ print("*" * 100)
 print(f"Run Section 2 Analyze Route ---Subset RawNav Data...")
 begin_time = datetime.now()
 analysis_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-day_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-assert (len(set(day_of_week) - set(analysis_days)) >= 0), print("""
-                                                    analysis_days is a subset of following days: 
-                                                    ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
-                                                """)
+
 # 2.1 Rawnav data
 ############################################
 rawnav_dat = wr.read_cleaned_rawnav(
