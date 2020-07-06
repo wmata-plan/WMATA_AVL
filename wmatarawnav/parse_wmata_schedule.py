@@ -153,32 +153,33 @@ def parent_merge_rawnav_wmata_schedule(analysis_route_,
             removed if  order does not increase with index_loc or time or distance.
             - where all stops with closest rawnav point > 100 ft. are removed.
     """
+
+    # Filter to relevant inputs
     rawnav_subset_dat = rawnav_dat_.query('route==@analysis_route_ & wday==@analysis_day_')
     rawnav_sum_subset_dat = rawnav_sum_dat_.query('route==@analysis_route_ & wday==@analysis_day_')
-    doesnt_have_data = rawnav_sum_subset_dat.shape[0] == 0
-    if doesnt_have_data: return None, None
+
+    if (rawnav_sum_subset_dat.shape[0] == 0): return None, None
+    
+    # Find rawnav point nearest each stop
     nearest_rawnav_point_to_wmata_schedule_dat = \
         merge_stops_wmata_schedule_rawnav(
-            wmata_schedule_dat=wmata_schedule_dat_,
-            rawnav_dat=rawnav_subset_dat)
-    nearest_rawnav_point_to_wmata_schedule_dat.rename(columns={'heading': 'stop_heading'}, 
-                                                      inplace=True)
+            wmata_schedule_dat = wmata_schedule_dat_,
+            rawnav_dat = rawnav_subset_dat)
+    
+    # Assert and clean stop data
     nearest_rawnav_point_to_wmata_schedule_dat = \
         remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat)
-    # Assert and clean stop data
-    nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat = \
-        assert_clean_stop_order_increase_with_odom(nearest_rawnav_point_to_wmata_schedule_dat)
 
+    nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat = \
+        (nearest_rawnav_point_to_wmata_schedule_dat)
+
+    # Generate Summary
     wmata_schedule_based_sum_dat = include_wmata_schedule_based_summary(
         rawnav_q_dat=rawnav_subset_dat,
         rawnav_sum_dat=rawnav_sum_subset_dat,
         nearest_stop_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
     )
-    wmata_schedule_based_sum_dat. \
-        set_index(['fullpath', 'filename', 'file_id', 'wday', 'start_date_time', 'end_date_time',
-                   'index_trip_start_in_clean_data', 'taglist', 'route_pattern', 'route', 'pattern'], 
-                  inplace=True,
-                  drop=True)
+
     return wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
 
 
@@ -264,13 +265,11 @@ def merge_stops_wmata_schedule_rawnav(wmata_schedule_dat, rawnav_dat):
     geometry_points = [Point(xy) for xy in zip(rawnav_dat.long.astype(float), rawnav_dat.lat.astype(float))]
     gd_wmata_schedule_dat = gpd.GeoDataFrame(wmata_schedule_dat, geometry=geometry_stops, crs={'init': 'epsg:4326'})
     gd_rawnav_dat = gpd.GeoDataFrame(rawnav_dat, geometry=geometry_points, crs={'init': 'epsg:4326'})
-    # Project to 2-D plane
-    # https://gis.stackexchange.com/questions/293310/how-to-use-geoseries-distance-to-get-the-right-answer
-    gd_wmata_schedule_dat.to_crs(epsg=3310, inplace=True)  # Distance in meters---Default is in degrees!
-    gd_rawnav_dat.to_crs(epsg=3310, inplace=True)  # Distance in meters---Default is in degrees!
-    wmata_schedule_groups = gd_wmata_schedule_dat.groupby(['route', 'pattern'])  # Group GTFS data
+    gd_wmata_schedule_dat.to_crs(epsg=3310, inplace=True)  
+    gd_rawnav_dat.to_crs(epsg=3310, inplace=True) 
+    wmata_schedule_groups = gd_wmata_schedule_dat.groupby(['route', 'pattern'])  
     rawnav_groups = gd_rawnav_dat.groupby(
-        ['filename', 'index_trip_start_in_clean_data', 'route', 'pattern'])  # Group rawnav data
+        ['filename', 'index_trip_start_in_clean_data', 'route', 'pattern'])  
     nearest_rawnav_point_to_wmata_schedule_data = pd.DataFrame()
     for name, rawnav_group in rawnav_groups:
         # print(name)
@@ -295,7 +294,9 @@ def merge_stops_wmata_schedule_rawnav(wmata_schedule_dat, rawnav_dat):
     geometry = [LineString(list(xy)) for xy in zip(geometry_nearest_rawnav_point, geometry_stop_on_route)]
     nearest_rawnav_point_to_wmata_schedule_data = \
         gpd.GeoDataFrame(nearest_rawnav_point_to_wmata_schedule_data, geometry=geometry, crs={'init': 'epsg:4326'})
-    nearest_rawnav_point_to_wmata_schedule_data.rename(columns={'dist': 'dist_nearest_point_from_stop'}, inplace=True)
+    nearest_rawnav_point_to_wmata_schedule_data.\
+        rename(columns={'dist': 'dist_nearest_point_from_stop',
+                        'heading': 'stop_heading'}, inplace=True)
     return nearest_rawnav_point_to_wmata_schedule_data
 
 
@@ -459,6 +460,13 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
                                             'trip_length_mi_direct_wmata_schedule']], 2)
     rawnav_q_stop_sum_dat = \
         rawnav_q_stop_sum_dat.merge(rawnav_sum_dat, on=['filename', 'index_trip_start_in_clean_data'], how='left')
+        
+    rawnav_q_stop_sum_dat.set_index(
+        ['fullpath', 'filename', 'file_id', 'wday', 'start_date_time', 'end_date_time',
+         'index_trip_start_in_clean_data', 'taglist', 'route_pattern', 'route', 'pattern'], 
+        inplace=True,
+        drop=True)
+        
     return rawnav_q_stop_sum_dat
 
 
