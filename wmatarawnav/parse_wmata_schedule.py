@@ -7,6 +7,7 @@ Purpose: Functions for processing rawnav & wmata_schedule data
 import os
 import inflection
 import pandas as pd
+import pyodbc
 import geopandas as gpd
 from shapely.geometry import Point
 from shapely.geometry import LineString
@@ -31,6 +32,99 @@ def read_wmata_schedule(wmata_schedule_data_file):
                                        'longitude': 'stop_lon', 'latitude': 'stop_lat',
                                        'stop_dist': 'dist_from_previous_stop'}, inplace=True)
     return (wmata_schedule_dat)
+
+def read_sched_db_patterns(path,
+                           analysis_routes,
+                           UID = "",
+                           PWD = ""):
+    """
+    Parameters
+    ----------
+    path: str,
+        full path to the wmata schedule db
+    analysis_routes: list,
+        list of route names to filter schedule db to
+    UID: str,
+        user id used to access db, if needed
+    PWD: str,
+        password used to access db, if needed
+    Returns
+    -------
+    wmata_schedule_dat: pd.DataFrame, wmata_schedule data
+    """
+    # Open Connection  
+    cnxn = pyodbc.connect(r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + path +\
+                          r';UID="' + UID +\
+                          r'";PWD="' + PWD + r'";')
+        
+    # Load Tables
+    # NOTE: The creation of the table returned by this function could largely be done with SQL, 
+    # but we instead just load the tables as dataframes for some of the convenience of working
+    # with Python and pandas syntax.
+    with cnxn:
+        stop_dat = pd.read_sql("SELECT * FROM Stop",
+                               cnxn)
+        
+        pattern_dat = pd.read_sql("SELECT * FROM Pattern",
+                           cnxn)
+        
+        pattern_detail_dat = pd.read_sql("SELECT * FROM PatternDetail",
+                           cnxn)
+        
+        # We let Pandas close the connection automatically
+        
+    # Lightly Clean Tables
+    stop_dat = stop_dat.dropna(axis=1)
+    stop_dat.columns = [inflection.underscore(col_nm) for col_nm in stop_dat.columns]
+
+    pattern_dat = pattern_dat[['PatternID','TARoute','PatternName','Direction',
+                               'Distance','CDRoute','CDVariation','PatternDestination',
+                               'RouteText','RouteKey','PubRouteDir','DirectionID']]
+    pattern_dat.columns = [inflection.underscore(col_nm) for col_nm in pattern_dat.columns]
+    pattern_dat.rename(columns={'distance':'trip_length'},inplace=True)
+    pattern_dat.cd_route = pattern_dat.cd_route.astype(str).str.strip()
+    
+    pattern_detail_dat = pattern_detail_dat[pattern_detail_dat.TimePointID.isna()]
+    pattern_detail_dat = pattern_detail_dat.drop(columns=['SortOrder', 'GeoPathID','TimePointID'])
+    pattern_detail_dat.columns = [inflection.underscore(col_nm) for col_nm in pattern_detail_dat.columns]
+    pattern_detail_dat.rename(columns={'distance':'stop_dist'},inplace=True)
+
+    # Filter to Relevant Routes
+    q_jump_route_list = analysis_routes
+    pattern_q_jump_route_dat = pattern_dat.query('cd_route in @q_jump_route_list')
+    if set(pattern_q_jump_route_dat.cd_route.unique()) != set(q_jump_route_list):
+        miss_routes = set(q_jump_route_list) - set(pattern_q_jump_route_dat.cd_route.unique())
+        print("Schedule data does not include the following route(s): " + miss_routes)
+    
+    # Join tables
+    pattern_pattern_detail_stop_q_jump_route_dat = \
+        pattern_q_jump_route_dat.merge(pattern_detail_dat,on='pattern_id',how='left')\
+        .merge(stop_dat,on='geo_id',how='left')
+    
+    pattern_pattern_detail_stop_q_jump_route_dat.\
+        sort_values(by=['cd_route','cd_variation','order'],inplace=True)
+    
+    # Check for Missing Lat Long In Stops   
+    mask_nan_latlong = pattern_pattern_detail_stop_q_jump_route_dat[['latitude', 'longitude']].isna().all(axis=1)
+    assert_stop_sort_order_zero_has_nan_latlong = \
+        sum(pattern_pattern_detail_stop_q_jump_route_dat[mask_nan_latlong].stop_sort_order-0)
+    assert(assert_stop_sort_order_zero_has_nan_latlong==0),\
+        print("Missing LatLong values found for stops, please address in source database")
+    
+    # Ensure Joins Worked as Expected and Drop Superfluous Cols
+    assert(0== sum(~ pattern_pattern_detail_stop_q_jump_route_dat.
+                   eval('''direction==pub_route_dir& cd_route==ta_route''')))
+    pattern_pattern_detail_stop_q_jump_route_dat.drop(columns=['pub_route_dir','ta_route'],inplace=True)
+    
+    # Rename remaining cols
+    pattern_pattern_detail_stop_q_jump_route_dat.rename(
+        columns={'cd_route': 'route', 
+                 'cd_variation': 'pattern',
+                 'longitude': 'stop_lon', 
+                 'latitude': 'stop_lat',
+                 'stop_dist': 'dist_from_previous_stop'}, inplace=True)
+        
+    return pattern_pattern_detail_stop_q_jump_route_dat
 
 
 def parent_merge_rawnav_wmata_schedule(analysis_route_, analysis_day_, rawnav_dat_, rawnav_sum_dat_,
@@ -66,7 +160,8 @@ def parent_merge_rawnav_wmata_schedule(analysis_route_, analysis_day_, rawnav_da
         merge_stops_wmata_schedule_rawnav(
             wmata_schedule_dat=wmata_schedule_dat_,
             rawnav_dat=rawnav_subset_dat)
-    nearest_rawnav_point_to_wmata_schedule_dat.rename(columns={'heading': 'stop_heading'}, inplace=True)
+    nearest_rawnav_point_to_wmata_schedule_dat.rename(columns={'heading': 'stop_heading'}, 
+                                                      inplace=True)
     nearest_rawnav_point_to_wmata_schedule_dat = \
         remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat)
     # Assert and clean stop data
@@ -80,7 +175,8 @@ def parent_merge_rawnav_wmata_schedule(analysis_route_, analysis_day_, rawnav_da
     )
     wmata_schedule_based_sum_dat. \
         set_index(['fullpath', 'filename', 'file_id', 'wday', 'start_date_time', 'end_date_time',
-                   'index_trip_start_in_clean_data', 'taglist', 'route_pattern', 'route', 'pattern'], inplace=True,
+                   'index_trip_start_in_clean_data', 'taglist', 'route_pattern', 'route', 'pattern'], 
+                  inplace=True,
                   drop=True)
     return wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
 
@@ -117,11 +213,14 @@ def output_rawnav_wmata_schedule(analysis_route_, analysis_day_, wmata_schedule_
     if not os.path.exists(save_dir2): os.makedirs(save_dir2)
     if not os.path.exists(save_dir3): os.makedirs(save_dir3)
     # Output Summary Files
-    sum_out_file = os.path.join(save_dir3, f'wmata_schedule_trip_summaries-{analysis_route_}_{analysis_day_}.xlsx')
+    sum_out_file = os.path.join(save_dir3, 
+                                f'wmata_schedule_trip_summaries-{analysis_route_}_{analysis_day_}.xlsx')
     wmata_schedule_based_sum_dat_.to_excel(sum_out_file, merge_cells=False)
     # Output GTFS+Rawnav Merged Files
-    wmata_schedule_rawnav_out_file = os.path.join(save_dir3,
-                                                  f'wmata_schedule_stop_locations_inventory-{analysis_route_}_{analysis_day_}.xlsx')
+    wmata_schedule_rawnav_out_file = os.path.join(
+        save_dir3,
+        f'wmata_schedule_stop_locations_inventory-{analysis_route_}_{analysis_day_}.xlsx'
+        )
     rawnav_wmata_schedule_dat.to_excel(wmata_schedule_rawnav_out_file)
     return None
 
