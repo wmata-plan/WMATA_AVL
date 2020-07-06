@@ -76,24 +76,30 @@ def read_sched_db_patterns(path,
     # Lightly Clean Tables
     stop_dat = stop_dat.dropna(axis=1)
     stop_dat.columns = [inflection.underscore(col_nm) for col_nm in stop_dat.columns]
+    stop_dat.rename(columns={'longitude': 'stop_lon', 'latitude': 'stop_lat'}, inplace=True)
 
     pattern_dat = pattern_dat[['PatternID','TARoute','PatternName','Direction',
                                'Distance','CDRoute','CDVariation','PatternDestination',
                                'RouteText','RouteKey','PubRouteDir','DirectionID']]
     pattern_dat.columns = [inflection.underscore(col_nm) for col_nm in pattern_dat.columns]
-    pattern_dat.rename(columns={'distance':'trip_length'},inplace=True)
     pattern_dat.cd_route = pattern_dat.cd_route.astype(str).str.strip()
+    pattern_dat.cd_variation = pattern_dat.cd_variation.astype('int32')
+    pattern_dat.rename(columns={
+        'cd_route': 'route', 
+        'cd_variation': 'pattern',
+        'distance':'trip_length'}, 
+        inplace=True)
     
     pattern_detail_dat = pattern_detail_dat[pattern_detail_dat.TimePointID.isna()]
-    pattern_detail_dat = pattern_detail_dat.drop(columns=['SortOrder', 'GeoPathID','TimePointID'])
+    pattern_detail_dat = pattern_detail_dat.drop(columns=['SortOrder', 'GeoPathID', 'TimePointID'])
     pattern_detail_dat.columns = [inflection.underscore(col_nm) for col_nm in pattern_detail_dat.columns]
-    pattern_detail_dat.rename(columns={'distance':'stop_dist'},inplace=True)
+    pattern_detail_dat.rename(columns={'distance':'dist_from_previous_stop'},inplace=True)
 
     # Filter to Relevant Routes
     q_jump_route_list = analysis_routes
-    pattern_q_jump_route_dat = pattern_dat.query('cd_route in @q_jump_route_list')
-    if set(pattern_q_jump_route_dat.cd_route.unique()) != set(q_jump_route_list):
-        miss_routes = set(q_jump_route_list) - set(pattern_q_jump_route_dat.cd_route.unique())
+    pattern_q_jump_route_dat = pattern_dat.query('route in @q_jump_route_list')
+    if set(pattern_q_jump_route_dat.route.unique()) != set(q_jump_route_list):
+        miss_routes = set(q_jump_route_list) - set(pattern_q_jump_route_dat.route.unique())
         print("Schedule data does not include the following route(s): " + miss_routes)
     
     # Join tables
@@ -102,32 +108,27 @@ def read_sched_db_patterns(path,
         .merge(stop_dat,on='geo_id',how='left')
     
     pattern_pattern_detail_stop_q_jump_route_dat.\
-        sort_values(by=['cd_route','cd_variation','order'],inplace=True)
-    
+        sort_values(by=['route','pattern','order'],inplace=True)
+
     # Check for Missing Lat Long In Stops   
-    mask_nan_latlong = pattern_pattern_detail_stop_q_jump_route_dat[['latitude', 'longitude']].isna().all(axis=1)
+    mask_nan_latlong = pattern_pattern_detail_stop_q_jump_route_dat[['stop_lat', 'stop_lon']].isna().all(axis=1)
     assert_stop_sort_order_zero_has_nan_latlong = \
         sum(pattern_pattern_detail_stop_q_jump_route_dat[mask_nan_latlong].stop_sort_order-0)
     assert(assert_stop_sort_order_zero_has_nan_latlong==0),\
         print("Missing LatLong values found for stops, please address in source database")
     
-    # Ensure Joins Worked as Expected and Drop Superfluous Cols
+    # Ensure Table Values are Consistent and then Drop Superfluous Cols
     assert(0== sum(~ pattern_pattern_detail_stop_q_jump_route_dat.
-                   eval('''direction==pub_route_dir& cd_route==ta_route''')))
+                   eval('''direction==pub_route_dir& route==ta_route''')))
     pattern_pattern_detail_stop_q_jump_route_dat.drop(columns=['pub_route_dir','ta_route'],inplace=True)
-    
-    # Rename remaining cols
-    pattern_pattern_detail_stop_q_jump_route_dat.rename(
-        columns={'cd_route': 'route', 
-                 'cd_variation': 'pattern',
-                 'longitude': 'stop_lon', 
-                 'latitude': 'stop_lat',
-                 'stop_dist': 'dist_from_previous_stop'}, inplace=True)
         
     return pattern_pattern_detail_stop_q_jump_route_dat
 
 
-def parent_merge_rawnav_wmata_schedule(analysis_route_, analysis_day_, rawnav_dat_, rawnav_sum_dat_,
+def parent_merge_rawnav_wmata_schedule(analysis_route_, 
+                                       analysis_day_, 
+                                       rawnav_dat_, 
+                                       rawnav_sum_dat_,
                                        wmata_schedule_dat_):
     """
     Parameters
