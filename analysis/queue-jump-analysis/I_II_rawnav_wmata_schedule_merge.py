@@ -99,10 +99,10 @@ rawnav_summary_dat, rawnav_trips_less_than_600sec_or_2miles = wr.read_summary_ra
     restrict=restrict_n,
     analysis_days=analysis_days)
 rawnav_summary_dat = wr.fix_rawnav_names(rawnav_summary_dat)
-rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_trip_start_in_clean_data']]
 
-# 2.3 Merge Processed and Summary data
+# 2.3 Filter Processed Rawnav Data Based on Tripo Summary Information
 ############################################
+rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_trip_start_in_clean_data']]
 rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col, on=['filename', 'index_trip_start_in_clean_data'],
                                     how='right')
 rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
