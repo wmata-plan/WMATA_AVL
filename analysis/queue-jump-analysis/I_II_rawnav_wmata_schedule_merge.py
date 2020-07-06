@@ -38,7 +38,7 @@ if os.getlogin() == "WylieTimmerman":
     path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
     # Source data
     # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
-    path_source_data = r"C:\Downloads"
+    path_source_data = os.path.join(path_sp,"Client Shared Folder","data","00-raw")
     path_wmata_schedule_data = os.path.join(path_working, "data", "02-processed")
     # Processed data
     path_processed_data = os.path.join(path_sp, r"Client Shared Folder\data\02-processed")
@@ -113,13 +113,17 @@ executionTime = str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 2 Analyze Route ---Subset RawNav Data : {executionTime}")
 print("*" * 100)
 
-# 3 Read, analyze and summarize GTFS data
+# 3 Read, analyze and summarize Schedule data
 ########################################################################################################################
 print(f"Run Section 3 Read, analyze and summarize WMATA schedule data...")
 begin_time = datetime.now()
 # Read the Wmata_Schedule data
-wmata_schedule_data_file = os.path.join(path_wmata_schedule_data, 'wmata_schedule_data_q_jump_routes.csv')
-wmata_schedule_dat = wr.read_wmata_schedule(wmata_schedule_data_file=wmata_schedule_data_file)
+wmata_schedule_dat = wr.read_sched_db_patterns(
+    path = os.path.join(path_source_data,
+                        "wmata_schedule_data",
+                        "Schedule_082719-201718.mdb"),
+    analysis_routes = analysis_routes)
+
 for analysis_route in analysis_routes:
     print("*" * 100)
     print(f'Processing analysis route {analysis_route}')
