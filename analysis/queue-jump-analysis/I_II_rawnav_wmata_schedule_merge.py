@@ -12,6 +12,7 @@ from IPython import get_ipython  # run magic commands
 ipython = get_ipython()
 ipython.magic("reset -f")
 ipython = get_ipython()
+ipython.magic("autoreload")
 
 # 1 Import Libraries and Set Global Parameters
 ########################################################################################################################
@@ -42,7 +43,6 @@ if os.getlogin() == "WylieTimmerman":
     path_wmata_schedule_data = os.path.join(path_working, "data", "02-processed")
     # Processed data
     path_processed_data = os.path.join(path_sp, r"Client Shared Folder\data\02-processed")
-    path_processed_route_data = os.path.join(path_processed_data, "RouteData")
 elif os.getlogin() == "abibeka":
     # Working Paths
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
@@ -53,7 +53,6 @@ elif os.getlogin() == "abibeka":
     path_wmata_schedule_data = os.path.join(path_working, "data", "02-processed")
     # Processed data
     path_processed_data = os.path.join(path_source_data, "ProcessedData")
-    path_processed_route_data = os.path.join(path_processed_data, "RouteData")
 else:
     raise FileNotFoundError("Define the path_working, path_source_data, path_wmata_schedule_data, and"
                             " path_processed_data in a new elif block")
@@ -68,6 +67,8 @@ analysis_routes = q_jump_route_list
 # analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
 # analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
 # analysis_routes = ['S2','S4','H1','H2','H3','79','W47']
+analysis_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
 # 1.3 Import User-Defined Package
 ############################################
 import wmatarawnav as wr
@@ -80,24 +81,24 @@ print("*" * 100)
 ########################################################################################################################
 print(f"Run Section 2 Analyze Route ---Subset RawNav Data...")
 begin_time = datetime.now()
-analysis_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
 
 # 2.1 Rawnav data
 ############################################
 rawnav_dat = wr.read_cleaned_rawnav(
     analysis_routes_=analysis_routes,
-    path_processed_route_data=path_processed_route_data,
+    path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
     restrict=restrict_n,
-    analysis_days=analysis_days)
+    analysis_days_=analysis_days)
 rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
 
 # 2.2 Summary data
 ############################################
 rawnav_summary_dat, rawnav_trips_less_than_600sec_or_2miles = wr.read_summary_rawnav(
     analysis_routes_=analysis_routes,
-    path_processed_route_data=path_processed_route_data,
+    path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
     restrict=restrict_n,
-    analysis_days=analysis_days)
+    analysis_days_=analysis_days)
 rawnav_summary_dat = wr.fix_rawnav_names(rawnav_summary_dat)
 
 # 2.3 Filter Processed Rawnav Data Based on Tripo Summary Information
@@ -153,6 +154,7 @@ for analysis_route in analysis_routes:
             wmata_schedule_based_sum_dat_=wmata_schedule_based_sum_dat,
             rawnav_wmata_schedule_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat,
             path_processed_data_=path_processed_data)
+        
 executionTime = str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 3 Read, analyze and summarize WMATA schedule data : {executionTime}")
 print("*" * 100)
