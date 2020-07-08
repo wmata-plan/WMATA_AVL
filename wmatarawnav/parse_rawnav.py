@@ -57,18 +57,26 @@ def read_cleaned_rawnav(analysis_routes_, path_processed_route_data, restrict, a
     
     for analysis_route in analysis_routes_:
         filter_parquet = [[('wday', '=', day)] for day in analysis_days_]
-        rawnav_temp_dat = \
-            pq.read_table(source=os.path.join(path_processed_route_data,
-                                              f"Route{analysis_route}_Restrict{restrict}.parquet"),
-                          filters=filter_parquet).to_pandas()
-        # NOTE: some of this due to conversion to and from parquet, weird things can happen
-        rawnav_temp_dat.route = rawnav_temp_dat.route.astype('str')
-        rawnav_temp_dat.drop(columns=['Blank', 'LatRaw', 'LongRaw', 'SatCnt', '__index_level_0__'], 
-                             inplace=True)
-        # Check for duplicate IndexLoc
-        assert (rawnav_temp_dat
-                .groupby(['filename', 'IndexTripStartInCleanData', 'IndexLoc'])['IndexLoc'].count().values.max() == 1)
-        rawnav_temp_list.append(rawnav_temp_dat)
+        try:
+            rawnav_temp_dat = \
+                pq.read_table(source=os.path.join(path_processed_route_data,
+                                                  f"Route{analysis_route}_Restrict{restrict}.parquet"),
+                              filters=filter_parquet).to_pandas()
+        except Exception as e:
+            if str(type(e)) == "<class 'IndexError'>":
+                print("No data found for given filter conditions")
+            else:
+                print(e)
+            continue
+        else:
+            # NOTE: some of this due to conversion to and from parquet, weird things can happen
+            rawnav_temp_dat.route = rawnav_temp_dat.route.astype('str')
+            rawnav_temp_dat.drop(columns=['Blank', 'LatRaw', 'LongRaw', 'SatCnt', '__index_level_0__'], 
+                                 inplace=True)
+            # Check for duplicate IndexLoc
+            assert (rawnav_temp_dat
+                    .groupby(['filename', 'IndexTripStartInCleanData', 'IndexLoc'])['IndexLoc'].count().values.max() == 1)
+            rawnav_temp_list.append(rawnav_temp_dat)
     rawnav_dat = pd.concat(rawnav_temp_list)
     return rawnav_dat
 
