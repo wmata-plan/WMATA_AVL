@@ -22,7 +22,7 @@ from datetime import datetime
 
 print(f"Run Section 1 Import Libraries and Set Global Parameters...")
 begin_time = datetime.now()
-import os, sys
+import os, sys, pandas as pd, geopandas as gpd
 
 if not sys.warnoptions:
     import warnings
@@ -68,6 +68,8 @@ analysis_routes = q_jump_route_list
 # analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
 # analysis_routes = ['S2','S4','H1','H2','H3','79','W47']
 analysis_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+# EPSG code for WMATA-area work
+wmata_crs = 2248
 
 # 1.3 Import User-Defined Package
 ############################################
@@ -81,7 +83,6 @@ print("*" * 100)
 ########################################################################################################################
 print(f"Run Section 2 Analyze Route ---Subset RawNav Data...")
 begin_time = datetime.now()
-
 
 # 2.1 Rawnav data
 ############################################
@@ -101,15 +102,24 @@ rawnav_summary_dat, rawnav_trips_less_than_600sec_or_2miles = wr.read_summary_ra
     analysis_days_=analysis_days)
 rawnav_summary_dat = wr.fix_rawnav_names(rawnav_summary_dat)
 
-# 2.3 Filter Processed Rawnav Data Based on Tripo Summary Information
+# 2.3 Filter Processed Rawnav Data Based on Trip Summary Information
 ############################################
 rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_trip_start_in_clean_data']]
 rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col, on=['filename', 'index_trip_start_in_clean_data'],
                                     how='right')
+
+# Remaining Type Conversions
 rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
-# Having issues with route "70" and "64"---Getting read as int instead of str
 rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
+
+rawnav_qjump_gdf =  gpd.GeoDataFrame(
+            rawnav_qjump_dat, 
+            geometry = gpd.points_from_xy(rawnav_qjump_dat.long,rawnav_qjump_dat.lat),
+            crs='EPSG:4326').\
+            to_crs(epsg=wmata_crs)
+
 rawnav_summary_dat.route = rawnav_summary_dat.route.astype(str)
+
 executionTime = str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 2 Analyze Route ---Subset RawNav Data : {executionTime}")
 print("*" * 100)
@@ -124,6 +134,12 @@ wmata_schedule_dat = wr.read_sched_db_patterns(
                         "wmata_schedule_data",
                         "Schedule_082719-201718.mdb"),
     analysis_routes = analysis_routes)
+
+wmata_schedule_gdf = gpd.GeoDataFrame(
+            wmata_schedule_dat, 
+            geometry = gpd.points_from_xy(wmata_schedule_dat.stop_lon,wmata_schedule_dat.stop_lat),
+            crs='EPSG:4326').\
+            to_crs(epsg=wmata_crs)
 
 for analysis_route in analysis_routes:
     print("*" * 100)
@@ -141,9 +157,9 @@ for analysis_route in analysis_routes:
             wr.parent_merge_rawnav_wmata_schedule(
                 analysis_route_=analysis_route,
                 analysis_day_=analysis_day,
-                rawnav_dat_=rawnav_qjump_dat,
+                rawnav_dat_=rawnav_qjump_gdf,
                 rawnav_sum_dat_=rawnav_summary_dat,
-                wmata_schedule_dat_=wmata_schedule_dat)
+                wmata_schedule_dat_=wmata_schedule_gdf)
         if type(wmata_schedule_based_sum_dat) == type(None):
             print(f'No data on analysis route {analysis_route} for {analysis_day}')
             continue

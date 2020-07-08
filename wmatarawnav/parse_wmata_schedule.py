@@ -15,9 +15,11 @@ from scipy.spatial import cKDTree
 import numpy as np
 import folium
 from folium import plugins
+import re
 
 
 def read_wmata_schedule(wmata_schedule_data_file):
+    #TODO: Probably dump this function
     """
     Parameters
     ----------
@@ -76,7 +78,10 @@ def read_sched_db_patterns(path,
     # Lightly Clean Tables
     stop_dat = stop_dat.dropna(axis=1)
     stop_dat.columns = [inflection.underscore(col_nm) for col_nm in stop_dat.columns]
-    stop_dat.rename(columns={'longitude': 'stop_lon', 'latitude': 'stop_lat'}, inplace=True)
+    stop_dat.rename(
+        columns={'longitude': 'stop_lon', 
+                 'latitude': 'stop_lat',
+                 'heading': 'stop_heading'}, inplace=True)
 
     pattern_dat = pattern_dat[['PatternID','TARoute','PatternName','Direction',
                                'Distance','CDRoute','CDVariation','PatternDestination',
@@ -162,16 +167,17 @@ def parent_merge_rawnav_wmata_schedule(analysis_route_,
     
     # Find rawnav point nearest each stop
     nearest_rawnav_point_to_wmata_schedule_dat = \
-        merge_stops_wmata_schedule_rawnav(
-            wmata_schedule_dat = wmata_schedule_dat_,
+        merge_rawnav_target(
+            target_dat = wmata_schedule_dat_,
             rawnav_dat = rawnav_subset_dat)
     
     # Assert and clean stop data
     nearest_rawnav_point_to_wmata_schedule_dat = \
         remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat)
 
+    # TODO: check if function call dropped?
     nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat = \
-        (nearest_rawnav_point_to_wmata_schedule_dat)
+        assert_clean_stop_order_increase_with_odom(nearest_rawnav_point_to_wmata_schedule_dat)
 
     # Generate Summary
     wmata_schedule_based_sum_dat = include_wmata_schedule_based_summary(
@@ -246,58 +252,112 @@ def fix_rawnav_names(data):
     return data
 
 
-def merge_stops_wmata_schedule_rawnav(wmata_schedule_dat, rawnav_dat):
+# def merge_stops_wmata_schedule_rawnav(wmata_schedule_dat, rawnav_dat, CRS = 2248):
+#     """
+#     Parameters
+#     ----------
+#     wmata_schedule_dat : pd.DataFrame
+#         wmata schedule data with unique stops per route and info on short/long and direction.
+#     rawnav_dat : pd.DataFrame
+#         rawnav data.
+#     Returns
+#     -------
+#     nearest_rawnav_point_to_wmata_schedule_data : gpd.GeoDataFrame
+#         A geopandas dataframe with nearest rawnav point to each of the wmata schedule stops on that route.
+#     """
+#     # Convert to geopandas dataframe
+#     geometry_stops = [Point(xy) for xy in zip(wmata_schedule_dat.stop_lon.astype(float),
+#                                               wmata_schedule_dat.stop_lat.astype(float))]
+#     geometry_points = [Point(xy) for xy in zip(rawnav_dat.long.astype(float), rawnav_dat.lat.astype(float))]
+#     gd_wmata_schedule_dat = gpd.GeoDataFrame(wmata_schedule_dat, geometry=geometry_stops, crs={'init': 'epsg:4326'})
+#     gd_rawnav_dat = gpd.GeoDataFrame(rawnav_dat, geometry=geometry_points, crs={'init': 'epsg:4326'})
+#     gd_wmata_schedule_dat.to_crs(epsg=CRS, inplace=True)  
+#     gd_rawnav_dat.to_crs(epsg=CRS, inplace=True) 
+#     wmata_schedule_groups = gd_wmata_schedule_dat.groupby(['route', 'pattern'])  
+#     rawnav_groups = gd_rawnav_dat.groupby(
+#         ['route', 'pattern','filename', 'index_trip_start_in_clean_data'])  
+#     nearest_rawnav_point_to_wmata_schedule_data = pd.DataFrame()
+#     for name, rawnav_group in rawnav_groups:
+#         # print(name)
+#         wmata_schedule_relevant_route_dat = \
+#             wmata_schedule_groups.get_group(
+#                 (name[0], name[1]))  # Get the relevant group in sched corresponding to rawnav.
+#         nearest_rawnav_point_to_wmata_schedule_data = \
+#             pd.concat([nearest_rawnav_point_to_wmata_schedule_data,
+#                        ckdnearest(wmata_schedule_relevant_route_dat, rawnav_group)])
+#     nearest_rawnav_point_to_wmata_schedule_data.dist = \
+#         nearest_rawnav_point_to_wmata_schedule_data.dist # previously converted meters to feet here
+#     nearest_rawnav_point_to_wmata_schedule_data.lat = \
+#         nearest_rawnav_point_to_wmata_schedule_data.lat.astype('float')
+#     geometry_nearest_rawnav_point = []
+#     for xy in zip(nearest_rawnav_point_to_wmata_schedule_data.long,
+#                   nearest_rawnav_point_to_wmata_schedule_data.lat):
+#         geometry_nearest_rawnav_point.append(Point(xy))
+#     geometry_stop_on_route = []
+#     for xy in zip(nearest_rawnav_point_to_wmata_schedule_data.stop_lon,
+#                   nearest_rawnav_point_to_wmata_schedule_data.stop_lat):
+#         geometry_stop_on_route.append(Point(xy))
+#     geometry = [LineString(list(xy)) for xy in zip(geometry_nearest_rawnav_point, geometry_stop_on_route)]
+#     nearest_rawnav_point_to_wmata_schedule_data = \
+#         gpd.GeoDataFrame(nearest_rawnav_point_to_wmata_schedule_data, geometry=geometry, crs={'init': 'epsg:4326'})
+#     nearest_rawnav_point_to_wmata_schedule_data.\
+#         rename(columns={'dist': 'dist_nearest_point_from_stop',
+#                         'heading': 'stop_heading'}, inplace=True)
+#     return nearest_rawnav_point_to_wmata_schedule_data
+
+def merge_rawnav_target(target_dat, rawnav_dat):
     """
     Parameters
     ----------
-    wmata_schedule_dat : pd.DataFrame
+    target_dat : gpd.GeoDataFrame
         wmata schedule data with unique stops per route and info on short/long and direction.
-    rawnav_dat : pd.DataFrame
+    rawnav_dat :gpd.GeoDataFrame
         rawnav data.
     Returns
     -------
-    nearest_rawnav_point_to_wmata_schedule_data : gpd.GeoDataFrame
+    nearest_rawnav_point_to_target_data : gpd.GeoDataFrame
         A geopandas dataframe with nearest rawnav point to each of the wmata schedule stops on that route.
     """
-    # Convert to geopandas dataframe
-    geometry_stops = [Point(xy) for xy in zip(wmata_schedule_dat.stop_lon.astype(float),
-                                              wmata_schedule_dat.stop_lat.astype(float))]
-    geometry_points = [Point(xy) for xy in zip(rawnav_dat.long.astype(float), rawnav_dat.lat.astype(float))]
-    gd_wmata_schedule_dat = gpd.GeoDataFrame(wmata_schedule_dat, geometry=geometry_stops, crs={'init': 'epsg:4326'})
-    gd_rawnav_dat = gpd.GeoDataFrame(rawnav_dat, geometry=geometry_points, crs={'init': 'epsg:4326'})
-    gd_wmata_schedule_dat.to_crs(epsg=3310, inplace=True)  
-    gd_rawnav_dat.to_crs(epsg=3310, inplace=True) 
-    wmata_schedule_groups = gd_wmata_schedule_dat.groupby(['route', 'pattern'])  
-    rawnav_groups = gd_rawnav_dat.groupby(
-        ['filename', 'index_trip_start_in_clean_data', 'route', 'pattern'])  
-    nearest_rawnav_point_to_wmata_schedule_data = pd.DataFrame()
+    
+    assert(bool(re.search("US survey foot", target_dat.crs.to_wkt()))), print('Need a CRS with feet as units')
+    assert(bool(re.search("US survey foot", rawnav_dat.crs.to_wkt()))), print('Need a CRS with feet as units')
+    assert(target_dat.crs == rawnav_dat.crs), print("CRS must match between objects")
+
+    # Iterate over groups of routes and patterns in rawnav data and target object
+    target_groups = target_dat.groupby(['route', 'pattern'])  
+    rawnav_groups = rawnav_dat.groupby(
+        ['route', 'pattern', 'filename', 'index_trip_start_in_clean_data'])  
+    
+    nearest_rawnav_point_to_target_dat = pd.DataFrame()
+    
     for name, rawnav_group in rawnav_groups:
-        # print(name)
-        wmata_schedule_relevant_route_dat = \
-            wmata_schedule_groups.get_group(
-                (name[2], name[3]))  # Get the relevant group in GTFS corresponding to rawnav.
-        nearest_rawnav_point_to_wmata_schedule_data = \
-            pd.concat([nearest_rawnav_point_to_wmata_schedule_data,
-                       ckdnearest(wmata_schedule_relevant_route_dat, rawnav_group)])
-    nearest_rawnav_point_to_wmata_schedule_data.dist = \
-        nearest_rawnav_point_to_wmata_schedule_data.dist * 3.28084  # meters to feet
-    nearest_rawnav_point_to_wmata_schedule_data.lat = \
-        nearest_rawnav_point_to_wmata_schedule_data.lat.astype('float')
-    geometry_nearest_rawnav_point = []
-    for xy in zip(nearest_rawnav_point_to_wmata_schedule_data.long,
-                  nearest_rawnav_point_to_wmata_schedule_data.lat):
-        geometry_nearest_rawnav_point.append(Point(xy))
-    geometry_stop_on_route = []
-    for xy in zip(nearest_rawnav_point_to_wmata_schedule_data.stop_lon,
-                  nearest_rawnav_point_to_wmata_schedule_data.stop_lat):
-        geometry_stop_on_route.append(Point(xy))
-    geometry = [LineString(list(xy)) for xy in zip(geometry_nearest_rawnav_point, geometry_stop_on_route)]
-    nearest_rawnav_point_to_wmata_schedule_data = \
-        gpd.GeoDataFrame(nearest_rawnav_point_to_wmata_schedule_data, geometry=geometry, crs={'init': 'epsg:4326'})
-    nearest_rawnav_point_to_wmata_schedule_data.\
-        rename(columns={'dist': 'dist_nearest_point_from_stop',
-                        'heading': 'stop_heading'}, inplace=True)
-    return nearest_rawnav_point_to_wmata_schedule_data
+        target_dat_relevant = \
+            target_groups.get_group(
+                (name[0], name[1]))  
+        nearest_rawnav_point_to_target_dat = \
+            pd.concat([nearest_rawnav_point_to_target_dat,
+                       ckdnearest(target_dat_relevant, rawnav_group)])
+    
+    # Create a linestring geometry between the rawnav point and target point for visualization
+    # TODO: check for downstream dependencies, but maybe move this elsewhere.
+    # Right now it's not strictly necessary
+    # geometry_nearest_rawnav_point = gpd.points_from_xy(nearest_rawnav_point_to_target_dat.long,
+    #                                                    nearest_rawnav_point_to_target_dat.lat)
+    
+    # geometry_stop_on_route = gpd.points_from_xy(nearest_rawnav_point_to_target_dat.stop_lon,
+    #                                             nearest_rawnav_point_to_target_dat.stop_lat)
+        
+    # geometry = [LineString(list(xy)) for xy in zip(geometry_nearest_rawnav_point, geometry_stop_on_route)]
+    
+    # nearest_rawnav_point_to_target_dat = \
+    #     gpd.GeoDataFrame(
+    #         nearest_rawnav_point_to_target_dat, 
+    #         geometry=geometry, 
+    #         crs=target_dat.crs)
+
+    # Return
+    
+    return nearest_rawnav_point_to_target_dat
 
 
 def ckdnearest(gdA, gdB):
@@ -324,7 +384,7 @@ def ckdnearest(gdA, gdB):
         [gdA.reset_index(drop=True),
          gdB.loc[idx, ['filename', 'index_trip_start_in_clean_data', 'index_loc', 'lat', 'long']].reset_index(
              drop=True),
-         pd.Series(dist, name='dist')], axis=1)
+         pd.Series(dist, name='dist_to_nearest_point')], axis=1)
     return gdf
 
 
@@ -342,7 +402,7 @@ def remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat
     """
     row_before = nearest_rawnav_point_to_wmata_schedule_data_.shape[0]
     nearest_rawnav_point_to_wmata_schedule_data_ = \
-        nearest_rawnav_point_to_wmata_schedule_data_.query('dist_nearest_point_from_stop<100')
+        nearest_rawnav_point_to_wmata_schedule_data_.query('dist_to_nearest_point < 100')
     row_after = nearest_rawnav_point_to_wmata_schedule_data_.shape[0]
     print(f'deleted {row_before - row_after} rows from {row_before} with distance to the nearest stop > 100 ft.')
     return nearest_rawnav_point_to_wmata_schedule_data_
@@ -490,9 +550,9 @@ def get_first_last_stop_rawnav(nearest_rawnav_stop_dat):
         last_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).stop_sort_order.transform(max)
     last_stop_dat = last_stop_dat.query('stop_sort_order==tempCol').reset_index(drop=True).drop(columns='tempCol')
     last_stop_dat = last_stop_dat[['filename', 'index_trip_start_in_clean_data', 'index_loc',
-                                   'dist_nearest_point_from_stop']]
+                                   'dist_to_nearest_point']]
     last_stop_dat.rename(columns={'index_loc': 'index_loc_last_stop',
-                                  'dist_nearest_point_from_stop': 'last_stop_dist_nearest_point'}, inplace=True)
+                                  'dist_to_nearest_point': 'last_stop_dist_nearest_point'}, inplace=True)
     first_stop_dat = \
         nearest_rawnav_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).stop_sort_order.transform(min)
     first_stop_dat = nearest_rawnav_stop_dat.copy()
@@ -500,7 +560,7 @@ def get_first_last_stop_rawnav(nearest_rawnav_stop_dat):
         first_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).stop_sort_order.transform(min)
     first_stop_dat = first_stop_dat.query('stop_sort_order==tempCol').reset_index(drop=True).drop(columns='tempCol')
     first_stop_dat.rename(columns={'index_loc': 'index_loc_first_stop',
-                                   'dist_nearest_point_from_stop': 'first_stop_dist_nearest_point'}, inplace=True)
+                                   'dist_to_nearest_point': 'first_stop_dist_nearest_point'}, inplace=True)
     first_stop_dat.sort_values(['filename', 'index_trip_start_in_clean_data'], inplace=True)
     first_last_stop_dat = first_stop_dat.merge(last_stop_dat, on=['filename', 'index_trip_start_in_clean_data'],
                                                how='left')
