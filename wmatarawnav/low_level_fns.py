@@ -7,6 +7,8 @@ Created on Mon Jul  6 22:38:06 2020
 import pandas as pd 
 import geopandas as gpd
 from shapely.geometry import Point
+from scipy.spatial import cKDTree
+import numpy as np
 
 def tribble(columns, *data):
     return pd.DataFrame(
@@ -57,4 +59,30 @@ def explode_first_last(gdf):
                                        crs = line_first_last_list[0].crs)
     
     return(line_first_last)
-    
+
+def ckdnearest(gdA, gdB):
+    """
+    # https://gis.stackexchange.com/questions/222315/geopandas-find-nearest-point-in-other-dataframe
+    Parameters
+    ----------
+    gdA : gpd.GeoDataFrame
+        wmata schedule data for the correct route and direction.
+    gdB : gpd.GeoDataFrame
+        rawnav data: only nearest points to gdA are kept in the output.
+    Returns
+    -------
+    gdf : gpd.GeoDataFrame
+        wmata schedule data for the correct route and direction with the closest rawnav point.
+    """
+    gdA.reset_index(inplace=True, drop=True);
+    gdB.reset_index(inplace=True, drop=True)
+    nA = np.array(list(zip(gdA.geometry.x, gdA.geometry.y)))
+    nB = np.array(list(zip(gdB.geometry.x, gdB.geometry.y)))
+    btree = cKDTree(nB)
+    dist, idx = btree.query(nA, k=1)
+    gdf = pd.concat(
+        [gdA.reset_index(drop=True),
+         gdB.loc[idx, ['filename', 'index_trip_start_in_clean_data', 'index_loc', 'lat', 'long']].reset_index(
+             drop=True),
+         pd.Series(dist, name='dist_to_nearest_point')], axis=1)
+    return gdf
