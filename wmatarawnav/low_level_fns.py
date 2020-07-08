@@ -45,11 +45,13 @@ def explode_first_last(gdf):
         
         first_row = gpd.GeoDataFrame(
             drop_geometry(justone).assign(location = 'first'),
-            geometry = [first_point])
+            geometry = [first_point],
+            crs = justone.crs)
         
         last_row = gpd.GeoDataFrame(
             drop_geometry(justone).assign(location = 'last'),
-            geometry = [last_point])
+            geometry = [last_point],
+            crs = justone.crs)
 
         line_first_last_list.append(first_row)
         line_first_last_list.append(last_row)
