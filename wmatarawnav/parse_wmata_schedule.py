@@ -11,7 +11,6 @@ import pyodbc
 import geopandas as gpd
 from shapely.geometry import Point
 from shapely.geometry import LineString
-from scipy.spatial import cKDTree
 import numpy as np
 import folium
 from folium import plugins
@@ -34,6 +33,7 @@ def read_wmata_schedule(wmata_schedule_data_file):
                                        'longitude': 'stop_lon', 'latitude': 'stop_lat',
                                        'stop_dist': 'dist_from_previous_stop'}, inplace=True)
     return (wmata_schedule_dat)
+from . import low_level_fns as ll
 
 def read_sched_db_patterns(path,
                            analysis_routes,
@@ -331,61 +331,19 @@ def merge_rawnav_target(target_dat, rawnav_dat):
     nearest_rawnav_point_to_target_dat = pd.DataFrame()
     
     for name, rawnav_group in rawnav_groups:
-        target_dat_relevant = \
-            target_groups.get_group(
-                (name[0], name[1]))  
-        nearest_rawnav_point_to_target_dat = \
-            pd.concat([nearest_rawnav_point_to_target_dat,
-                       ckdnearest(target_dat_relevant, rawnav_group)])
-    
-    # Create a linestring geometry between the rawnav point and target point for visualization
-    # TODO: check for downstream dependencies, but maybe move this elsewhere.
-    # Right now it's not strictly necessary
-    # geometry_nearest_rawnav_point = gpd.points_from_xy(nearest_rawnav_point_to_target_dat.long,
-    #                                                    nearest_rawnav_point_to_target_dat.lat)
-    
-    # geometry_stop_on_route = gpd.points_from_xy(nearest_rawnav_point_to_target_dat.stop_lon,
-    #                                             nearest_rawnav_point_to_target_dat.stop_lat)
-        
-    # geometry = [LineString(list(xy)) for xy in zip(geometry_nearest_rawnav_point, geometry_stop_on_route)]
-    
-    # nearest_rawnav_point_to_target_dat = \
-    #     gpd.GeoDataFrame(
-    #         nearest_rawnav_point_to_target_dat, 
-    #         geometry=geometry, 
-    #         crs=target_dat.crs)
-
-    # Return
-    
+        # breakpoint()
+        try: 
+            target_dat_relevant = \
+                target_groups.get_group(
+                    (name[0], name[1]))  
+            nearest_rawnav_point_to_target_dat = \
+                pd.concat([nearest_rawnav_point_to_target_dat,
+                           ll.ckdnearest(target_dat_relevant, rawnav_group)])
+        except:
+            if (quiet == False):
+                print(f"No target geometry found for {name[0]} - {name[1]}")
+       
     return nearest_rawnav_point_to_target_dat
-
-
-def ckdnearest(gdA, gdB):
-    """
-    # https://gis.stackexchange.com/questions/222315/geopandas-find-nearest-point-in-other-dataframe
-    Parameters
-    ----------
-    gdA : gpd.GeoDataFrame
-        wmata schedule data for the correct route and direction.
-    gdB : gpd.GeoDataFrame
-        rawnav data: only nearest points to gdA are kept in the output.
-    Returns
-    -------
-    gdf : gpd.GeoDataFrame
-        wmata schedule data for the correct route and direction with the closest rawnav point.
-    """
-    gdA.reset_index(inplace=True, drop=True);
-    gdB.reset_index(inplace=True, drop=True)
-    nA = np.array(list(zip(gdA.geometry.x, gdA.geometry.y)))
-    nB = np.array(list(zip(gdB.geometry.x, gdB.geometry.y)))
-    btree = cKDTree(nB)
-    dist, idx = btree.query(nA, k=1)
-    gdf = pd.concat(
-        [gdA.reset_index(drop=True),
-         gdB.loc[idx, ['filename', 'index_trip_start_in_clean_data', 'index_loc', 'lat', 'long']].reset_index(
-             drop=True),
-         pd.Series(dist, name='dist_to_nearest_point')], axis=1)
-    return gdf
 
 
 def remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_data_):
