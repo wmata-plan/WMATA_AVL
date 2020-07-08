@@ -14,13 +14,11 @@ def tribble(columns, *data):
         columns=columns
     )
 
-
 def check_convert_list(possible_list):
     if isinstance(possible_list,str):
         return ([possible_list])
     else:
         return (possible_list)
-    
     
 def drop_geometry(gdf):
     # Inspired by 
@@ -30,13 +28,12 @@ def drop_geometry(gdf):
     df = pd.DataFrame(gdf[[col for col in gdf.columns if col != gdf._geometry_column_name]])
     
     return(df)
-    
-    
+       
 def explode_first_last(gdf):
 
     line_first_last_list = []
      
-    # Note especially pythonic, but preserves dtypes nicely relative to itertuples and esp. iterrows
+    # Not especially pythonic, but preserves dtypes nicely relative to itertuples and esp. iterrows
     for i in range(0,len(gdf)):
         justone = gdf.loc[[i],:]
     
