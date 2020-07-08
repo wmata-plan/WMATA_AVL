@@ -64,10 +64,10 @@ def read_cleaned_rawnav(analysis_routes_, path_processed_route_data, restrict, a
                               filters=filter_parquet).to_pandas()
         except Exception as e:
             if str(type(e)) == "<class 'IndexError'>":
-                print("No data found for given filter conditions")
+                raise ValueError('No data found for given filter conditions')
             else:
                 print(e)
-            continue
+                raise
         else:
             # NOTE: some of this due to conversion to and from parquet, weird things can happen
             rawnav_temp_dat.route = rawnav_temp_dat.route.astype('str')

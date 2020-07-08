@@ -6,6 +6,9 @@ Created on Mon Jul  6 22:28:17 2020
 """
 
 from . import parse_wmata_schedule as ws
+from . import low_level_fns as ll
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 def merge_rawnav_segment(rawnav_gdf_, 
                          rawnav_sum_dat_,
@@ -30,6 +33,7 @@ def merge_rawnav_segment(rawnav_gdf_,
             target_dat = target_,
             rawnav_dat = rawnav_gdf_)
     
+    index_run_segment_start_end = ll.drop_geometry(index_run_segment_start_end_1)
     # WAIT FOR APOORBA TO IMPLEMENT THIS FIRST
     # I imagine we should do some double-checking that the results are about what we want for each run:
     #  - Are the points nearest to the end of the segment within ~ X feet?
@@ -48,7 +52,9 @@ def merge_rawnav_segment(rawnav_gdf_,
             rawnav_sum_dat = rawnav_sum_dat_,
             nearest_stop_dat = index_run_segment_start_end_1) #later replace with corrected vers
     
-    
+    # Could do this earlier, but need to remove geometry reference in get_first_last_stop_rawnav if so
+    index_run_segment_start_end = ll.drop_geometry(index_run_segment_start_end_1)
+      
     return(index_run_segment_start_end, summary_run_segment)
     
 def include_segment_summary(rawnav_q_dat, 
@@ -72,60 +78,89 @@ def include_segment_summary(rawnav_q_dat,
     # 5 Get summary after merging files
     ########################################################################################
     first_last_stop_dat = ws.get_first_last_stop_rawnav(nearest_stop_dat)
-    breakpoint() # see how the above turns out 
     rawnav_q_target_dat = \
         rawnav_q_dat.merge(first_last_stop_dat, on=['filename', 'index_trip_start_in_clean_data'], how='right')
     rawnav_q_target_dat = rawnav_q_target_dat.query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
+    # TODO: The points after this are largely copied and slimmed down from the schedule merge
+    # implementation. Not ideal by any stretch, but making this more flexible would be a significant
+    # chore given the variety of columns and aggregations that need to be applied in each case. 
     rawnav_q_target_dat = \
         rawnav_q_target_dat[
-            ['filename', 'index_trip_start_in_clean_data', 'lat', 'long', 'heading', 'odomt_ft', 'sec_past_st'
-                , 'first_stop_dist_nearest_point', 'trip_length', 'route_text', 'pattern_name', 'direction',
-             'pattern_destination', 'direction_id']]
+            ['filename',
+             'index_trip_start_in_clean_data', 
+             'seg_name_id', 
+             'lat', 
+             'long', 
+             'heading', 
+             'odomt_ft', 
+             'sec_past_st', 
+             'first_stop_dist_nearest_point']]
+    
     Map1 = lambda x: max(x) - min(x)
-    rawnav_q_stop_sum_dat = \
-        rawnav_q_target_dat.groupby(['filename', 'index_trip_start_in_clean_data']). \
+    rawnav_q_segment_summary = \
+        rawnav_q_target_dat.groupby(['filename', 'index_trip_start_in_clean_data', 'seg_name_id']).\
             agg({'odomt_ft': ['min', 'max', Map1],
                  'sec_past_st': ['min', 'max', Map1],
                  'lat': ['first', 'last'],
                  'long': ['first', 'last'],
-                 'first_stop_dist_nearest_point': ['first'],
-                 'trip_length': ['first'],
-                 'route_text': ['first'],
-                 'pattern_name': ['first'],
-                 'direction': ['first'],
-                 'pattern_destination': ['first'],
-                 'direction_id': ['first']})
-    breakpoint() # i think the points after this are scehdule specific, right?
-    # COULD maybe insert a string here to make this reusable...
-    # need to replace trip with run
-    rawnav_q_stop_sum_dat.columns = ['start_odom_ft_wmata_schedule', 'end_odom_ft_wmata_schedule',
-                                     'trip_dist_mi_odom_and_wmata_schedule', 'start_sec_wmata_schedule',
-                                     'end_sec_wmata_schedule', 'trip_dur_sec_wmata_schedule',
-                                     'start_lat_wmata_schedule', 'end_lat_wmata_schedule',
-                                     'start_long_wmata_schedule', 'end_long_wmata_schedule',
-                                     'dist_first_stop_wmata_schedule', 'trip_length_mi_direct_wmata_schedule',
-                                     'route_text_wmata_schedule', 'pattern_name_wmata_schedule',
-                                     'direction_wmata_schedule', 'pattern_destination_wmata_schedule',
-                                     'direction_id_wmata_schedule']
-    rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule']] = \
-        rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule']] / 5280
-    rawnav_q_stop_sum_dat.loc[:, ['trip_length_mi_direct_wmata_schedule']] = \
-        rawnav_q_stop_sum_dat.loc[:, ['trip_length_mi_direct_wmata_schedule']] / 5280
-    rawnav_q_stop_sum_dat.loc[:, 'trip_speed_mph_wmata_schedule'] = \
+                 'first_stop_dist_nearest_point': ['first']})
+
+    rawnav_q_segment_summary.columns = ['start_odom_ft_segment', 
+                                     'end_odom_ft_segment',
+                                     'trip_dist_mi_odom_and_segment', 
+                                     'start_sec_segment',
+                                     'end_sec_segment', 
+                                     'trip_dur_sec_segment',
+                                     'start_lat_segment', 
+                                     'end_lat_segment',
+                                     'start_long_segment', 
+                                     'end_long_segment',
+                                     'dist_first_stop_segment'] 
+    rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment']] = \
+        rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment']] / 5280
+    rawnav_q_segment_summary.loc[:, 'trip_speed_mph_segment'] = \
         round(3600 *
-              rawnav_q_stop_sum_dat.trip_dist_mi_odom_and_wmata_schedule /
-              rawnav_q_stop_sum_dat.trip_dur_sec_wmata_schedule, 2)
-    rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule', 'dist_first_stop_wmata_schedule',
-                                  'trip_length_mi_direct_wmata_schedule']] = \
-        round(rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule', 'dist_first_stop_wmata_schedule',
-                                            'trip_length_mi_direct_wmata_schedule']], 2)
-    rawnav_q_stop_sum_dat = \
-        rawnav_q_stop_sum_dat.merge(rawnav_sum_dat, on=['filename', 'index_trip_start_in_clean_data'], how='left')
+              rawnav_q_segment_summary.trip_dist_mi_odom_and_segment /
+              rawnav_q_segment_summary.trip_dur_sec_segment, 2)
+    rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment', 
+                                  'dist_first_stop_segment']] = \
+        round(rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment', 
+                                            'dist_first_stop_segment']], 2)
+    
+    rawnav_q_segment_summary.reset_index(inplace = True)
         
-    rawnav_q_stop_sum_dat.set_index(
-        ['fullpath', 'filename', 'file_id', 'wday', 'start_date_time', 'end_date_time',
-         'index_trip_start_in_clean_data', 'taglist', 'route_pattern', 'route', 'pattern'], 
-        inplace=True,
-        drop=True)
+    rawnav_q_segment_summary =\
+        rawnav_q_segment_summary.merge(rawnav_sum_dat, on=['filename', 
+                                                           'index_trip_start_in_clean_data'], 
+                                       how='left')
+                
+    return rawnav_q_segment_summary
+
+def output_rawnav_merge(summary,
+                        index,
+                        outtype,
+                        path):
+    # TODO: documentation go here
+    
+    dir_new = os.path.join(path, "segment_summary.parquet")
+    if not os.path.isdir(dir_new): 
+        os.mkdir(dir_new)
+    else:
+        while os.path.isdir(dir_new):
+             shutil.rmtree(dir_new, ignore_errors=True)  
+    
+    pq.write_to_dataset(pa.Table.from_pandas(summary), 
+                    root_path=os.path.join(dir_new),
+                    partition_cols=['route','wday','seg_name_id'])
+    
+    dir_new = os.path.join(path, "segment_index.parquet")
+    if not os.path.isdir(dir_new): 
+        os.mkdir(dir_new)
+    else:
+         while os.path.isdir(dir_new):
+             shutil.rmtree(dir_new, ignore_errors=True)  
         
-    return rawnav_q_stop_sum_dat
+    pq.write_to_dataset(pa.Table.from_pandas(index), 
+                        root_path=os.path.join(dir_new),
+                        partition_cols=['route','wday','seg_name_id'])
+        

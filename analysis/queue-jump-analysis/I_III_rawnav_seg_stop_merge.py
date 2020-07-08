@@ -20,7 +20,7 @@ ipython.magic("autoreload")
 ############################################
 from datetime import datetime
 
-import os, sys
+import os, sys, shutil
 
 if not sys.warnoptions:
     import warnings
@@ -29,6 +29,8 @@ if not sys.warnoptions:
 import os, sys
 import pandas as pd
 import geopandas as gpd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 # 1.2 Set Global Parameters
 ############################################
@@ -53,7 +55,7 @@ else:
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None
 restrict_n = 5000
-q_jump_route_list = [ 'H8', 'W47'] 
+q_jump_route_list = [  'W47']  #'H8'
  # ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
                      # 16 Gb RAM can't handle all these at one go
 analysis_routes = q_jump_route_list
@@ -145,6 +147,23 @@ seg_pattern_first_last = wr.explode_first_last(seg_pattern_shape)
 
 # 3.1 Rawnav-Segment ########################
 
+# Make Output Directory
+# TODO: function? also, something that makes this 'safer'?
+path_seg_summary = os.path.join(path_processed_data, "segment_summary.parquet")
+if not os.path.isdir(path_seg_summary): 
+    os.mkdir(path_seg_summary)
+else:
+    while os.path.isdir(path_seg_summary):
+         shutil.rmtree(path_seg_summary, ignore_errors=True) 
+             
+path_seg_index = os.path.join(path_processed_data, "segment_index.parquet")
+if not os.path.isdir(path_seg_index): 
+    os.mkdir(path_seg_index)
+else:
+     while os.path.isdir(path_seg_index):
+         shutil.rmtree(path_seg_index, ignore_errors=True) 
+
+# Iterate
 for analysis_route in analysis_routes:
     for analysis_day in analysis_days:
         # TODO: reinsert the checks, print statements
@@ -157,8 +176,7 @@ for analysis_route in analysis_routes:
                 analysis_days_=analysis_day,
                 restrict=restrict_n)
         except Exception as e:
-            # No data found
-            breakpoint()
+            print(e) #usually no data found or something similar
             continue
         else:
             rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
@@ -176,6 +194,7 @@ for analysis_route in analysis_routes:
                                                 how='right')
             
             # Address Remaining Col Format issues
+            # TODO: resolve these elsewhere
             rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
             rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
             rawnav_summary_dat.route = rawnav_summary_dat.route.astype(str)
@@ -190,27 +209,29 @@ for analysis_route in analysis_routes:
             xwalk_seg_pattern_subset = xwalk_seg_pattern.query('route == @analysis_route')
     
             for seg in xwalk_seg_pattern_subset.seg_name_id:
-                index_run_segment_start_end = \
+                index_run_segment_start_end, summary_run_segment = \
                     wr.merge_rawnav_segment(
                         rawnav_gdf_=rawnav_qjump_gdf,
                         rawnav_sum_dat_=rawnav_summary_dat,
                         target_=seg_pattern_first_last.query('seg_name_id == @seg and route == @analysis_route'))
-                breakpoint()
-    
-            # TODO: create output after function is run        
-            # wr.output_rawnav_wmata_schedule(
-            #     analysis_route_=analysis_route,
-            #     analysis_day_=analysis_day,
-            #     wmata_schedule_based_sum_dat_=wmata_schedule_based_sum_dat,
-            #     rawnav_wmata_schedule_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat,
-            #     path_processed_data_=path_processed_data)
+                
+                # TODO: clean up a little bit on these
+                index_run_segment_start_end['wday'] = analysis_day
+                summary_run_segment['wday'] = analysis_day
+                
+                # TODO: this stopped working...
+                pq.write_to_dataset(
+                    table = pa.Table.from_pandas(summary_run_segment),
+                    root_path = path_seg_summary,
+                    partition_cols = ['route','wday','seg_name_id'])
+                
+                pq.write_to_dataset(
+                    table = pa.Table.from_pandas(index_run_segment_start_end),
+                    root_path = path_seg_index,
+                    partition_cols = ['route','wday','seg_name_id'])
+                
 
-
-# 3.1.1. Identify points at the start and end of each segment for each run 
-
-# 3.1.2 After the fact checks on rawnav-segment merge:
-
-             
+                         
 # 3.2 Rawnav-Stop Zone Merge ########################
 
 # Essentially, repeat the above steps or those for the schedule merge, but for stop zones. Stop

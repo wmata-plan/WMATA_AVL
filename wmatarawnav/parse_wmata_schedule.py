@@ -259,7 +259,6 @@ def merge_rawnav_target(target_dat, rawnav_dat, quiet = True):
     nearest_rawnav_point_to_target_dat = pd.DataFrame()
     
     for name, rawnav_group in rawnav_groups:
-        # breakpoint()
         try: 
             target_dat_relevant = \
                 target_groups.get_group(
@@ -346,7 +345,7 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
     '''
     Parameters
     ----------
-    rawnav_q_dat: pd.DataFrame, rawnav data
+    rawnav_q_dat: pd.DataFrame, rawnav data 
     rawnav_sum_dat: pd.DataFrame, rawnav summary data
     nearest_stop_dat: gpd.GeoDataFrame
         cleaned data on nearest rawnav point to wmata schedule data where
@@ -358,7 +357,8 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
     rawnav_q_stop_sum_dat: pd.DataFrame
         trip summary data with additional information from wmata schedule data
     '''
-    # 5 Get summary after using GTFS data
+    # TODO: Currently the arguments actually come in as gdfs, should check on that...
+    # 5 Get summary after merging files
     ########################################################################################
     first_last_stop_dat = get_first_last_stop_rawnav(nearest_stop_dat)
     rawnav_q_stop_dat = \
@@ -416,6 +416,8 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
     return rawnav_q_stop_sum_dat
 
 
+
+
 def get_first_last_stop_rawnav(nearest_rawnav_stop_dat):
     '''
 
@@ -433,18 +435,18 @@ def get_first_last_stop_rawnav(nearest_rawnav_stop_dat):
     '''
     last_stop_dat = nearest_rawnav_stop_dat.copy()
     last_stop_dat.loc[:, "tempCol"] = \
-        last_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).stop_sort_order.transform(max)
-    last_stop_dat = last_stop_dat.query('stop_sort_order==tempCol').reset_index(drop=True).drop(columns='tempCol')
+        last_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).index_loc.transform(max)
+    last_stop_dat = last_stop_dat.query('index_loc==tempCol').reset_index(drop=True).drop(columns='tempCol')
     last_stop_dat = last_stop_dat[['filename', 'index_trip_start_in_clean_data', 'index_loc',
                                    'dist_to_nearest_point']]
     last_stop_dat.rename(columns={'index_loc': 'index_loc_last_stop',
                                   'dist_to_nearest_point': 'last_stop_dist_nearest_point'}, inplace=True)
     first_stop_dat = \
-        nearest_rawnav_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).stop_sort_order.transform(min)
+        nearest_rawnav_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).index_loc.transform(min)
     first_stop_dat = nearest_rawnav_stop_dat.copy()
     first_stop_dat.loc[:, "tempCol"] = \
-        first_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).stop_sort_order.transform(min)
-    first_stop_dat = first_stop_dat.query('stop_sort_order==tempCol').reset_index(drop=True).drop(columns='tempCol')
+        first_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).index_loc.transform(min)
+    first_stop_dat = first_stop_dat.query('index_loc==tempCol').reset_index(drop=True).drop(columns='tempCol')
     first_stop_dat.rename(columns={'index_loc': 'index_loc_first_stop',
                                    'dist_to_nearest_point': 'first_stop_dist_nearest_point'}, inplace=True)
     first_stop_dat.sort_values(['filename', 'index_trip_start_in_clean_data'], inplace=True)
@@ -470,7 +472,7 @@ def make_target_rawnav_linestring(index_table):
         gpd.GeoDataFrame(
             index_table, 
             geometry=geometry, 
-            crs=target_dat.crs)
+            crs=index_table.crs)
 
     return index_table
 
