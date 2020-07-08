@@ -154,7 +154,7 @@ for analysis_route in analysis_routes:
         print("*" * 50)
         print(f'Processing analysis route {analysis_route} for {analysis_day}...')
         wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat = \
-            wr.parent_merge_rawnav_wmata_schedule(
+            wr.merge_rawnav_wmata_schedule(
                 analysis_route_=analysis_route,
                 analysis_day_=analysis_day,
                 rawnav_dat_=rawnav_qjump_gdf,

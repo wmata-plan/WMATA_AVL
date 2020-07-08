@@ -62,6 +62,8 @@ analysis_routes = q_jump_route_list
 # analysis_routes = ['S2','S4','H1','H2','H3','79','W47']
 analysis_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
+# EPSG code for WMATA-area work
+wmata_crs = 2248
 # 1.3 Import User-Defined Package
 ############################################
 import wmatarawnav as wr
@@ -69,40 +71,53 @@ import wmatarawnav as wr
 # 2 Load Relevant Static Files 
 ####################################################################################################
 
-# 1. load segment-pattern-stop crosswalk 
-# - could make this based on the pattern identifiers instead of route and direction, but just 
-#   sketching... You'll of course want to replace direction_id with something more rawnav specific
-#   and also replace the stop_id.
-# - Could also replace with a looked-up Excel file, but leaving as this for now
-
-xwalk_seg_pattern_stop = wr.tribble(
-             ['route','direction_id',                   'seg_name_id', 'stop_id'], 
-                 "79",            1,               "georgia_columbia",    '5381',      
-                 "79",            1,      "georgia_piney_branch_long",    '5401',
+# 2.1. Load segment-pattern-stop crosswalk 
+# This crosswalk is used to connect segment shapes to rawnav data. The 'route' field must 
+# match the same string used in the rawnav data. 'direction' will be looked up in a moment
+# against the wmata schedule database
+# and replaced with a pattern code as an int32 value. 'seg_name_id' is also found in the segment
+# geometry file. 'stop_id' matches the stop identifier in the WMATA schedule database.
+xwalk_seg_pattern_stop_in = wr.tribble(
+             ['route',        'direction',                    'seg_name_id','stop_id'], 
+                 "79",            "SOUTH",               "georgia_columbia",    '5381',      
+                 "79",            "SOUTH",      "georgia_piney_branch_long",    '5401',
                  #not sure yet how to deal with second stop, but i think this works
-                 "70",            1,                 "georgia_irving",    '5600',
-                 "70",            1,                 "georgia_irving",    '5381', 
-                 "70",            1,      "georgia_piney_branch_shrt",    '5401',
-                 "S1",            0,               "sixteenth_u_shrt",    '7848',
-                 "S2",            0,               "sixteenth_u_shrt",    '7848',
-                 "S4",            0,               "sixteenth_u_shrt",    '7848',
-                 "S9",            0,               "sixteenth_u_long",    '7848',
-                 "64",            0,            "eleventh_i_new_york",    '7627',
-                 "G8",            0,            "eleventh_i_new_york",    '7627',
-                "D32",            0,     "irving_fifteenth_sixteenth",    '7794',
-                 "H1",            0,     "irving_fifteenth_sixteenth",    '7794',
-                 "H2",            0,     "irving_fifteenth_sixteenth",    '7794',
-                 "H3",            0,     "irving_fifteenth_sixteenth",    '7794',
-                 "H4",            0,     "irving_fifteenth_sixteenth",    '7794',
-                 "H8",            0,     "irving_fifteenth_sixteenth",    '7794',
-                "W47",            0,     "irving_fifteenth_sixteenth",    '7794'
+                 "70",            "SOUTH",                 "georgia_irving",    '5600',
+                 "70",            "SOUTH",                 "georgia_irving",    '5381', 
+                 "70",            "SOUTH",      "georgia_piney_branch_shrt",    '5401',
+                 "S1",            "NORTH",               "sixteenth_u_shrt",    '7848',
+                 "S2",            "NORTH",               "sixteenth_u_shrt",    '7848',
+                 "S4",            "NORTH",               "sixteenth_u_shrt",    '7848',
+                 "S9",            "NORTH",               "sixteenth_u_long",    '7848',
+                 "64",            "NORTH",            "eleventh_i_new_york",    '7627',
+                 "G8",             "EAST",            "eleventh_i_new_york",    '7627',
+                "D32",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
+                 "H1",            "NORTH",     "irving_fifteenth_sixteenth",    '7794',
+                 "H2",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
+                 "H3",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
+                 "H4",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
+                 "H8",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
+                "W47",             "EAST",     "irving_fifteenth_sixteenth",    '7794'
   )
 
-# 2. load segment-pattern crosswalk (could be loaded separately or summarized from above)
+xwalk_wmata_route_dir_pattern = wr.read_sched_db_patterns(
+    path = os.path.join(path_source_data,
+                        "wmata_schedule_data",
+                        "Schedule_082719-201718.mdb"),
+    analysis_routes = analysis_routes)\
+    [['direction', 'route','pattern']]\
+    .drop_duplicates()
+    
+xwalk_seg_pattern_stop = (xwalk_seg_pattern_stop_in
+                          .merge(xwalk_wmata_route_dir_pattern, on = ['route','direction'])
+                          .drop('direction', 1)
+                          .reindex(columns = ['route','pattern','seg_name_id','stop_id']))
 
-xwalk_seg_pattern = \
-    xwalk_seg_pattern_stop.drop('stop_id', 1).\
-    drop_duplicates()
+del xwalk_seg_pattern_stop_in
+
+# 2. load segment-pattern crosswalk (could be loaded separately or summarized from above)
+xwalk_seg_pattern = (xwalk_seg_pattern_stop.drop('stop_id', 1)
+                     .drop_duplicates())
 
 # 3. load shapes
 # Segments
@@ -110,102 +125,93 @@ xwalk_seg_pattern = \
 # Note that these are not yet updated to reflect the extension of the 11th street segment 
 # further south to give the stop more breathing room.
 segments = gpd.read_file(
-    os.path.join(path_processed_data,"segments.geojson"))
+    os.path.join(path_processed_data,"segments.geojson")).\
+    to_crs(wmata_crs)
 
 # Intersections
 # WT: TBD -- Will do some of this work in ArCGIS first
 
+# 2.2 Segment Reformat ########################
+# A bit of a hack for now, but we'll reformat the segments file and segments crosswalk to make a 
+# file similar in key to the wmata patterns file. Then we'll be able to reuse that function in 
+# a number of ways.
 
-# 2 Merge Additional Geometry
+seg_pattern_shape = segments.merge(xwalk_seg_pattern, on = ['seg_name_id'])
+
+seg_pattern_first_last = wr.explode_first_last(seg_pattern_shape)
+
+# 3 Merge Additional Geometry
 ####################################################################################################
 
-# First, we'd run additional 'merge' style functions that take as input rawnav data (possibly
-#   filtered to a route or day) and other geometry and then return data frames returning the 
-#   index of points nearest to these geometries, beginning with segments.
-
-# NOTE: we may want to combine this work with the I_II_rawnav_wmata_schedule_merge.py script
-# since it's performing a pretty similar function. Up to you!
-
-# 2.1 Rawnav-Segment ########################
+# 3.1 Rawnav-Segment ########################
 
 for analysis_route in analysis_routes:
     for analysis_day in analysis_days:
         # TODO: reinsert the checks, print statements
         
         # Reload data
-        rawnav_dat = wr.read_cleaned_rawnav(
-            path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
-            analysis_routes_=analysis_route,
-            analysis_days_=analysis_day,
-            restrict=restrict_n)
-        rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
-
-        rawnav_summary_dat, rawnav_trips_less_than_600sec_or_2miles = wr.read_summary_rawnav(
-                        path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
-                        analysis_routes_=analysis_route,
-                        analysis_days_=analysis_day,
-                        restrict=restrict_n)
-        rawnav_summary_dat = wr.fix_rawnav_names(rawnav_summary_dat)
-        
-        # Subset Rawnav Data to Records Desired
-        rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_trip_start_in_clean_data']]
-        rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col, on=['filename', 'index_trip_start_in_clean_data'],
-                                            how='right')
-        
-        # Address Remaining Col Format issues
-        rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
-        rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
-        rawnav_summary_dat.route = rawnav_summary_dat.route.astype(str)
-
-        # Iterate on Xwalk 
-        xwalk_seg_pattern_subset = xwalk_seg_pattern.query('route == @analysis_route')
-
-        for seg in xwalk_seg_pattern_subset.seg_name_id:
+        try:
+            rawnav_dat = wr.read_cleaned_rawnav(
+                path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
+                analysis_routes_=analysis_route,
+                analysis_days_=analysis_day,
+                restrict=restrict_n)
+        except Exception as e:
+            # No data found
+            breakpoint()
+            continue
+        else:
+            rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
+    
+            rawnav_summary_dat, rawnav_trips_less_than_600sec_or_2miles = wr.read_summary_rawnav(
+                            path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
+                            analysis_routes_=analysis_route,
+                            analysis_days_=analysis_day,
+                            restrict=restrict_n)
+            rawnav_summary_dat = wr.fix_rawnav_names(rawnav_summary_dat)
             
-            summary_run_segment, index_run_segment_start_end = \
-                wr.parent_merge_rawnav_segment(
-                    rawnav_dat_=rawnav_subset_dat,
-                    rawnav_sum_dat_=rawnav_sum_subset_dat,
-                    segments_=segments)
-         
-        
+            # Subset Rawnav Data to Records Desired
+            rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_trip_start_in_clean_data']]
+            rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col, on=['filename', 'index_trip_start_in_clean_data'],
+                                                how='right')
             
-            
-            
+            # Address Remaining Col Format issues
+            rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
+            rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
+            rawnav_summary_dat.route = rawnav_summary_dat.route.astype(str)
+    
+            rawnav_qjump_gdf = gpd.GeoDataFrame(
+                rawnav_qjump_dat, 
+                geometry = gpd.points_from_xy(rawnav_qjump_dat.long,rawnav_qjump_dat.lat),
+                crs='EPSG:4326').\
+                to_crs(epsg=wmata_crs)
+    
+            # Iterate on over Pattern-Segments Combinations
+            xwalk_seg_pattern_subset = xwalk_seg_pattern.query('route == @analysis_route')
+    
+            for seg in xwalk_seg_pattern_subset.seg_name_id:
+                index_run_segment_start_end = \
+                    wr.merge_rawnav_segment(
+                        rawnav_gdf_=rawnav_qjump_gdf,
+                        rawnav_sum_dat_=rawnav_summary_dat,
+                        target_=seg_pattern_first_last.query('seg_name_id == @seg and route == @analysis_route'))
+                breakpoint()
+    
+            # TODO: create output after function is run        
+            # wr.output_rawnav_wmata_schedule(
+            #     analysis_route_=analysis_route,
+            #     analysis_day_=analysis_day,
+            #     wmata_schedule_based_sum_dat_=wmata_schedule_based_sum_dat,
+            #     rawnav_wmata_schedule_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat,
+            #     path_processed_data_=path_processed_data)
 
-        # wr.output_rawnav_wmata_schedule(
-        #     analysis_route_=analysis_route,
-        #     analysis_day_=analysis_day,
-        #     wmata_schedule_based_sum_dat_=wmata_schedule_based_sum_dat,
-        #     rawnav_wmata_schedule_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat,
-        #     path_processed_data_=path_processed_data)
 
+# 3.1.1. Identify points at the start and end of each segment for each run 
 
-# 2.1.1. Identify points at the start and end of each segment for each run 
-    # Similar approach (if not the exact same!) as the approach used for the schedule merge. 
-    # Iterate over the runs using function called something like wr.parent_merge_rawnav_segment(). 
-    #   Take care to ensure each run can be associated with several segments. Take care to ensure
-    #   that if multiple variants of a segment were defined during testing (ala a version that starts
-    #   upstream 75 feet from previous intersection vs. 150 feet from previous intersection) we 
-    #   could still make the function work.
-    # Return two dataframes
-        # 1. index of segment start-end and nearest rawnav point for each run  (index_run_segment_start_end)
-            #   results in two rows per run per applicable segment, one observation for start, one for end
-        # 2. segment-run summary table (summary_run_segment)
-            #    one row per run per applicable segment, information on start and end observation and time, dist., etc.
+# 3.1.2 After the fact checks on rawnav-segment merge:
 
-# 2.1.2 After the fact checks on rawnav-segment merge:
-    # I imagine we should do some double-checking that the results are about what we want for each run:
-    #  - Are the points nearest to the end of the segment within ~ X feet?
-    #  - Are the nearest points in order, such that the segment start point has a lower index value than the
-    #    segment end point (checks that the segment was drawn in the right direction and that any
-    #    future bidirectional segment is actually drawn once for every segment)
-    #  -  Are rawnav points continuously within a buffer of ~Y feet around a segment?
-    # At this point, one could further filter the rawnav_run_iteration_frame created in #2 to those 
-    #   meeting certain criteria for quality (e.g., average speed not insanely high or low, total
-    #   travel time or travel distance not crazy).
              
-# 2.2 Rawnav-Stop Zone Merge ########################
+# 3.2 Rawnav-Stop Zone Merge ########################
 
 # Essentially, repeat the above steps or those for the schedule merge, but for stop zones. Stop
 #   zones here defined as a number of feet upstream and a number of feet downstream from a QJ stop.
@@ -237,6 +243,6 @@ for analysis_route in analysis_routes:
 #   the next downstream stop's zone doesn't extend back into our evaluation segment.
 
 
-# 2.3 Rawnav-Intersection Merge ######################## 
+# 3.3 Rawnav-Intersection Merge ######################## 
 
 # To follow, time permitting.
