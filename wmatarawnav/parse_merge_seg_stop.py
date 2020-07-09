@@ -135,32 +135,3 @@ def include_segment_summary(rawnav_q_dat,
                                        how='left')
                 
     return rawnav_q_segment_summary
-
-def output_rawnav_merge(summary,
-                        index,
-                        outtype,
-                        path):
-    # TODO: documentation go here
-    
-    dir_new = os.path.join(path, "segment_summary.parquet")
-    if not os.path.isdir(dir_new): 
-        os.mkdir(dir_new)
-    else:
-        while os.path.isdir(dir_new):
-             shutil.rmtree(dir_new, ignore_errors=True)  
-    
-    pq.write_to_dataset(pa.Table.from_pandas(summary), 
-                    root_path=os.path.join(dir_new),
-                    partition_cols=['route','wday','seg_name_id'])
-    
-    dir_new = os.path.join(path, "segment_index.parquet")
-    if not os.path.isdir(dir_new): 
-        os.mkdir(dir_new)
-    else:
-         while os.path.isdir(dir_new):
-             shutil.rmtree(dir_new, ignore_errors=True)  
-        
-    pq.write_to_dataset(pa.Table.from_pandas(index), 
-                        root_path=os.path.join(dir_new),
-                        partition_cols=['route','wday','seg_name_id'])
-        

@@ -38,9 +38,9 @@ if os.getlogin() == "WylieTimmerman":
     path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL"
     os.chdir(os.path.join(path_working))
     sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
-    path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
-    path_source_data = os.path.join(path_sp,"Client Shared Folder","data","00-raw")
-    path_processed_data = os.path.join(path_sp, r"Client Shared Folder\data\02-processed")
+    path_sp = r"C:\Users\WylieTimmerman\Documents\projects_local\wmata_avl_local"
+    path_source_data = os.path.join(path_sp,"data","00-raw")
+    path_processed_data = os.path.join(path_sp, "data","02-processed")
 elif os.getlogin() == "abibeka":
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
     os.chdir(os.path.join(path_working))
@@ -148,20 +148,14 @@ seg_pattern_first_last = wr.explode_first_last(seg_pattern_shape)
 # 3.1 Rawnav-Segment ########################
 
 # Make Output Directory
-# TODO: function? also, something that makes this 'safer'?
+# TODO: Function or something that makes this safer?
 path_seg_summary = os.path.join(path_processed_data, "segment_summary.parquet")
-if not os.path.isdir(path_seg_summary): 
-    os.mkdir(path_seg_summary)
-else:
-    while os.path.isdir(path_seg_summary):
-         shutil.rmtree(path_seg_summary, ignore_errors=True) 
-             
+shutil.rmtree(path_seg_summary, ignore_errors=True) 
+os.mkdir(path_seg_summary)
+
 path_seg_index = os.path.join(path_processed_data, "segment_index.parquet")
-if not os.path.isdir(path_seg_index): 
-    os.mkdir(path_seg_index)
-else:
-     while os.path.isdir(path_seg_index):
-         shutil.rmtree(path_seg_index, ignore_errors=True) 
+shutil.rmtree(path_seg_index, ignore_errors=True) 
+os.mkdir(path_seg_index)
 
 # Iterate
 for analysis_route in analysis_routes:
@@ -215,11 +209,9 @@ for analysis_route in analysis_routes:
                         rawnav_sum_dat_=rawnav_summary_dat,
                         target_=seg_pattern_first_last.query('seg_name_id == @seg and route == @analysis_route'))
                 
-                # TODO: clean up a little bit on these
                 index_run_segment_start_end['wday'] = analysis_day
                 summary_run_segment['wday'] = analysis_day
                 
-                # TODO: this stopped working...
                 pq.write_to_dataset(
                     table = pa.Table.from_pandas(summary_run_segment),
                     root_path = path_seg_summary,

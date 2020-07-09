@@ -36,13 +36,9 @@ if os.getlogin() == "WylieTimmerman":
     path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL"
     os.chdir(os.path.join(path_working))
     sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
-    path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
-    # Source data
-    # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
-    path_source_data = os.path.join(path_sp,"Client Shared Folder","data","00-raw")
-    path_wmata_schedule_data = os.path.join(path_working, "data", "02-processed")
-    # Processed data
-    path_processed_data = os.path.join(path_sp, r"Client Shared Folder\data\02-processed")
+    path_sp = r"C:\Users\WylieTimmerman\Documents\projects_local\wmata_avl_local"
+    path_source_data = os.path.join(path_sp,"data","00-raw")
+    path_processed_data = os.path.join(path_sp, "data","02-processed)
 elif os.getlogin() == "abibeka":
     # Working Paths
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
@@ -50,11 +46,10 @@ elif os.getlogin() == "abibeka":
     sys.path.append(path_working)
     # Source data
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
-    path_wmata_schedule_data = os.path.join(path_working, "data", "02-processed")
     # Processed data
     path_processed_data = os.path.join(path_source_data, "ProcessedData")
 else:
-    raise FileNotFoundError("Define the path_working, path_source_data, path_wmata_schedule_data, and"
+    raise FileNotFoundError("Define the path_working, path_source_data, and"
                             " path_processed_data in a new elif block")
 
 # Globals
