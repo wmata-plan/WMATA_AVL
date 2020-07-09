@@ -9,151 +9,238 @@ Note: the sections here are guideposts - this may be better as several scripts
 
 # 0 Housekeeping. Clear variable space
 ####################################################################################################
+from IPython import get_ipython  
 
+ipython = get_ipython()
+ipython.magic("reset -f")
+ipython = get_ipython()
+ipython.magic("autoreload")
 # 1 Import Libraries and Set Global Parameters
 ####################################################################################################
-
-
 # 1.1 Import Python Libraries
-#############################################
+############################################
+from datetime import datetime
+
+import os, sys, shutil
+
+if not sys.warnoptions:
+    import warnings
+    # warnings.simplefilter("ignore")  # Stop Pandas warnings
 
 import os, sys
 import pandas as pd
 import geopandas as gpd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 # 1.2 Set Global Parameters
 ############################################
 
 if os.getlogin() == "WylieTimmerman":
-    # Working Paths
     path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL"
     os.chdir(os.path.join(path_working))
     sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
-    path_sp = r"C:\OD\Foursquare ITP\Foursquare ITP SharePoint Site - Shared Documents\WMATA Queue Jump Analysis"
-    # Source data
-    # path_source_data = os.path.join(path_sp,r"Client Shared Folder\data\00-raw\102019 sample")
-    path_source_data = r"C:\Downloads"
-    gtfs_dir = os.path.join(path_sp, r"Client Shared Folder\data\00-raw\wmata-2019-05-18 dl20200205gtfs")
-    # Processed data
-    path_processed_data = os.path.join(path_sp, r"Client Shared Folder\data\02-processed")
+    path_sp = r"C:\Users\WylieTimmerman\Documents\projects_local\wmata_avl_local"
+    path_source_data = os.path.join(path_sp,"data","00-raw")
+    path_processed_data = os.path.join(path_sp, "data","02-processed")
 elif os.getlogin() == "abibeka":
-    # Working Paths
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
     os.chdir(os.path.join(path_working))
     sys.path.append(path_working)
-    # Source data
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
-    gtfs_dir = os.path.join(path_source_data, "google_transit")
-    # Processed data
     path_processed_data = os.path.join(path_source_data, "ProcessedData")
 else:
     raise FileNotFoundError("Define the path_working, path_source_data, gtfs_dir, \
                             ZippedFilesloc, and path_processed_data in a new elif block")
+                            
+# Globals
+# Restrict number of zip files to parse to this number for testing.
+# For all cases, use None
+restrict_n = 5000
+q_jump_route_list = ['W47']  #'H8'
+ # ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
+                     # 16 Gb RAM can't handle all these at one go
+analysis_routes = q_jump_route_list
+# analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
+# analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
+# analysis_routes = ['S2','S4','H1','H2','H3','79','W47']
+analysis_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
+# EPSG code for WMATA-area work
+wmata_crs = 2248
+                            
 # 1.3 Import User-Defined Package
 ############################################
-
-# WT: I can't get out of my R habits, so defining this one for now!
-def tribble(columns, *data):
-    return pd.DataFrame(
-        data=list(zip(*[iter(data)]*len(columns))),
-        columns=columns
-    )
+import wmatarawnav as wr
 
 # 1.4 Reload Relevant Files 
 ####################################################################################################
+# TODO: Should we move this to a project specific folder or something? Right now I'm just recopying it
+# 2.1. Load segment-pattern-stop crosswalk 
+# This crosswalk is used to connect segment shapes to rawnav data. The 'route' field must 
+# match the same string used in the rawnav data. 'direction' will be looked up in a moment
+# against the wmata schedule database
+# and replaced with a pattern code as an int32 value. 'seg_name_id' is also found in the segment
+# geometry file. 'stop_id' matches the stop identifier in the WMATA schedule database.
+xwalk_seg_pattern_stop_in = wr.tribble(
+             ['route',        'direction',                    'seg_name_id','stop_id'], 
+                 "79",            "SOUTH",               "georgia_columbia",    '5381',      
+                 "79",            "SOUTH",      "georgia_piney_branch_long",    '5401',
+                 #not sure yet how to deal with second stop, but i think this works
+                 "70",            "SOUTH",                 "georgia_irving",    '5600',
+                 "70",            "SOUTH",                 "georgia_irving",    '5381', 
+                 "70",            "SOUTH",      "georgia_piney_branch_shrt",    '5401',
+                 "S1",            "NORTH",               "sixteenth_u_shrt",    '7848',
+                 "S2",            "NORTH",               "sixteenth_u_shrt",    '7848',
+                 "S4",            "NORTH",               "sixteenth_u_shrt",    '7848',
+                 "S9",            "NORTH",               "sixteenth_u_long",    '7848',
+                 "64",            "NORTH",            "eleventh_i_new_york",    '7627',
+                 "G8",             "EAST",            "eleventh_i_new_york",    '7627',
+                "D32",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
+                 "H1",            "NORTH",     "irving_fifteenth_sixteenth",    '7794',
+                 "H2",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
+                 "H3",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
+                 "H4",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
+                 "H8",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
+                "W47",             "EAST",     "irving_fifteenth_sixteenth",    '7794'
+  )
 
-# 1. load segment-pattern-stop crosswalk 
-# See earlier other script for example
+xwalk_wmata_route_dir_pattern = wr.read_sched_db_patterns(
+    path = os.path.join(path_source_data,
+                        "wmata_schedule_data",
+                        "Schedule_082719-201718.mdb"),
+    analysis_routes = analysis_routes)\
+    [['direction', 'route','pattern']]\
+    .drop_duplicates()
+    
+xwalk_seg_pattern_stop = (xwalk_seg_pattern_stop_in
+                          .merge(xwalk_wmata_route_dir_pattern, on = ['route','direction'])
+                          .drop('direction', 1)
+                          .reindex(columns = ['route','pattern','seg_name_id','stop_id']))
+
+del xwalk_seg_pattern_stop_in
 
 # 2. load segment-pattern crosswalk (could be loaded separately or summarized from above)
+xwalk_seg_pattern = (xwalk_seg_pattern_stop.drop('stop_id', 1)
+                     .drop_duplicates())
 
-# 3. load segment shapes
-# See earlier other script for example
+# 3. load shapes
+# Segments
+# Note unique identifier seg_name_id
+# Note that these are not yet updated to reflect the extension of the 11th street segment 
+# further south to give the stop more breathing room.
+segments = gpd.read_file(
+    os.path.join(path_processed_data,"segments.geojson")).\
+    to_crs(wmata_crs)
+    
+# 4. Load rawnav data
+rawnav_dat = wr.read_cleaned_rawnav(
+                path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
+                analysis_routes_=analysis_routes,
+                analysis_days_=analysis_days,
+                restrict=restrict_n)
+rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
 
-# 2 Add Additional Metrics to Rawnav Data
-####################################################################################################
-
-# Apoorba, on reflection, i think there are a few columns we should try to add to the rawnav data
-# during the processing phase (I_parse_rawnav.py) that are used repeatedly in the code elsewhere.
-# For now, it may be best to simply add these needed fields here, and then move this chunk of code
-# into I_parse_rawnav.py later.
-
-# In particular, I think we need the following (calculated in groups by run)
-#   SecsPastSt_marg (or some better name): The marginal time between the current rawnav ping and the
-#       next one.
-#   OdomFt_marg (or some better name):  The marignal distance between the current rawnav ping and the
-#       next one.
-#   fps_marg (or some better name): The speed between the current rawnav ping and the next one.
-
+segment_summary =\
+    pq.read_table(source = os.path.join(path_processed_data,"segment_summary.parquet"),
+                  # columns = [],
+                  use_pandas_metadata = True,
+                  # filters = 
+                  ).to_pandas()
 # 3 Filter Out Runs that Appear Problematic
 ####################################################################################################
 
-# Here, i imagine we'll want to use the summary files created in I_III_rawnav_other_merge.py to 
-#   identify runs that we should not include because . I think you partially did this with 
-#   read_summary_rawnav(), but it may be helpful to punt that to here in case we want to filter
-#   out runs that are incomplete in the middle of a segment or the middle of a stop zone.
+# TODO: need to change col name and add dist to last 'stop' 
+segment_summary_fil = segment_summary.query('dist_first_stop_segment < 30')
+
+# Reduce rawnav data to runs present in the summary file after filtering.
+# Don't want to do a straight merge -- that has issues in that some runs will appear twice in the 
+# segment summary file because they have multiple segments defined. This will keep them if they
+# meet criteria for any of their segments and will not duplicate. #TODO : test this.
+# Ideally we could shortcut this using the index, but the index for this table is a little different
+segment_summary_fil_runs = list(zip(segment_summary_fil.filename.values, 
+                                    segment_summary_fil.index_trip_start_in_clean_data.values))
+
+# Later we shouldn't need this
+rawnav_dat.set_index(['filename','index_trip_start_in_clean_data'], inplace = True)
+
+rawnav_qjump_dat = rawnav_dat[rawnav_dat.index.isin(segment_summary_fil_runs)]
+
+# TODO: repeat for filtering problematic wmata schedule joins
+
+# Cleanup
+del rawnav_dat    
+del segment_summary_fil_runs
+
+# 2 Add Additional Metrics to Rawnav Data (Temporary)
+####################################################################################################
+
+# We'll use the 'instantaneous' speed in some cases                 
+rawnav_qjump_dat[['odomt_ft_next','sec_past_st_next']] = (
+    rawnav_qjump_dat.groupby(['filename','index_trip_start_in_clean_data'], sort = False)\
+        [['odomt_ft','sec_past_st']]
+        .shift(-1))
+    
+rawnav_qjump_dat = (rawnav_qjump_dat
+                    .assign(fps_next = lambda x: x.odomt_ft_next / x.sec_past_st_next))
+    
+# but also want a bigger lag for more stable values for free flow speed
+rawnav_qjump_dat[['odomt_ft_next3','sec_past_st_next3']] = (
+    rawnav_qjump_dat.groupby(['filename','index_trip_start_in_clean_data'], sort = False)\
+        [['odomt_ft','sec_past_st']]
+        .shift(-3))
+
+rawnav_qjump_dat = (
+    rawnav_qjump_dat
+    .assign(fps_next3 = lambda x: x.odomt_ft_next3 / x.sec_past_st_next3))
 
 # 4 Calculate Free Flow Speed
 ####################################################################################################
 
-# NOTE: we may want to skip writing this function until later and substitute a table of hardcoded
-# values in the short-term, just so we can get the overall decomposition approach running.
-# Regardless of the choice above, while decomposition will ultimately be produced for individual
-# trips, freeflow is calculated as an aggregate value at the segment level. Result will look like
-# this:
+# TODO: Consider moving to function
+freeflow = []
+
+for seg in ['irving_fifteenth_sixteenth']:   #segments['seg_name_id']:
+    segment_summary_fil_seg = (
+        segment_summary_fil
+        .query('seg_name_id == @seg')\
+        [['filename', 'index_trip_start_in_clean_data', 'start_odom_ft_segment', 'end_odom_ft_segment']]
+        )
     
-seg_freeflow = tribble(
-             ['seg_name_id',              'spd_freeflow_fps'], 
-              "georgia_irving",                       44.0,
-              "georgia_columbia",                     44.0, 
-              "georgia_piney_branch_shrt",            44.0,
-              "georgia_piney_branch_long",            44.0,
-              "sixteenth_u_shrt",                     44.0,
-              "sixteenth_u_long",                     44.0,
-              "eleventh_i_new_york",                  44.0,
-              "irving_fifteenth_sixteenth",           36.7
-  )
-
-
-# We'll leave open a few options for calculating free flow speed:
-    # 1. Hardcode for each segment using posted speed (would need to be weighted somehow if 
-    #     a segment had multiple posted speeds, not ideal)
-    # 2. Bring in intersection points and calculate speeds between intersections (a little tedious,
-    #     may be hard to execute on short gaps between intersections/stops)
-    # 3. Take the 95th percentile average speed for the segment (doesn't work well for routes where there are few early
-    #     trips or cases where there are many downstream intersections of which most routes catch one)
-    # 4. Take a sort of 95th percentile speed by point (current approach)
-
-# wr.calc_seg_freeflow() will return a speed in feet per second calculated from inputs.
-
-#   Note that we want to use speed instead of time. Because each run may have its nearest rawnav 
-#   observation just ahead or just before the segment end (and we want to avoid the hassle of 
-#   interpolation), we'll calculate a speed here and then use this later to calculate the freeflow
-#   travel time in seconds, which we can use for the decomposition. We also want to use feet per
-#   second since that's a bit easier to work with downstream.
-
-#   Function Inputs include: 
-    # - segment identifier seg_name_id.
-    # - segment-pattern crosswalk, identifying what routes run on a segment. Any route running on 
-    #   a segment will be used for freeflow, such that an S2's run's freeflow speed may be based on
-    #   the S4. This could also just be a list of routes, but we'd ahve to be more careful on the
-    #   iteration in that case.
-    # - rawnav data
-    # - threshold percentile of speed (ala 0.95). 
+    #not sure about directionality of join, shouldn't matter much
+    rawnav_qjump_dat_seg = (
+        rawnav_qjump_dat
+        .merge(segment_summary_fil_seg,
+               on=['filename', 'index_trip_start_in_clean_data'], how='right')
+        )
+  
+    # TODO: insert the index field into the summary file, then update this filter.
+    # effect is probably the same though
+    rawnav_qjump_dat_seg = (
+        rawnav_qjump_dat_seg
+        .query('odomt_ft >= start_odom_ft_segment & odomt_ft < end_odom_ft_segment')
+        .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
+        )
+         
+    freeflow_seg = (
+        rawnav_qjump_dat_seg
+        .loc[lambda x: x.fps_next3 < 73.3, 'fps_next3']
+        .quantile([0.01, 0.05, 0.10, 0.15, 0.25, 0.5, 0.75, 0.85, 0.90, 0.95, 0.99])
+        .to_frame()
+        .assign(mph = lambda x: x.fps_next3 / 1.467,
+                seg_name_id = seg)
+        )
     
-#   Major steps:
-    # - filter segment-pattern crosswalk to routes matching seg_name_id. We can't vectorize because
-    #   we want to leave open possibility of multiple versions of a segment being defined.
-    # - filter to the rawnav pings beginning at point nearest to the beginning point and before the
-    #   final point.
-    # - For each record in the run, calculate the odometer distance between the current record and the next
-    #   run adn the time between the current record and the next run. Then calc the speed in ft per sec.
-    #   Likely will group by run and then ungroup here.
-    # - calculate Xth percentile speed over all observations.
-    
-# Again, output of this section is a simple table with one row for every segment and a value for the
-#   freeflow speed in feet per second of the segment.
+    freeflow.append(freeflow_seg)
+
+freeflow = pd.concat(freeflow)
+
+# why does this transpose?
+freeflow_vals = (
+    freeflow
+    .loc[.95]
+    .to_frame()
+    )
 
 # 4. Do Basic Decomposition of Travel Time by Run
 ####################################################################################################
