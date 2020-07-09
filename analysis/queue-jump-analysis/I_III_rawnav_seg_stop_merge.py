@@ -212,6 +212,8 @@ for analysis_route in analysis_routes:
                 index_run_segment_start_end['wday'] = analysis_day
                 summary_run_segment['wday'] = analysis_day
                 
+                # The additional partitioning here is excessive, but if fits better in the 
+                # iterative/chunking process above
                 pq.write_to_dataset(
                     table = pa.Table.from_pandas(summary_run_segment),
                     root_path = path_seg_summary,

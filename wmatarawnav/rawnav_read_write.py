@@ -5,6 +5,10 @@ Created on Thu Jul  9 12:20:18 2020
 @author: WylieTimmerman, Apoorba Bibeka
 """
 
+import pyarrow.parquet as pq
+from . import low_level_fns as ll
+
+
 def read_cleaned_rawnav(analysis_routes_, path_processed_route_data, restrict, analysis_days_):
     """
     Parameters

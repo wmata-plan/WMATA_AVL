@@ -11,8 +11,6 @@ from zipfile import BadZipfile
 import geopandas as gpd
 from shapely.geometry import Point
 from pandas.io.parsers import ParserError
-import pyarrow.parquet as pq
-from . import low_level_fns as ll
 
 # FIXME : Change all functions below to snake_case---refactor code
 # Parent Functions
@@ -89,13 +87,13 @@ def find_rawnav_routes(file_universe, nmax=None, quiet=True):
     # Get Tags and Reformat
     file_universe_df['taglist'] = [find_all_tags(path, quiet=quiet) for path in file_universe_df['fullpath']]
     file_universe_df = file_universe_df.explode('taglist')
-    file_universe_df[['line_num', 'route_pattern', 'tag_busid', 'tag_date', 'tag_time', 'Unk1', 'CanBeMiFt']] = \
+    file_universe_df[['line_num', 'route_pattern', 'tag_busid', 'tag_date', 'tag_time', 'Unk1', 'mi_to_ft']] = \
         file_universe_df['taglist'].str.split(',', expand=True)
     file_universe_df[['route', 'pattern']] = \
         file_universe_df['route_pattern'].str.extract('^(?:\s*)(?:(?!PO))(?:(?!PI))(?:(?!DH))(\S+)(\d{2})$')
     # Convert Column Types and Create new ones
-    # Note that we leave line_num as text, as integer values don't support
-    # NAs in Pandas
+    # Note that we leave some cols as text, as integer values don't support
+    # NAs in Pandas. Some of this conversion will occur later once 'empty' tags are removed
     file_universe_df['tag_busid'] = pd.to_numeric(file_universe_df['tag_busid'])
     file_universe_df['tag_datetime'] = file_universe_df['tag_date'] + ' ' + file_universe_df['tag_time']
     file_universe_df['tag_datetime'] = pd.to_datetime(file_universe_df['tag_datetime'],
@@ -104,6 +102,9 @@ def find_rawnav_routes(file_universe, nmax=None, quiet=True):
     file_universe_df['tag_starthour'] = pd.to_numeric(file_universe_df['tag_starthour'])
     file_universe_df['tag_date'] = pd.to_datetime(file_universe_df['tag_date'], infer_datetime_format=True)
     file_universe_df['wday'] = file_universe_df['tag_date'].dt.day_name()
+    
+    # TODO check if indexing here would be faster 
+    
     return file_universe_df
 
 
@@ -150,9 +151,10 @@ def clean_rawnav_data(data_dict, filename):
     '''
     rawnavdata = data_dict['RawData']
     tagline_data = data_dict['tagLineInfo']
+
     # Check the location of taglines from tagline_data data match the locations in rawnavdata
     try:
-        temp = tagline_data.NewLineNo.values.flatten()
+        temp = tagline_data.new_line_no.values.flatten()
         tag_indices = np.delete(temp, np.where(temp == -1))
         if (len(tag_indices)) != 0:
             check_tag_line_data = rawnavdata.loc[tag_indices, :]
@@ -160,42 +162,64 @@ def clean_rawnav_data(data_dict, filename):
             check_tag_line_data.loc[:, 'taglist'] = \
                 (check_tag_line_data[[0, 1, 2, 3, 4, 5]].astype(str) + ',').sum(axis=1).str.rsplit(",", 1, expand=True)[
                     0]
-            check_tag_line_data.loc[:, 'taglist'] = check_tag_line_data.loc[:, 'taglist'].str.strip()
+            check_tag_line_data.loc[:, 'taglist'] = check_tag_line_data.loc[:, 'taglist'].str.srun()
             infopat = '^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
             assert ((~check_tag_line_data.taglist.str.match(infopat, re.S)).sum() == 0)
     except:
         print(f"TagLists Did not match in file {filename}")
-    # Keep index references. Will use later
+    
     rawnavdata.reset_index(inplace=True);
-    rawnavdata.rename(columns={"index": "IndexLoc"}, inplace=True)
+    rawnavdata.rename(columns={"index": "index_loc"}, inplace=True)
+    
     # Get End of route Info
     tagline_data, delete_indices1 = add_end_route_info(rawnavdata, tagline_data)
     rawnavdata = rawnavdata[~rawnavdata.index.isin(np.append(tag_indices, delete_indices1))]
-    # Remove APC and CAL labels and keep APC locations. Can merge_asof later.
+   
+    # Remove APC and CAL labels and keep APC locations. 
     rawnavdata, apc_tag_loc = remove_apc_cal_tags(rawnavdata)
     rawnavdata = rawnavdata[rawnavdata.apply(check_valid_data_entry, axis=1)]
-    # Add the APC tag to the rawnav data to identify stops
     apc_loc_dat = pd.Series(apc_tag_loc, name='apc_tag_loc')
     apc_loc_dat = \
-        pd.merge_asof(apc_loc_dat, rawnavdata[["IndexLoc"]], left_on="apc_tag_loc", right_on="IndexLoc")
-    # default direction is backward
-    rawnavdata.loc[:, 'RowBeforeAPC'] = False
-    rawnavdata.loc[apc_loc_dat.IndexLoc, 'RowBeforeAPC'] = True
-    tagline_data.rename(columns={'NewLineNo': "IndexTripStart"}, inplace=True)
+        pd.merge_asof(apc_loc_dat, rawnavdata[["index_loc"]], left_on="apc_tag_loc", right_on="index_loc")
+    rawnavdata.loc[:, 'row_before_apc'] = False
+    rawnavdata.loc[apc_loc_dat.index_loc, 'row_before_apc'] = True
+    tagline_data.rename(columns={'new_line_no': "index_run_start_original"}, inplace=True)
+    
     # Get trip summary
-    summary_data = get_trip_summary(data=rawnavdata, tagline_data=tagline_data)
-    column_nm_map = {0: 'Lat', 1: 'Long', 2: 'Heading', 3: 'DoorState', 4: 'VehState', 5: 'OdomtFt', 6: 'SecPastSt',
-                     7: 'SatCnt',
-                     8: 'StopWindow', 9: 'Blank', 10: 'LatRaw', 11: 'LongRaw'}
+    summary_data = get_run_summary(data=rawnavdata, tagline_data=tagline_data)
+    
+    # Rename vals
+    column_nm_map = {0: 'lat', 
+                     1: 'long', 
+                     2: 'heading', 
+                     3: 'door_state', 
+                     4: 'veh_state', 
+                     5: 'odom_ft', 
+                     6: 'sec_past_st',
+                     7: 'sat_cnt',
+                     8: 'stop_window',
+                     9: 'blank', 
+                     10: 'lat_raw', 
+                     11: 'long_raw'}
     rawnavdata.rename(columns=column_nm_map, inplace=True)
+    
+    # Apply column transformations
+    rawnavdata = rawnavdata.assign(lat=lambda x: x.lat.astype('float'),
+                                   long=lambda x: x.long.astype('float'),
+                                   pattern=lambda x: x.pattern.astype('int32'),
+                                   route=lambda x: x.pattern.astype('str'),
+                                   heading=lambda x: x.heading.astype('float'))
+    
     # Add composite key to the data
-    rawnavdata = add_trip_dividers(rawnavdata, summary_data)
+    rawnavdata = add_run_dividers(rawnavdata, summary_data)
     rawnavdata.loc[:, "filename"] = filename
+    
     return_dict = {'rawnavdata': rawnavdata, 'summary_data': summary_data}
+    
     return return_dict
 
 
-def subset_rawnav_trip(rawnav_data_dict_, rawnav_inventory_filtered_, analysis_routes_):
+def subset_rawnav_run(rawnav_data_dict_, rawnav_inventory_filtered_valid_, analysis_routes_):
     '''
     Subset data for analysis routes
     Parameters
@@ -214,7 +238,7 @@ def subset_rawnav_trip(rawnav_data_dict_, rawnav_inventory_filtered_, analysis_r
         Concatenated data for an analysis route. 
     '''
     fin_dat = pd.DataFrame()
-    search_df = rawnav_inventory_filtered_[['route', 'filename']].set_index('route')
+    search_df = rawnav_inventory_filtered_valid_[['route', 'filename']].set_index('route')
     try:
         route_files = np.unique(search_df.loc[analysis_routes_, :].values.flatten())
         fin_dat = pd.concat([rawnav_data_dict_[file] for file in route_files])
@@ -228,7 +252,7 @@ def subset_rawnav_trip(rawnav_data_dict_, rawnav_inventory_filtered_, analysis_r
 # Nested Functions
 ########################################################################################################################
 
-def add_trip_dividers(data, summary_data):
+def add_run_dividers(data, summary_data):
     '''
     Parameters
     ----------
@@ -243,19 +267,19 @@ def add_trip_dividers(data, summary_data):
     '''
     summary_data.columns
     tags_temp = summary_data[
-        ['route_pattern', 'route', 'pattern', 'IndexTripStartInCleanData', 'IndexTripEndInCleanData']]
-    q1 = '''SELECT data.IndexLoc,data.Lat,data.Long,data.Heading,data.DoorState,data.VehState,data.OdomtFt,
-    data.SecPastSt,data.SatCnt,data.StopWindow,data.Blank,data.LatRaw,data.LongRaw,data.RowBeforeAPC,
-    tags_temp.route_pattern,tags_temp.route,tags_temp.pattern,tags_temp.IndexTripStartInCleanData,
-    tags_temp.IndexTripEndInCleanData
-    FROM data LEFT JOIN tags_temp on data.IndexLoc 
-    BETWEEN  tags_temp.IndexTripStartInCleanData and tags_temp.IndexTripEndInCleanData
+        ['route_pattern', 'route', 'pattern', 'index_run_start', 'index_run_end']]
+    q1 = '''SELECT data.index_loc,data.lat,data.long,data.heading,data.door_state,data.veh_state,data.odom_ft,
+    data.sec_past_st,data.sat_cnt,data.stop_window,data.blank,data.lat_raw,data.long_raw,data.row_before_apc,
+    tags_temp.route_pattern,tags_temp.route,tags_temp.pattern,tags_temp.index_run_start,
+    tags_temp.index_run_end
+    FROM data LEFT JOIN tags_temp on data.index_loc 
+    BETWEEN  tags_temp.index_run_start and tags_temp.index_run_end
     '''
     data = ps.sqldf(q1, locals())
     return data
 
 
-def get_trip_summary(data, tagline_data):
+def get_run_summary(data, tagline_data):
     '''
     Parameters
     ----------
@@ -266,50 +290,93 @@ def get_trip_summary(data, tagline_data):
     Returns
     -------
     Summary data : pd.DataFrame
-        data with trip level summary.
+        data with run level summary.
     '''
-    temp = tagline_data[['IndexTripStart', 'IndexTripEnd']]
+    # breakpoint()
+    temp = tagline_data[['index_run_start_original', 'index_run_end_original']]
     temp = temp.astype('int32')
-    raw_da_cpy = data[['IndexLoc', 0, 1, 5, 6]].copy()
-    raw_da_cpy[['IndexLoc', 5, 6]] = raw_da_cpy[['IndexLoc', 5, 6]].astype('int32')
-    raw_da_cpy.rename(columns={0: 'Lat', 1: 'Long', 5: 'OdomtFt', 6: 'SecPastSt'}, inplace=True)
-    # Get rows with trip start from raw_da_cpy
-    temp = pd.merge_asof(temp, raw_da_cpy, left_on="IndexTripStart", right_on="IndexLoc", direction='forward')
-    temp.rename(columns={'Lat': "LatStart", 'Long': "LongStart",
-                         'OdomtFt': "OdomFtStart", 'SecPastSt': "SecStart", "IndexLoc": "IndexTripStartInCleanData"},
+    raw_da_cpy = data[['index_loc', 0, 1, 5, 6]].copy()
+    raw_da_cpy[['index_loc', 5, 6]] = raw_da_cpy[['index_loc', 5, 6]].astype('int32')
+    raw_da_cpy.rename(columns={0: 'lat', 
+                               1: 'long', 
+                               5: 'odom_ft', 
+                               6: 'sec_past_st'}, 
+                      inplace=True)
+    # Get rows with run start from raw_da_cpy
+    temp = pd.merge_asof(temp, raw_da_cpy, left_on="index_run_start_original", right_on="index_loc", direction='forward')
+    temp.rename(columns={'lat': "lat_start", 
+                         'long': "long_start",
+                         'odom_ft': "odom_ft_start", 
+                         'sec_past_st': "sec_start", 
+                         "index_loc": "index_run_start"},
                 inplace=True)
-    # Get rows with trip end from raw_da_cpy
-    temp = pd.merge_asof(temp, raw_da_cpy, left_on="IndexTripEnd", right_on="IndexLoc", direction='backward')
-    temp.rename(columns={'Lat': "LatEnd", 'Long': "LongEnd", 'OdomtFt': "OdomFtEnd", 'SecPastSt': "SecEnd",
-                         "IndexLoc": "IndexTripEndInCleanData"}, inplace=True)
-    temp.loc[:, "TripDurFromSec"] = temp.SecEnd - temp.SecStart
+    # Get rows with run end from raw_da_cpy
+    temp = pd.merge_asof(temp, 
+                         raw_da_cpy, 
+                         left_on="index_run_end_original", 
+                         right_on="index_loc", 
+                         direction='backward')
+    temp.rename(columns={'lat': "lat_end", 
+                         'long': "long_end",
+                         'odom_ft': "odom_ft_end", 
+                         'sec_past_st': "sec_end",
+                         "index_loc": "index_run_end"}, inplace=True)
+    temp.loc[:, "run_duration_from_sec"] = temp.sec_end - temp.sec_start
     temp.eval("""
-              TripDurFromSec = SecEnd-SecStart
-              DistOdomMi = (OdomFtEnd - OdomFtStart)/ 5280
-              SpeedOdomMPH = (DistOdomMi/ TripDurFromSec) * 3600
+              run_duration_from_sec = sec_end-sec_start
+              dist_odom_mi = (odom_ft_end - odom_ft_start)/ 5280
+              mph_odom = (dist_odom_mi/ run_duration_from_sec) * 3600
               """, inplace=True)
-    temp[["LatStart", "LongStart", "LatEnd", "LongEnd"]] = temp[["LatStart", "LongStart", "LatEnd", "LongEnd"]].astype(
-        float)
-    # Get distance b/w trip start and end lat-longs
-    temp.loc[:, 'CrowFlyDistLatLongMi'] = get_distance_latlong_mi(temp, "LatStart", "LongStart", "LatEnd", "LongEnd")
-    summary_dat = tagline_data.merge(temp, on=['IndexTripStart', 'IndexTripEnd'], how='left')
+    temp[["lat_start", "long_start", "lat_end", "long_end"]] =\
+        temp[["lat_start", "long_start", "lat_end", "long_end"]].astype(float)
+    # Get distance b/w run start and end lat-longs
+    temp.loc[:, 'dist_crow_fly_mi'] = get_distance_latlong_mi(temp, "lat_start", "long_start", "lat_end", "long_end")
+    summary_dat = tagline_data.merge(temp, on=['index_run_start_original', 'index_run_end_original'], how='left')
     summary_dat.tag_date = summary_dat.tag_date.astype(str)
-    summary_dat.loc[:, "StartDateTime"] = pd.to_datetime(summary_dat['tag_date'] + " " + summary_dat['TripStartTime'])
-    summary_dat.loc[:, "EndDateTime"] = pd.to_datetime(summary_dat['tag_date'] + " " + summary_dat['TripEndTime'],
+    summary_dat.loc[:, "start_date_time"] = pd.to_datetime(summary_dat['tag_date'] + " " + summary_dat['TripStartTime'])
+    summary_dat.loc[:, "end_date_time"] = pd.to_datetime(summary_dat['tag_date'] + " " + summary_dat['TripEndTime'],
                                                        errors='coerce')
-    summary_dat.loc[:, "TripDurationFromTags"] = pd.to_timedelta(
-        summary_dat.loc[:, "EndDateTime"] - summary_dat.loc[:, "StartDateTime"])
-    summary_dat.loc[:, "SpeedTripTagMPH"] = round(
-        3600 * summary_dat.DistOdomMi / summary_dat.TripDurationFromTags.dt.total_seconds(), 2)
-    summary_dat = summary_dat[['fullpath', 'filename', 'file_busid', 'file_id', 'taglist', 'route_pattern', 'tag_busid',
-                               'route', 'pattern', 'wday',
-                               'StartDateTime', 'EndDateTime', 'IndexTripStart', 'IndexTripStartInCleanData',
-                               'IndexTripEnd', 'IndexTripEndInCleanData', 'SecStart',
-                               'OdomFtStart', 'SecEnd', 'OdomFtEnd', "TripDurFromSec", "TripDurationFromTags",
-                               "DistOdomMi", "SpeedOdomMPH", "SpeedTripTagMPH", "CrowFlyDistLatLongMi"
-        , "LatStart", "LongStart", "LatEnd", "LongEnd"]]
+    summary_dat.loc[:, "run_duration_from_tags"] = pd.to_timedelta(
+        summary_dat.loc[:, "end_date_time"] - summary_dat.loc[:, "start_date_time"])
+    summary_dat.loc[:, "mph_run_tag"] = round(
+        3600 * summary_dat.dist_odom_mi / summary_dat.run_duration_from_tags.dt.total_seconds(), 2)
+    summary_dat.run_duration_from_tags = summary_dat.run_duration_from_tags.astype(str)
+    summary_dat = summary_dat[['fullpath', 
+                               'filename', 
+                               'file_busid', 
+                               'file_id', 
+                               'taglist', 
+                               'route_pattern', 
+                               'tag_busid',
+                               'route', 
+                               'pattern', 
+                               'wday',
+                               'start_date_time', 
+                               'end_date_time', 
+                               'index_run_start_original',
+                               'index_run_start',
+                               'index_run_end_original',
+                               'index_run_end', 
+                               'sec_start',
+                               'odom_ft_start', 
+                               'sec_end', 
+                               'odom_ft_end', 
+                               "run_duration_from_sec", 
+                               "run_duration_from_tags",
+                               "dist_odom_mi",
+                               "mph_odom", 
+                               "mph_run_tag", 
+                               "dist_crow_fly_mi", 
+                               "lat_start", 
+                               "long_start", 
+                               "lat_end", 
+                               "long_end"]]
     return summary_dat
 
+
+# TODO: REimplement this,
+                                   # index_run_start=lambda x: x.index_run_start.astype('int'),
+                                   # index_run_end=lambda x: x.index_run_end.astype('int')
 
 def remove_apc_cal_tags(data):
     '''
@@ -345,7 +412,7 @@ def add_end_route_info(data, tagline_data):
     Returns
     -------
     tagline_data : pd.DataFrame
-        Tagline data with trip end time adjusted based on
+        Tagline data with run end time adjusted based on
         "Busware navigation reported end of route..." or
         "Buswares is now using route zero" tags.
     deleteIndices : np.array
@@ -355,22 +422,24 @@ def add_end_route_info(data, tagline_data):
         '^\s*/\s*(?P<TripEndTime>\d{2}:\d{2}:\d{2})\s*(?:Buswares navigation reported end of route|Buswares is now using route zero)',
         re.S)
     data.loc[:, 'TripEndTime'] = data[0].str.extract(pat)
-    end_of_route = data[['IndexLoc', 'TripEndTime']]
+    end_of_route = data[['index_loc', 'TripEndTime']]
     end_of_route = end_of_route[~(end_of_route.TripEndTime.isna())]
-    delete_indices = end_of_route.IndexLoc.values
-    end_of_route.rename(columns={'IndexLoc': 'IndexTripEnd'}, inplace=True)
-    end_of_route.IndexTripEnd = end_of_route.IndexTripEnd.astype('int32')
-    tagline_data.NewLineNo = tagline_data.NewLineNo.astype('int32')
-    end_of_route = pd.merge_asof(end_of_route, tagline_data[['tag_time', 'NewLineNo']], left_on="IndexTripEnd",
-                                 right_on='NewLineNo', direction='backward')
-    end_of_route = end_of_route[~(end_of_route.duplicated(subset=['NewLineNo', 'tag_time'], keep='first'))]
-    tagline_data = tagline_data.merge(end_of_route, on=['NewLineNo', 'tag_time'], how='left')
-    tagline_data.loc[:, 'tempLine'] = tagline_data['NewLineNo'].shift(-1)
+    delete_indices = end_of_route.index_loc.values
+    end_of_route.rename(columns={'index_loc': 'index_run_end_original'}, inplace=True)
+    end_of_route.index_run_end_original = end_of_route.index_run_end_original.astype('int32')
+    tagline_data.new_line_no = tagline_data.new_line_no.astype('int32')
+    end_of_route = pd.merge_asof(end_of_route, 
+                                 tagline_data[['tag_time', 'new_line_no']],
+                                 left_on="index_run_end_original",
+                                 right_on='new_line_no', direction='backward')
+    end_of_route = end_of_route[~(end_of_route.duplicated(subset=['new_line_no', 'tag_time'], keep='first'))]
+    tagline_data = tagline_data.merge(end_of_route, on=['new_line_no', 'tag_time'], how='left')
+    tagline_data.loc[:, 'tempLine'] = tagline_data['new_line_no'].shift(-1)
     tagline_data.loc[:, 'tempTime'] = tagline_data['tag_time'].shift(-1)
-    tagline_data.loc[tagline_data.TripEndTime.isna(), ['IndexTripEnd', 'TripEndTime']] = tagline_data.loc[
+    tagline_data.loc[tagline_data.TripEndTime.isna(), ['index_run_end_original', 'TripEndTime']] = tagline_data.loc[
         tagline_data.TripEndTime.isna(), ['tempLine', 'tempTime']].values
-    if np.isnan(tagline_data.iloc[-1]['IndexTripEnd']):
-        tagline_data.loc[tagline_data.index.max(), 'IndexTripEnd'] = max(data.IndexLoc)
+    if np.isnan(tagline_data.iloc[-1]['index_run_end_original']):
+        tagline_data.loc[tagline_data.index.max(), 'index_run_end_original'] = max(data.index_loc)
     tagline_data.rename(columns={'tag_time': "TripStartTime"}, inplace=True)
     return tagline_data, delete_indices
 
@@ -526,7 +595,7 @@ def check_valid_data_entry(row):
     '''
     row: Pandas DataFrame Row
     Check if a row is valid i.e. has
-    lat, long, heading, DoorState, VehinMotion, Odometer and TimeSec data.
+    lat, long, heading, door_state, VehinMotion, Odometer and TimeSec data.
     Also validate the data range.
     '''
     is_valid_entry = False
