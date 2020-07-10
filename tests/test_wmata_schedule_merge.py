@@ -18,11 +18,12 @@ Created on Mon Jun 22 10:18 2020
 import pytest
 import os
 import sys
-
+import geopandas as gpd
 sys.path.append('.')
 
 import wmatarawnav as wr
 
+#Fixme: fix the tests
 ###############################################################################
 # Load in data for testing
 @pytest.fixture(scope="session")
@@ -39,7 +40,7 @@ def get_rawnav_clean_data(get_cwd):
         analysis_routes_=["H8"],
         path_processed_route_data=path_processed_route_data,
         restrict=1000,
-        analysis_days=["Monday", "Tueday"])
+        analysis_days_=["Monday","Tuesday"])
     rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
     return rawnav_dat
 
@@ -52,7 +53,7 @@ def get_rawnav_summary_dat(get_cwd):
         analysis_routes_=["H8"],
         path_processed_route_data=path_processed_route_data,
         restrict=1000,
-        analysis_days=["Monday", "Tueday"])
+        analysis_days_=["Monday", "Tuesday"])
     rawnav_summary_dat = wr.fix_rawnav_names(rawnav_summary_dat)
     return rawnav_summary_dat
 
@@ -73,6 +74,15 @@ def fix_data_type_issues_in_rawnav_qjump_dat(subset_valid_rawnav_trips):
     rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
     # Having issues with route "70" and "64"---Getting read as int instead of str
     rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
+    rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
+    rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
+    # EPSG code for WMATA-area work
+    wmata_crs = 2248
+    rawnav_qjump_gdf = gpd.GeoDataFrame(
+        rawnav_qjump_dat,
+        geometry=gpd.points_from_xy(rawnav_qjump_dat.long, rawnav_qjump_dat.lat),
+        crs='EPSG:4326'). \
+        to_crs(epsg=wmata_crs)
     return rawnav_qjump_dat
 
 @pytest.fixture(scope="session")
