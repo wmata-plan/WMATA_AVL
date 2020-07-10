@@ -104,27 +104,30 @@ def find_rawnav_routes(file_universe, nmax=None, quiet=True):
     file_universe_df['tag_starthour'] = pd.to_numeric(file_universe_df['tag_starthour'])
     file_universe_df['tag_date'] = pd.to_datetime(file_universe_df['tag_date'], infer_datetime_format=True)
     file_universe_df['wday'] = file_universe_df['tag_date'].dt.day_name()
-    file_universe_df['line_num_next'] = file_universe_df['line_num'].shift(-1)
+    file_universe_df['line_num_next'] =\
+        file_universe_df.groupby(['filename'], sort = False)['line_num'].shift(-1)
     
-    #Reorder
-    file_universe_df = file_universe_df[['fullpath', 
-                                         'filename', 
-                                         'file_id', 
-                                         'file_busid', 
-                                         'taglist',
-                                         'line_num',
-                                         'line_num_next',
-                                         'route_pattern',
-                                         'route', 
-                                         'pattern', 
-                                         'tag_busid', 
-                                         'tag_date', 
-                                         'tag_time', 
-                                         'tag_datetime', 
-                                         'tag_starthour',
-                                         'wday',
-                                         'Unk1',
-                                         'mi_to_ft']]
+    #Reorder Cols
+    column_nm_map = ['fullpath', 
+                     'filename', 
+                     'file_id', 
+                     'file_busid', 
+                     'taglist',
+                     'line_num',
+                     'line_num_next',
+                     'route_pattern',
+                     'route', 
+                     'pattern', 
+                     'tag_busid', 
+                     'tag_date', 
+                     'tag_time', 
+                     'tag_datetime', 
+                     'tag_starthour',
+                     'wday',
+                     'Unk1',
+                     'mi_to_ft']
+    
+    file_universe_df = file_universe_df.reindex(columns = column_nm_map, copy = False)
         
     return file_universe_df
 
@@ -170,6 +173,7 @@ def clean_rawnav_data(data_dict, filename):
     -------
     Cleaned data without any tags.
     '''
+    
     rawnavdata = data_dict['RawData']
     tagline_data = data_dict['tagLineInfo']
 
@@ -190,6 +194,8 @@ def clean_rawnav_data(data_dict, filename):
         print(f"TagLists Did not match in file {filename}")
     
     rawnavdata.reset_index(inplace=True);
+    # TODO: This line prevents the function from being rerun, need to address later.
+    # IS okay on a first run though
     rawnavdata.rename(columns={"index": "index_loc"}, inplace=True)
     
     # Get End of route Info
@@ -359,9 +365,6 @@ def get_run_summary(data, tagline_data):
     summary_dat.loc[:, "mph_run_tag"] = round(
         3600 * summary_dat.dist_odom_mi / summary_dat.run_duration_from_tags.dt.total_seconds(), 2)
     summary_dat.run_duration_from_tags = summary_dat.run_duration_from_tags.astype(str)
-    summary_dat = summary_dat.assign(
-        route=lambda x: x.route.astype('str'),
-        pattern=lambda x: x.pattern.astype('int32'))
     summary_dat = summary_dat[['fullpath', 
                                'filename', 
                                'file_busid', 
@@ -439,8 +442,6 @@ def add_end_route_info(data, tagline_data):
     deleteIndices : np.array
         indices to delete from raw data.
     '''
-    # data_og = data
-    breakpoint()
     pat = re.compile(
         '^\s*/\s*(?P<run_end_time>\d{2}:\d{2}:\d{2})\s*(?:Buswares navigation reported end of route|Buswares is now using route zero)',
         re.S)
@@ -452,10 +453,10 @@ def add_end_route_info(data, tagline_data):
     end_of_route.index_run_end_original = end_of_route.index_run_end_original.astype('int32')
     tagline_data.new_line_no = tagline_data.new_line_no.astype('int32')
     end_of_route = pd.merge_asof(end_of_route, 
-                                 tagline_data[['tag_time', 'new_line_no']], # a little confused, ins't this just the first tag?
+                                 tagline_data[['tag_time', 'new_line_no']], 
                                  left_on="index_run_end_original",
                                  right_on='new_line_no', 
-                                 direction='backward') #issue here?
+                                 direction='backward') 
     end_of_route = end_of_route[~(end_of_route.duplicated(subset=['new_line_no', 'tag_time'], keep='first'))]
     tagline_data = tagline_data.merge(end_of_route, on=['new_line_no', 'tag_time'], how='left')
     tagline_data.loc[:, 'tempLine'] = tagline_data['new_line_no'].shift(-1)

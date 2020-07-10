@@ -60,17 +60,17 @@ else:
 # For all cases, use None 
 # In general, set analysis_routes to the largest set of routes you are likely to look at --
 # the list of routes can be subset further later.
-restrict_n = 5000
-analysis_routes = ['W47'] 
-# analysis_routes = ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4', 
-#                    'H8', 'W47'] 
+restrict_n = None
+# analysis_routes = ['W47'] 
+analysis_routes = ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4', 
+                    'H8', 'W47'] 
 zip_parent_folder_name = "October 2019 Rawnav"
 # Assumes directory structure:
 # zip_parent_folder_name (e.g, October 2019 Rawnav)
 #  -- zipped_files_dirs (e.g., Vehicles 0-2999.zip)
 #     -- file_universe (items in various zipped_files_dirs ala rawnav##########.txt.zip
 
-run_inventory = False # inventory (or re-inventory files), otherwise reload saved inventory if available
+run_inventory = True # inventory (or re-inventory files), otherwise reload saved inventory if available
 
 # 1.3 Import User-Defined Package
 ############################################
@@ -98,32 +98,31 @@ if run_inventory:
     path_rawnav_inventory = os.path.join(path_processed_data,"rawnav_inventory.parquet")
     shutil.rmtree(path_rawnav_inventory, ignore_errors=True) 
     os.mkdir(path_rawnav_inventory)
-    
-    # Still deciding whether saving the filtered version is the right call
+        
+    # Note: partitioning required, using filename avoids resorting of values, filename column
+    # will be sorted to end on reload however.
     rawnav_inventory.to_parquet(
         path = path_rawnav_inventory,
-        partition_cols = ['route'],
-        index = False)
+        partition_cols = ['filename'],
+        index = False) 
        
 else:
     try:
         rawnav_inventory = (
             pd.read_parquet(path=os.path.join(path_processed_data,"rawnav_inventory.parquet"))
+            .assign(filename = lambda x: x.filename.astype(str)) #returned as categorical
             )
         
     except:
         raise("No rawnav inventory found")
-
-rawnav_inventory_filtered = (
-    rawnav_inventory[rawnav_inventory.route.isin(analysis_routes)]
-    .assign(line_num = lambda x: x.line_num.astype('int'))
-    )
+ 
+rawnav_inventory_filtered =\
+    rawnav_inventory[rawnav_inventory.groupby('filename',sort = False)['route'].transform(lambda x: x.isin(analysis_routes).any())]
+   
+rawnav_inventory_filtered = rawnav_inventory_filtered.assign(line_num = lambda x: x.line_num.astype('int'))
     
 if len(rawnav_inventory_filtered) == 0:
     raise Exception("No Analysis Routes found in file_universe")
-  
-
-rawnav_inventory_filtered = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == 'rawnav02837191019.txt']
 
 execution_time = str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 2 Identify Relevant Files for Analysis Routes : {execution_time}")
@@ -183,9 +182,14 @@ print(f"Run Time Section 4 Clean RawNav Data : {execution_time}")
 begin_time = datetime.now()  
 # 5.1 Output Summary Rawnav data
 ############################################
+
+# Combine summary files, filter to analysis routes, convert col types
 summary_rawnav = pd.concat(summary_data_dict.values())
 
 summary_rawnav = summary_rawnav[summary_rawnav['route'].isin(analysis_routes)]
+summary_rawnav = summary_rawnav.assign(
+    route=lambda x: x.route.astype('str'),
+    pattern=lambda x: x.pattern.astype('int32'))
 
 # Remove duplicate runs
 summary_rawnav = summary_rawnav[
