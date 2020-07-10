@@ -12,6 +12,7 @@ from IPython import get_ipython  # run magic commands
 ipython = get_ipython()
 ipython.magic("reset -f")
 ipython = get_ipython()
+ipython.magic("autoreload")
 
 # 1 Import Libraries and Set Global Parameters
 ########################################################################################################################
@@ -94,32 +95,35 @@ file_universe = wr.get_zipped_files_from_zip_dir(
 if run_inventory: 
     rawnav_inventory = wr.find_rawnav_routes(file_universe, nmax=restrict_n, quiet=True)
     
-    rawnav_inventory_filtered = (
-        rawnav_inventory[rawnav_inventory.route.isin(analysis_routes)]
-        .assign(line_num = lambda x: x.line_num.astype('int'))
-        )
-    
-    if len(rawnav_inventory_filtered) == 0:
-        raise Exception("No Analysis Routes found in file_universe")
-    
     path_rawnav_inventory = os.path.join(path_processed_data,"rawnav_inventory.parquet")
     shutil.rmtree(path_rawnav_inventory, ignore_errors=True) 
     os.mkdir(path_rawnav_inventory)
     
     # Still deciding whether saving the filtered version is the right call
-    rawnav_inventory_filtered.to_parquet(
+    rawnav_inventory.to_parquet(
         path = path_rawnav_inventory,
         partition_cols = ['route'],
         index = False)
        
 else:
     try:
-        rawnav_inventory_filtered = (
+        rawnav_inventory = (
             pd.read_parquet(path=os.path.join(path_processed_data,"rawnav_inventory.parquet"))
             )
         
     except:
         raise("No rawnav inventory found")
+
+rawnav_inventory_filtered = (
+    rawnav_inventory[rawnav_inventory.route.isin(analysis_routes)]
+    .assign(line_num = lambda x: x.line_num.astype('int'))
+    )
+    
+if len(rawnav_inventory_filtered) == 0:
+    raise Exception("No Analysis Routes found in file_universe")
+  
+
+rawnav_inventory_filtered = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == 'rawnav02837191019.txt']
 
 execution_time = str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 2 Identify Relevant Files for Analysis Routes : {execution_time}")
@@ -130,8 +134,8 @@ begin_time = datetime.now()
 # data is loaded into a dictionary named by the ID
 route_rawnav_tag_dict = {}
 
-# Iterate over each file, skipping to the first row where our data is found
-# Rather than read run-by-run, we read the whole file, then filter to relevant routes later
+# Iterate over each file, skipping to the first row where data in our filtered inventory is found
+# Rather than read run-by-run, we read the rest of the file, then filter to relevant routes later
 rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath', 'filename']).line_num.min().reset_index()
 rawnav_inventory_filtered_valid = rawnav_inventory_filtered
 
@@ -140,7 +144,6 @@ for index, row in rawnav_inv_filt_first.iterrows():
     tag_info_line_no = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == row['filename']]
     reference = min(tag_info_line_no.line_num)
     tag_info_line_no.loc[:, "new_line_no"] = tag_info_line_no.line_num - reference - 1
-
     temp = wr.load_rawnav_data(
         zip_folder_path=row['fullpath'],
         skiprows=row['line_num'])
@@ -149,7 +152,7 @@ for index, row in rawnav_inv_filt_first.iterrows():
         route_rawnav_tag_dict[row['filename']] = dict(RawData=temp, tagLineInfo=tag_info_line_no)
     else:
         remove_file = row['filename']  # remove bad read files
-        rawnav_inventory_filtered_valid  = rawnav_inventory_filtered_valid .query('filename!= @remove_file')
+        rawnav_inventory_filtered_valid  = rawnav_inventory_filtered_valid.query('filename!= @remove_file')
 
 execution_time = str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 3 Load Raw RawNav Data : {execution_time}")

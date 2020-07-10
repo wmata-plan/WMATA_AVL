@@ -84,6 +84,7 @@ def find_rawnav_routes(file_universe, nmax=None, quiet=True):
     file_universe_df['file_busid'] = file_universe_df['fullpath'].str.extract('rawnav(\d{5})\S+.txt')
     file_universe_df['file_id'] = file_universe_df['fullpath'].str.extract('rawnav(\d+).txt')
     file_universe_df['file_busid'] = pd.to_numeric(file_universe_df['file_busid'])
+    
     # Get Tags and Reformat
     file_universe_df['taglist'] = [find_all_tags(path, quiet=quiet) for path in file_universe_df['fullpath']]
     file_universe_df = file_universe_df.explode('taglist')
@@ -91,6 +92,7 @@ def find_rawnav_routes(file_universe, nmax=None, quiet=True):
         file_universe_df['taglist'].str.split(',', expand=True)
     file_universe_df[['route', 'pattern']] = \
         file_universe_df['route_pattern'].str.extract('^(?:\s*)(?:(?!PO))(?:(?!PI))(?:(?!DH))(\S+)(\d{2})$')
+    
     # Convert Column Types and Create new ones
     # Note that we leave some cols as text, as integer values don't support
     # NAs in Pandas. Some of this conversion will occur later once 'empty' tags are removed
@@ -102,9 +104,28 @@ def find_rawnav_routes(file_universe, nmax=None, quiet=True):
     file_universe_df['tag_starthour'] = pd.to_numeric(file_universe_df['tag_starthour'])
     file_universe_df['tag_date'] = pd.to_datetime(file_universe_df['tag_date'], infer_datetime_format=True)
     file_universe_df['wday'] = file_universe_df['tag_date'].dt.day_name()
+    file_universe_df['line_num_next'] = file_universe_df['line_num'].shift(-1)
     
-    # TODO check if indexing here would be faster 
-    
+    #Reorder
+    file_universe_df = file_universe_df[['fullpath', 
+                                         'filename', 
+                                         'file_id', 
+                                         'file_busid', 
+                                         'taglist',
+                                         'line_num',
+                                         'line_num_next',
+                                         'route_pattern',
+                                         'route', 
+                                         'pattern', 
+                                         'tag_busid', 
+                                         'tag_date', 
+                                         'tag_time', 
+                                         'tag_datetime', 
+                                         'tag_starthour',
+                                         'wday',
+                                         'Unk1',
+                                         'mi_to_ft']]
+        
     return file_universe_df
 
 
@@ -202,14 +223,11 @@ def clean_rawnav_data(data_dict, filename):
                      10: 'lat_raw', 
                      11: 'long_raw'}
     rawnavdata.rename(columns=column_nm_map, inplace=True)
-    
     # Apply column transformations
     rawnavdata = rawnavdata.assign(lat=lambda x: x.lat.astype('float'),
                                    long=lambda x: x.long.astype('float'),
-                                   pattern=lambda x: x.pattern.astype('int32'),
-                                   route=lambda x: x.pattern.astype('str'),
                                    heading=lambda x: x.heading.astype('float'))
-    
+    #TODO: divider came out wrong here
     # Add composite key to the data
     rawnavdata = add_run_dividers(rawnavdata, summary_data)
     rawnavdata.loc[:, "filename"] = filename
@@ -292,7 +310,7 @@ def get_run_summary(data, tagline_data):
     Summary data : pd.DataFrame
         data with run level summary.
     '''
-    # breakpoint()
+
     temp = tagline_data[['index_run_start_original', 'index_run_end_original']]
     temp = temp.astype('int32')
     raw_da_cpy = data[['index_loc', 0, 1, 5, 6]].copy()
@@ -333,14 +351,17 @@ def get_run_summary(data, tagline_data):
     temp.loc[:, 'dist_crow_fly_mi'] = get_distance_latlong_mi(temp, "lat_start", "long_start", "lat_end", "long_end")
     summary_dat = tagline_data.merge(temp, on=['index_run_start_original', 'index_run_end_original'], how='left')
     summary_dat.tag_date = summary_dat.tag_date.astype(str)
-    summary_dat.loc[:, "start_date_time"] = pd.to_datetime(summary_dat['tag_date'] + " " + summary_dat['TripStartTime'])
-    summary_dat.loc[:, "end_date_time"] = pd.to_datetime(summary_dat['tag_date'] + " " + summary_dat['TripEndTime'],
+    summary_dat.loc[:, "start_date_time"] = pd.to_datetime(summary_dat['tag_date'] + " " + summary_dat['run_start_time'])
+    summary_dat.loc[:, "end_date_time"] = pd.to_datetime(summary_dat['tag_date'] + " " + summary_dat['run_end_time'],
                                                        errors='coerce')
     summary_dat.loc[:, "run_duration_from_tags"] = pd.to_timedelta(
         summary_dat.loc[:, "end_date_time"] - summary_dat.loc[:, "start_date_time"])
     summary_dat.loc[:, "mph_run_tag"] = round(
         3600 * summary_dat.dist_odom_mi / summary_dat.run_duration_from_tags.dt.total_seconds(), 2)
     summary_dat.run_duration_from_tags = summary_dat.run_duration_from_tags.astype(str)
+    summary_dat = summary_dat.assign(
+        route=lambda x: x.route.astype('str'),
+        pattern=lambda x: x.pattern.astype('int32'))
     summary_dat = summary_dat[['fullpath', 
                                'filename', 
                                'file_busid', 
@@ -418,29 +439,32 @@ def add_end_route_info(data, tagline_data):
     deleteIndices : np.array
         indices to delete from raw data.
     '''
+    # data_og = data
+    breakpoint()
     pat = re.compile(
-        '^\s*/\s*(?P<TripEndTime>\d{2}:\d{2}:\d{2})\s*(?:Buswares navigation reported end of route|Buswares is now using route zero)',
+        '^\s*/\s*(?P<run_end_time>\d{2}:\d{2}:\d{2})\s*(?:Buswares navigation reported end of route|Buswares is now using route zero)',
         re.S)
-    data.loc[:, 'TripEndTime'] = data[0].str.extract(pat)
-    end_of_route = data[['index_loc', 'TripEndTime']]
-    end_of_route = end_of_route[~(end_of_route.TripEndTime.isna())]
+    data.loc[:, 'run_end_time'] = data[0].str.extract(pat)
+    end_of_route = data[['index_loc', 'run_end_time']]
+    end_of_route = end_of_route[~(end_of_route.run_end_time.isna())]
     delete_indices = end_of_route.index_loc.values
     end_of_route.rename(columns={'index_loc': 'index_run_end_original'}, inplace=True)
     end_of_route.index_run_end_original = end_of_route.index_run_end_original.astype('int32')
     tagline_data.new_line_no = tagline_data.new_line_no.astype('int32')
     end_of_route = pd.merge_asof(end_of_route, 
-                                 tagline_data[['tag_time', 'new_line_no']],
+                                 tagline_data[['tag_time', 'new_line_no']], # a little confused, ins't this just the first tag?
                                  left_on="index_run_end_original",
-                                 right_on='new_line_no', direction='backward')
+                                 right_on='new_line_no', 
+                                 direction='backward') #issue here?
     end_of_route = end_of_route[~(end_of_route.duplicated(subset=['new_line_no', 'tag_time'], keep='first'))]
     tagline_data = tagline_data.merge(end_of_route, on=['new_line_no', 'tag_time'], how='left')
     tagline_data.loc[:, 'tempLine'] = tagline_data['new_line_no'].shift(-1)
     tagline_data.loc[:, 'tempTime'] = tagline_data['tag_time'].shift(-1)
-    tagline_data.loc[tagline_data.TripEndTime.isna(), ['index_run_end_original', 'TripEndTime']] = tagline_data.loc[
-        tagline_data.TripEndTime.isna(), ['tempLine', 'tempTime']].values
+    tagline_data.loc[tagline_data.run_end_time.isna(), ['index_run_end_original', 'run_end_time']] = tagline_data.loc[
+        tagline_data.run_end_time.isna(), ['tempLine', 'tempTime']].values
     if np.isnan(tagline_data.iloc[-1]['index_run_end_original']):
         tagline_data.loc[tagline_data.index.max(), 'index_run_end_original'] = max(data.index_loc)
-    tagline_data.rename(columns={'tag_time': "TripStartTime"}, inplace=True)
+    tagline_data.rename(columns={'tag_time': "run_start_time"}, inplace=True)
     return tagline_data, delete_indices
 
 
