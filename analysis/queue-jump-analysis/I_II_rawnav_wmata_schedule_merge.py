@@ -55,11 +55,10 @@ else:
                             " path_processed_data in a new elif block")
 
 # Globals
-# Restrict number of zip files to parse to this number for testing.
-# For all cases, use None
-restrict_n = None
-q_jump_route_list = ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
-                     'H8', 'W47']
+
+# q_jump_route_list = ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
+#                      'H8', 'W47']
+q_jump_route_list = ['79']
 analysis_routes = q_jump_route_list
 # analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
 # analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
@@ -112,33 +111,30 @@ for analysis_route in analysis_routes:
         print(f'Processing analysis route {analysis_route} for {analysis_day}...')
         # Reload data
         try:
-            rawnav_dat = wr.read_cleaned_rawnav(
-                path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
-                analysis_routes_=analysis_route,
-                analysis_days_=analysis_day,
-                restrict=restrict_n)
+            rawnav_dat = (
+                wr.read_cleaned_rawnav(
+                   analysis_routes_ = analysis_route,
+                   analysis_days_ = analysis_day,
+                   path = os.path.join(path_processed_data, "rawnav_data.parquet"))
+                .drop(columns=['blank', 'lat_raw', 'long_raw', 'sat_cnt'])
+                )
         except Exception as e:
             print(e)  # usually no data found or something similar
             continue
         else:
-            rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
-            rawnav_summary_dat, rawnav_trips_less_than_600sec_or_2miles = wr.read_summary_rawnav(
-                path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
-                analysis_routes_=analysis_route,
-                analysis_days_=analysis_day,
-                restrict=restrict_n)
-            rawnav_summary_dat = wr.fix_rawnav_names(rawnav_summary_dat)
-            # Subset Rawnav Data to Records Desired
-            rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_trip_start_in_clean_data']]
-            rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col,
-                                                on=['filename', 'index_trip_start_in_clean_data'],
-                                                how='right')
 
-            # Address Remaining Col Format issues
-            # TODO: resolve these elsewhere
-            rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
-            rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
-            rawnav_summary_dat.route = rawnav_summary_dat.route.astype(str)
+            rawnav_summary_dat = wr.read_cleaned_rawnav(
+                analysis_routes_ = analysis_route,
+                analysis_days_ = analysis_day,
+                path = os.path.join(path_processed_data, "rawnav_summary.parquet"))
+
+            # Subset Rawnav Data to Records Desired
+            rawnav_summary_dat = rawnav_summary_dat.query('not (run_duration_from_sec < 600 | dist_odom_mi < 2)')
+            
+            rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_run_start']]
+            rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col,
+                                                on=['filename', 'index_run_start'],
+                                                how='right')
 
             rawnav_qjump_gdf = gpd.GeoDataFrame(
                 rawnav_qjump_dat,
@@ -161,10 +157,13 @@ for analysis_route in analysis_routes:
             table=pa.Table.from_pandas(wmata_schedule_based_sum_dat),
             root_path=path_stop_summary,
             partition_cols=['route', 'wday'])
+        
         nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat=\
             wr.drop_geometry(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat)
+        
         nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat=\
             nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat.assign(wday=analysis_day)
+        
         pq.write_to_dataset(
             table=pa.Table.from_pandas(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat),
             root_path=path_stop_index,
