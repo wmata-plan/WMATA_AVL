@@ -66,7 +66,7 @@ def ckdnearest(gdA, gdB):
     Parameters
     ----------
     gdA : gpd.GeoDataFrame
-        wmata schedule data for the correct route and direction.
+        typically wmata schedule data for the correct route and direction.
     gdB : gpd.GeoDataFrame
         rawnav data: only nearest points to gdA are kept in the output.
     Returns
@@ -82,7 +82,7 @@ def ckdnearest(gdA, gdB):
     dist, idx = btree.query(nA, k=1)
     gdf = pd.concat(
         [gdA.reset_index(drop=True),
-         gdB.loc[idx, ['filename', 'index_trip_start_in_clean_data', 'index_loc', 'lat', 'long']].reset_index(
+         gdB.loc[idx, ['filename', 'index_run_start', 'index_loc', 'lat', 'long']].reset_index(
              drop=True),
          pd.Series(dist, name='dist_to_nearest_point')], axis=1)
     return gdf

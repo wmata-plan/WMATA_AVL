@@ -184,7 +184,7 @@ def merge_rawnav_wmata_schedule(analysis_route_,
     )
     wmata_schedule_based_sum_dat.set_index(
         ['fullpath', 'filename', 'file_id', 'wday', 'start_date_time', 'end_date_time',
-         'index_trip_start_in_clean_data', 'taglist', 'route_pattern', 'route', 'pattern'],
+         'index_run_start', 'taglist', 'route_pattern', 'route', 'pattern'],
         inplace=True,
         drop=True)
     return wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
@@ -192,7 +192,7 @@ def merge_rawnav_wmata_schedule(analysis_route_,
 
 def add_num_missing_stops_to_sum(rawnav_wmata_schedule_dat, wmata_schedule_dat_,wmata_schedule_based_sum_dat_):
     rawnav_wmata_schedule_num_stops= \
-        rawnav_wmata_schedule_dat.groupby(['filename', 'index_trip_start_in_clean_data']). \
+        rawnav_wmata_schedule_dat.groupby(['filename', 'index_run_start']). \
             agg(route=('route','first'),
                 pattern=('pattern','first'),
                 num_stops_in_trip=('stop_id','count')).reset_index()
@@ -206,7 +206,7 @@ def add_num_missing_stops_to_sum(rawnav_wmata_schedule_dat, wmata_schedule_dat_,
     rawnav_wmata_schedule_num_stops=\
         rawnav_wmata_schedule_num_stops.assign(num_missin_stops=lambda x: x.wmata_stops_all-x.num_stops_in_trip)
     wmata_schedule_based_sum_dat_with_missing_stop = wmata_schedule_based_sum_dat_.merge(rawnav_wmata_schedule_num_stops,
-                                                                      on=['filename','index_trip_start_in_clean_data',
+                                                                      on=['filename','index_run_start',
                                                                           'route','pattern'],
                                                                       how='left')
     return wmata_schedule_based_sum_dat_with_missing_stop
@@ -255,6 +255,7 @@ def output_rawnav_wmata_schedule(analysis_route_, analysis_day_, wmata_schedule_
 
 
 # Eventually will clean the parse_rawnav.py functions to get these updated column names.
+#TODO: this should be moot
 def fix_rawnav_names(data):
     """
     Parameters
@@ -294,10 +295,9 @@ def merge_rawnav_target(target_dat, rawnav_dat, quiet=True):
     # Iterate over groups of routes and patterns in rawnav data and target object
     target_groups = target_dat.groupby(['route', 'pattern'])
     rawnav_groups = rawnav_dat.groupby(
-        ['route', 'pattern', 'filename', 'index_trip_start_in_clean_data'])
+        ['route', 'pattern', 'filename', 'index_run_start'])
 
     nearest_rawnav_point_to_target_dat = pd.DataFrame()
-
     for name, rawnav_group in rawnav_groups:
         try:
             target_dat_relevant = \
@@ -350,11 +350,11 @@ def assert_clean_stop_order_increase_with_odom(nearest_rawnav_point_to_wmata_sch
     """
     row_before = nearest_rawnav_point_to_wmata_schedule_data_.shape[0]
     nearest_rawnav_point_to_wmata_schedule_data_. \
-        sort_values(['filename', 'index_trip_start_in_clean_data', 'stop_sort_order'], inplace=True)
+        sort_values(['filename', 'index_run_start', 'stop_sort_order'], inplace=True)
     assert (nearest_rawnav_point_to_wmata_schedule_data_.duplicated(
-        ['filename', 'index_trip_start_in_clean_data', 'stop_sort_order']).sum() == 0)
+        ['filename', 'index_run_start', 'stop_sort_order']).sum() == 0)
     while (sum(nearest_rawnav_point_to_wmata_schedule_data_.
-                       groupby(['filename', 'index_trip_start_in_clean_data']).index_loc.diff().dropna() < 0) != 0):
+                       groupby(['filename', 'index_run_start']).index_loc.diff().dropna() < 0) != 0):
         nearest_rawnav_point_to_wmata_schedule_data_ = \
             delete_rows_with_incorrect_stop_order(nearest_rawnav_point_to_wmata_schedule_data_)
     row_after = nearest_rawnav_point_to_wmata_schedule_data_.shape[0]
@@ -374,7 +374,7 @@ def delete_rows_with_incorrect_stop_order(nearest_rawnav_point_to_wmata_schedule
         input data with the offending row deleted.
     """
     nearest_rawnav_point_to_wmata_schedule_data_.loc[:, 'diff_index'] = \
-        nearest_rawnav_point_to_wmata_schedule_data_.groupby(['filename', 'index_trip_start_in_clean_data']). \
+        nearest_rawnav_point_to_wmata_schedule_data_.groupby(['filename', 'index_run_start']). \
             index_loc.diff().fillna(0)
     wrong_snapping_dat = nearest_rawnav_point_to_wmata_schedule_data_.query('diff_index<0')
     nearest_rawnav_point_to_wmata_schedule_data_ = nearest_rawnav_point_to_wmata_schedule_data_.query('diff_index>=0')
@@ -402,17 +402,17 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
     ########################################################################################
     first_last_stop_dat = get_first_last_stop_rawnav(nearest_stop_dat)
     rawnav_q_stop_dat = \
-        rawnav_q_dat.merge(first_last_stop_dat, on=['filename', 'index_trip_start_in_clean_data'], how='right')
+        rawnav_q_dat.merge(first_last_stop_dat, on=['filename', 'index_run_start'], how='right')
     rawnav_q_stop_dat = rawnav_q_stop_dat.query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
     rawnav_q_stop_dat = \
         rawnav_q_stop_dat[
-            ['filename', 'index_trip_start_in_clean_data', 'lat', 'long', 'heading', 'odomt_ft', 'sec_past_st'
+            ['filename', 'index_run_start', 'lat', 'long', 'heading', 'odom_ft', 'sec_past_st'
                 , 'first_stop_dist_nearest_point', 'trip_length', 'route_text', 'pattern_name', 'direction',
              'pattern_destination', 'direction_id']]
     Map1 = lambda x: max(x) - min(x)
     rawnav_q_stop_sum_dat = \
-        rawnav_q_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']). \
-            agg({'odomt_ft': ['min', 'max', Map1],
+        rawnav_q_stop_dat.groupby(['filename', 'index_run_start']). \
+            agg({'odom_ft': ['min', 'max', Map1],
                  'sec_past_st': ['min', 'max', Map1],
                  'lat': ['first', 'last'],
                  'long': ['first', 'last'],
@@ -423,14 +423,22 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
                  'direction': ['first'],
                  'pattern_destination': ['first'],
                  'direction_id': ['first']})
-    rawnav_q_stop_sum_dat.columns = ['start_odom_ft_wmata_schedule', 'end_odom_ft_wmata_schedule',
-                                     'trip_dist_mi_odom_and_wmata_schedule', 'start_sec_wmata_schedule',
-                                     'end_sec_wmata_schedule', 'trip_dur_sec_wmata_schedule',
-                                     'start_lat_wmata_schedule', 'end_lat_wmata_schedule',
-                                     'start_long_wmata_schedule', 'end_long_wmata_schedule',
-                                     'dist_first_stop_wmata_schedule', 'trip_length_mi_direct_wmata_schedule',
-                                     'route_text_wmata_schedule', 'pattern_name_wmata_schedule',
-                                     'direction_wmata_schedule', 'pattern_destination_wmata_schedule',
+    rawnav_q_stop_sum_dat.columns = ['start_odom_ft_wmata_schedule', 
+                                     'end_odom_ft_wmata_schedule',
+                                     'trip_dist_mi_odom_and_wmata_schedule', 
+                                     'start_sec_wmata_schedule',
+                                     'end_sec_wmata_schedule', 
+                                     'trip_dur_sec_wmata_schedule',
+                                     'start_lat_wmata_schedule', 
+                                     'end_lat_wmata_schedule',
+                                     'start_long_wmata_schedule', 
+                                     'end_long_wmata_schedule',
+                                     'dist_first_stop_wmata_schedule', 
+                                     'trip_length_mi_direct_wmata_schedule',
+                                     'route_text_wmata_schedule', 
+                                     'pattern_name_wmata_schedule',
+                                     'direction_wmata_schedule', 
+                                     'pattern_destination_wmata_schedule',
                                      'direction_id_wmata_schedule']
     rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule']] = \
         rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule']] / 5280
@@ -440,12 +448,14 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
         round(3600 *
               rawnav_q_stop_sum_dat.trip_dist_mi_odom_and_wmata_schedule /
               rawnav_q_stop_sum_dat.trip_dur_sec_wmata_schedule, 2)
-    rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule', 'dist_first_stop_wmata_schedule',
+    rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule', 
+                                  'dist_first_stop_wmata_schedule',
                                   'trip_length_mi_direct_wmata_schedule']] = \
-        round(rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule', 'dist_first_stop_wmata_schedule',
+        round(rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule',
+                                            'dist_first_stop_wmata_schedule',
                                             'trip_length_mi_direct_wmata_schedule']], 2)
     rawnav_q_stop_sum_dat = \
-        rawnav_q_stop_sum_dat.merge(rawnav_sum_dat, on=['filename', 'index_trip_start_in_clean_data'], how='left')
+        rawnav_q_stop_sum_dat.merge(rawnav_sum_dat, on=['filename', 'index_run_start'], how='left')
     return rawnav_q_stop_sum_dat
 
 
@@ -466,22 +476,22 @@ def get_first_last_stop_rawnav(nearest_rawnav_stop_dat):
     '''
     last_stop_dat = nearest_rawnav_stop_dat.copy()
     last_stop_dat.loc[:, "tempCol"] = \
-        last_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).index_loc.transform(max)
+        last_stop_dat.groupby(['filename', 'index_run_start']).index_loc.transform(max)
     last_stop_dat = last_stop_dat.query('index_loc==tempCol').reset_index(drop=True).drop(columns='tempCol')
-    last_stop_dat = last_stop_dat[['filename', 'index_trip_start_in_clean_data', 'index_loc',
+    last_stop_dat = last_stop_dat[['filename', 'index_run_start', 'index_loc',
                                    'dist_to_nearest_point']]
     last_stop_dat.rename(columns={'index_loc': 'index_loc_last_stop',
                                   'dist_to_nearest_point': 'last_stop_dist_nearest_point'}, inplace=True)
     first_stop_dat = \
-        nearest_rawnav_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).index_loc.transform(min)
+        nearest_rawnav_stop_dat.groupby(['filename', 'index_run_start']).index_loc.transform(min)
     first_stop_dat = nearest_rawnav_stop_dat.copy()
     first_stop_dat.loc[:, "tempCol"] = \
-        first_stop_dat.groupby(['filename', 'index_trip_start_in_clean_data']).index_loc.transform(min)
+        first_stop_dat.groupby(['filename', 'index_run_start']).index_loc.transform(min)
     first_stop_dat = first_stop_dat.query('index_loc==tempCol').reset_index(drop=True).drop(columns='tempCol')
     first_stop_dat.rename(columns={'index_loc': 'index_loc_first_stop',
                                    'dist_to_nearest_point': 'first_stop_dist_nearest_point'}, inplace=True)
-    first_stop_dat.sort_values(['filename', 'index_trip_start_in_clean_data'], inplace=True)
-    first_last_stop_dat = first_stop_dat.merge(last_stop_dat, on=['filename', 'index_trip_start_in_clean_data'],
+    first_stop_dat.sort_values(['filename', 'index_run_start'], inplace=True)
+    first_last_stop_dat = first_stop_dat.merge(last_stop_dat, on=['filename', 'index_run_start'],
                                                how='left')
     first_last_stop_dat.drop(columns=['geometry', 'lat', 'long', 'pattern', 'route'], inplace=True)
     return first_last_stop_dat
