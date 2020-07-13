@@ -102,6 +102,8 @@ def find_rawnav_routes(file_universe, nmax=None, quiet=True):
                                                       infer_datetime_format=True, errors='coerce')
     file_universe_df['tag_starthour'] = file_universe_df['tag_time'].str.extract('^(?:\s*)(\d{2}):')
     file_universe_df['tag_starthour'] = pd.to_numeric(file_universe_df['tag_starthour'])
+    # Note that this will put some late Friday trips after 12AM into the "Saturday" bucket
+    #   should probably revisit at a later date to adjust trips before 4 AM to day before.
     file_universe_df['tag_date'] = pd.to_datetime(file_universe_df['tag_date'], infer_datetime_format=True)
     file_universe_df['wday'] = file_universe_df['tag_date'].dt.day_name()
     file_universe_df['line_num_next'] =\
@@ -181,13 +183,15 @@ def clean_rawnav_data(data_dict, filename):
     try:
         temp = tagline_data.new_line_no.values.flatten()
         tag_indices = np.delete(temp, np.where(temp == -1))
+        # Essentially, we reconstitute the tags in the file from the separated columns in rawnavdata and 
+        #   make sure that they all match the separate tag data that came from the rawnav_inventory
         if (len(tag_indices)) != 0:
             check_tag_line_data = rawnavdata.loc[tag_indices, :]
             check_tag_line_data[[1, 4, 5]] = check_tag_line_data[[1, 4, 5]].astype(int)
             check_tag_line_data.loc[:, 'taglist'] = \
                 (check_tag_line_data[[0, 1, 2, 3, 4, 5]].astype(str) + ',').sum(axis=1).str.rsplit(",", 1, expand=True)[
                     0]
-            check_tag_line_data.loc[:, 'taglist'] = check_tag_line_data.loc[:, 'taglist'].str.srun()
+            check_tag_line_data.loc[:, 'taglist'] = check_tag_line_data.loc[:, 'taglist'].str.strip()
             infopat = '^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
             assert ((~check_tag_line_data.taglist.str.match(infopat, re.S)).sum() == 0)
     except:
@@ -195,6 +199,7 @@ def clean_rawnav_data(data_dict, filename):
     
     rawnavdata.reset_index(inplace=True);
     # TODO: This line prevents the function from being rerun, need to address later.
+    #   odd, given local scoping of functions 
     # IS okay on a first run though
     rawnavdata.rename(columns={"index": "index_loc"}, inplace=True)
     
