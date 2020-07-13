@@ -33,6 +33,7 @@ def merge_rawnav_segment(rawnav_gdf_,
             target_dat = target_,
             rawnav_dat = rawnav_gdf_)
     
+
     index_run_segment_start_end = ll.drop_geometry(index_run_segment_start_end_1)
     # WAIT FOR APOORBA TO IMPLEMENT THIS FIRST
     # I imagine we should do some double-checking that the results are about what we want for each run:
@@ -79,7 +80,7 @@ def include_segment_summary(rawnav_q_dat,
     ########################################################################################
     first_last_stop_dat = ws.get_first_last_stop_rawnav(nearest_stop_dat)
     rawnav_q_target_dat = \
-        rawnav_q_dat.merge(first_last_stop_dat, on=['filename', 'index_trip_start_in_clean_data'], how='right')
+        rawnav_q_dat.merge(first_last_stop_dat, on=['filename', 'index_run_start'], how='right')
     rawnav_q_target_dat = rawnav_q_target_dat.query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
     # TODO: The points after this are largely copied and slimmed down from the schedule merge
     # implementation. Not ideal by any stretch, but making this more flexible would be a significant
@@ -87,19 +88,19 @@ def include_segment_summary(rawnav_q_dat,
     rawnav_q_target_dat = \
         rawnav_q_target_dat[
             ['filename',
-             'index_trip_start_in_clean_data', 
+             'index_run_start', 
              'seg_name_id', 
              'lat', 
              'long', 
              'heading', 
-             'odomt_ft', 
+             'odom_ft', 
              'sec_past_st', 
              'first_stop_dist_nearest_point']]
     
     Map1 = lambda x: max(x) - min(x)
     rawnav_q_segment_summary = \
-        rawnav_q_target_dat.groupby(['filename', 'index_trip_start_in_clean_data', 'seg_name_id']).\
-            agg({'odomt_ft': ['min', 'max', Map1],
+        rawnav_q_target_dat.groupby(['filename', 'index_run_start', 'seg_name_id']).\
+            agg({'odom_ft': ['min', 'max', Map1],
                  'sec_past_st': ['min', 'max', Map1],
                  'lat': ['first', 'last'],
                  'long': ['first', 'last'],
@@ -131,7 +132,7 @@ def include_segment_summary(rawnav_q_dat,
         
     rawnav_q_segment_summary =\
         rawnav_q_segment_summary.merge(rawnav_sum_dat, on=['filename', 
-                                                           'index_trip_start_in_clean_data'], 
+                                                           'index_run_start'], 
                                        how='left')
                 
     return rawnav_q_segment_summary
