@@ -17,10 +17,11 @@ from folium import plugins
 import re
 from . import low_level_fns as ll
 
+
 def read_sched_db_patterns(path,
                            analysis_routes,
-                           UID = "",
-                           PWD = ""):
+                           UID="",
+                           PWD=""):
     """
     Parameters
     ----------
@@ -36,11 +37,21 @@ def read_sched_db_patterns(path,
     -------
     wmata_schedule_dat: pd.DataFrame, wmata_schedule data
     """
-    # Open Connection  
-    cnxn = pyodbc.connect(r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + path +\
-                          r';UID="' + UID +\
+    # Open Connection
+    #TODO: Need to give documentation to wmata on how to install access database engine
+    # I was having issue with podbc. I think I have a 64 bit python and 32 bit access.
+    pyodbc_available_drivers = [x for x in pyodbc.drivers() if x.startswith('Microsoft')]
+    if 'Microsoft Access Driver (*.mdb, *.accdb)' not in pyodbc_available_drivers:
+        link1 = "https://ginesys.atlassian.net/wiki/spaces/PUB/pages/66617405/You+cannot+install+the+64-bit+version+of+Microsoft+Access+Database+Engine+because+you+currently+have+32-bit+Office+Product+installed+-+Error+message+shows+when+user+tries+to+install+a+64-bit+version+of+Microsoft+Access+Database+Engine"
+        link2 = "https://knowledge.autodesk.com/support/autocad/learn-explore/caas/sfdcarticles/sfdcarticles/How-to-install-64-bit-Microsoft-Database-Drivers-alongside-32-bit-Microsoft-Office.html"
+        raise pyodbc.InterfaceError("Likely issue with access database engine. Try the following links:\n"
+                                    f"link1 = {link1},\nlink2 = {link2}")
+    # https://ginesys.atlassian.net/wiki/spaces/PUB/pages/66617405/You+cannot+install+the+64-bit+version+of+Microsoft+Access+Database+Engine+because+you+currently+have+32-bit+Office+Product+installed+-+Error+message+shows+when+user+tries+to+install+a+64-bit+version+of+Microsoft+Access+Database+Engine
+    # https://knowledge.autodesk.com/support/autocad/learn-explore/caas/sfdcarticles/sfdcarticles/How-to-install-64-bit-Microsoft-Database-Drivers-alongside-32-bit-Microsoft-Office.html
+    cnxn = pyodbc.connect(r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + path + \
+                          r';UID="' + UID + \
                           r'";PWD="' + PWD + r'";')
-        
+
     # Load Tables
     # NOTE: The creation of the table returned by this function could largely be done with SQL, 
     # but we instead just load the tables as dataframes for some of the convenience of working
@@ -48,39 +59,39 @@ def read_sched_db_patterns(path,
     with cnxn:
         stop_dat = pd.read_sql("SELECT * FROM Stop",
                                cnxn)
-        
+
         pattern_dat = pd.read_sql("SELECT * FROM Pattern",
-                           cnxn)
-        
+                                  cnxn)
+
         pattern_detail_dat = pd.read_sql("SELECT * FROM PatternDetail",
-                           cnxn)
-        
+                                         cnxn)
+
         # We let Pandas close the connection automatically
-        
+
     # Lightly Clean Tables
     stop_dat = stop_dat.dropna(axis=1)
     stop_dat.columns = [inflection.underscore(col_nm) for col_nm in stop_dat.columns]
     stop_dat.rename(
-        columns={'longitude': 'stop_lon', 
+        columns={'longitude': 'stop_lon',
                  'latitude': 'stop_lat',
                  'heading': 'stop_heading'}, inplace=True)
 
-    pattern_dat = pattern_dat[['PatternID','TARoute','PatternName','Direction',
-                               'Distance','CDRoute','CDVariation','PatternDestination',
-                               'RouteText','RouteKey','PubRouteDir','DirectionID']]
+    pattern_dat = pattern_dat[['PatternID', 'TARoute', 'PatternName', 'Direction',
+                               'Distance', 'CDRoute', 'CDVariation', 'PatternDestination',
+                               'RouteText', 'RouteKey', 'PubRouteDir', 'DirectionID']]
     pattern_dat.columns = [inflection.underscore(col_nm) for col_nm in pattern_dat.columns]
     pattern_dat.cd_route = pattern_dat.cd_route.astype(str).str.strip()
     pattern_dat.cd_variation = pattern_dat.cd_variation.astype('int32')
     pattern_dat.rename(columns={
-        'cd_route': 'route', 
+        'cd_route': 'route',
         'cd_variation': 'pattern',
-        'distance':'trip_length'}, 
+        'distance': 'trip_length'},
         inplace=True)
-    
+
     pattern_detail_dat = pattern_detail_dat[pattern_detail_dat.TimePointID.isna()]
     pattern_detail_dat = pattern_detail_dat.drop(columns=['SortOrder', 'GeoPathID', 'TimePointID'])
     pattern_detail_dat.columns = [inflection.underscore(col_nm) for col_nm in pattern_detail_dat.columns]
-    pattern_detail_dat.rename(columns={'distance':'dist_from_previous_stop'},inplace=True)
+    pattern_detail_dat.rename(columns={'distance': 'dist_from_previous_stop'}, inplace=True)
 
     # Filter to Relevant Routes
     q_jump_route_list = analysis_routes
@@ -88,33 +99,33 @@ def read_sched_db_patterns(path,
     if set(pattern_q_jump_route_dat.route.unique()) != set(q_jump_route_list):
         miss_routes = set(q_jump_route_list) - set(pattern_q_jump_route_dat.route.unique())
         print("Schedule data does not include the following route(s): " + miss_routes)
-    
+
     # Join tables
     pattern_pattern_detail_stop_q_jump_route_dat = \
-        pattern_q_jump_route_dat.merge(pattern_detail_dat,on='pattern_id',how='left')\
-        .merge(stop_dat,on='geo_id',how='left')
-    
-    pattern_pattern_detail_stop_q_jump_route_dat.\
-        sort_values(by=['route','pattern','order'],inplace=True)
+        pattern_q_jump_route_dat.merge(pattern_detail_dat, on='pattern_id', how='left') \
+            .merge(stop_dat, on='geo_id', how='left')
+
+    pattern_pattern_detail_stop_q_jump_route_dat. \
+        sort_values(by=['route', 'pattern', 'order'], inplace=True)
 
     # Check for Missing Lat Long In Stops   
     mask_nan_latlong = pattern_pattern_detail_stop_q_jump_route_dat[['stop_lat', 'stop_lon']].isna().all(axis=1)
     assert_stop_sort_order_zero_has_nan_latlong = \
-        sum(pattern_pattern_detail_stop_q_jump_route_dat[mask_nan_latlong].stop_sort_order-0)
-    assert(assert_stop_sort_order_zero_has_nan_latlong==0),\
+        sum(pattern_pattern_detail_stop_q_jump_route_dat[mask_nan_latlong].stop_sort_order - 0)
+    assert (assert_stop_sort_order_zero_has_nan_latlong == 0), \
         print("Missing LatLong values found for stops, please address in source database")
-    
+
     # Ensure Table Values are Consistent and then Drop Superfluous Cols
-    assert(0== sum(~ pattern_pattern_detail_stop_q_jump_route_dat.
-                   eval('''direction==pub_route_dir& route==ta_route''')))
-    pattern_pattern_detail_stop_q_jump_route_dat.drop(columns=['pub_route_dir','ta_route'],inplace=True)
-        
+    assert (0 == sum(~ pattern_pattern_detail_stop_q_jump_route_dat.
+                     eval('''direction==pub_route_dir& route==ta_route''')))
+    pattern_pattern_detail_stop_q_jump_route_dat.drop(columns=['pub_route_dir', 'ta_route'], inplace=True)
+
     return pattern_pattern_detail_stop_q_jump_route_dat
 
 
-def merge_rawnav_wmata_schedule(analysis_route_, 
-                                analysis_day_, 
-                                rawnav_dat_, 
+def merge_rawnav_wmata_schedule(analysis_route_,
+                                analysis_day_,
+                                rawnav_dat_,
                                 rawnav_sum_dat_,
                                 wmata_schedule_dat_):
     """
@@ -146,13 +157,13 @@ def merge_rawnav_wmata_schedule(analysis_route_,
     rawnav_sum_subset_dat = rawnav_sum_dat_.query('route==@analysis_route_ & wday==@analysis_day_')
 
     if (rawnav_sum_subset_dat.shape[0] == 0): return None, None
-    
+
     # Find rawnav point nearest each stop
     nearest_rawnav_point_to_wmata_schedule_dat = \
         merge_rawnav_target(
-            target_dat = wmata_schedule_dat_,
-            rawnav_dat = rawnav_subset_dat)
-    
+            target_dat=wmata_schedule_dat_,
+            rawnav_dat=rawnav_subset_dat)
+
     # Assert and clean stop data
     nearest_rawnav_point_to_wmata_schedule_dat = \
         remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat)
@@ -166,10 +177,39 @@ def merge_rawnav_wmata_schedule(analysis_route_,
         rawnav_sum_dat=rawnav_sum_subset_dat,
         nearest_stop_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
     )
-
+    wmata_schedule_based_sum_dat = add_num_missing_stops_to_sum(
+        rawnav_wmata_schedule_dat = nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat,
+        wmata_schedule_dat_ = wmata_schedule_dat_,
+        wmata_schedule_based_sum_dat_=wmata_schedule_based_sum_dat
+    )
+    wmata_schedule_based_sum_dat.set_index(
+        ['fullpath', 'filename', 'file_id', 'wday', 'start_date_time', 'end_date_time',
+         'index_trip_start_in_clean_data', 'taglist', 'route_pattern', 'route', 'pattern'],
+        inplace=True,
+        drop=True)
     return wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
 
 
+def add_num_missing_stops_to_sum(rawnav_wmata_schedule_dat, wmata_schedule_dat_,wmata_schedule_based_sum_dat_):
+    rawnav_wmata_schedule_num_stops= \
+        rawnav_wmata_schedule_dat.groupby(['filename', 'index_trip_start_in_clean_data']). \
+            agg(route=('route','first'),
+                pattern=('pattern','first'),
+                num_stops_in_trip=('stop_id','count')).reset_index()
+    rawnav_wmata_schedule_num_stops=\
+        pd.DataFrame(rawnav_wmata_schedule_num_stops)
+    wmata_schedule_stops_all= \
+        wmata_schedule_dat_.groupby(['route','pattern']).agg(wmata_stops_all=('stop_id','count')).reset_index()
+    rawnav_wmata_schedule_num_stops = rawnav_wmata_schedule_num_stops.merge(wmata_schedule_stops_all,
+                                                                            on=['route','pattern'],
+                                                                            how='left')
+    rawnav_wmata_schedule_num_stops=\
+        rawnav_wmata_schedule_num_stops.assign(num_missin_stops=lambda x: x.wmata_stops_all-x.num_stops_in_trip)
+    wmata_schedule_based_sum_dat_with_missing_stop = wmata_schedule_based_sum_dat_.merge(rawnav_wmata_schedule_num_stops,
+                                                                      on=['filename','index_trip_start_in_clean_data',
+                                                                          'route','pattern'],
+                                                                      how='left')
+    return wmata_schedule_based_sum_dat_with_missing_stop
 def output_rawnav_wmata_schedule(analysis_route_, analysis_day_, wmata_schedule_based_sum_dat_,
                                  rawnav_wmata_schedule_dat, path_processed_data_):
     '''
@@ -202,14 +242,14 @@ def output_rawnav_wmata_schedule(analysis_route_, analysis_day_, wmata_schedule_
     if not os.path.exists(save_dir2): os.makedirs(save_dir2)
     if not os.path.exists(save_dir3): os.makedirs(save_dir3)
     # Output Summary Files
-    sum_out_file = os.path.join(save_dir3, 
+    sum_out_file = os.path.join(save_dir3,
                                 f'wmata_schedule_trip_summaries-{analysis_route_}_{analysis_day_}.xlsx')
     wmata_schedule_based_sum_dat_.to_excel(sum_out_file, merge_cells=False)
     # Output GTFS+Rawnav Merged Files
     wmata_schedule_rawnav_out_file = os.path.join(
         save_dir3,
         f'wmata_schedule_stop_locations_inventory-{analysis_route_}_{analysis_day_}.xlsx'
-        )
+    )
     rawnav_wmata_schedule_dat.to_excel(wmata_schedule_rawnav_out_file)
     return None
 
@@ -233,7 +273,7 @@ def fix_rawnav_names(data):
     return data
 
 
-def merge_rawnav_target(target_dat, rawnav_dat, quiet = True):
+def merge_rawnav_target(target_dat, rawnav_dat, quiet=True):
     """
     Parameters
     ----------
@@ -246,30 +286,30 @@ def merge_rawnav_target(target_dat, rawnav_dat, quiet = True):
     nearest_rawnav_point_to_target_data : gpd.GeoDataFrame
         A geopandas dataframe with nearest rawnav point to each of the wmata schedule stops on that route.
     """
-    
-    assert(bool(re.search("US survey foot", target_dat.crs.to_wkt()))), print('Need a CRS with feet as units')
-    assert(bool(re.search("US survey foot", rawnav_dat.crs.to_wkt()))), print('Need a CRS with feet as units')
-    assert(target_dat.crs == rawnav_dat.crs), print("CRS must match between objects")
+
+    assert (bool(re.search("US survey foot", target_dat.crs.to_wkt()))), print('Need a CRS with feet as units')
+    assert (bool(re.search("US survey foot", rawnav_dat.crs.to_wkt()))), print('Need a CRS with feet as units')
+    assert (target_dat.crs == rawnav_dat.crs), print("CRS must match between objects")
 
     # Iterate over groups of routes and patterns in rawnav data and target object
-    target_groups = target_dat.groupby(['route', 'pattern'])  
+    target_groups = target_dat.groupby(['route', 'pattern'])
     rawnav_groups = rawnav_dat.groupby(
-        ['route', 'pattern', 'filename', 'index_trip_start_in_clean_data'])  
-    
+        ['route', 'pattern', 'filename', 'index_trip_start_in_clean_data'])
+
     nearest_rawnav_point_to_target_dat = pd.DataFrame()
-    
+
     for name, rawnav_group in rawnav_groups:
-        try: 
+        try:
             target_dat_relevant = \
                 target_groups.get_group(
-                    (name[0], name[1]))  
+                    (name[0], name[1]))
             nearest_rawnav_point_to_target_dat = \
                 pd.concat([nearest_rawnav_point_to_target_dat,
                            ll.ckdnearest(target_dat_relevant, rawnav_group)])
         except:
             if (quiet == False):
                 print(f"No target geometry found for {name[0]} - {name[1]}")
-       
+
     return nearest_rawnav_point_to_target_dat
 
 
@@ -406,16 +446,7 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
                                             'trip_length_mi_direct_wmata_schedule']], 2)
     rawnav_q_stop_sum_dat = \
         rawnav_q_stop_sum_dat.merge(rawnav_sum_dat, on=['filename', 'index_trip_start_in_clean_data'], how='left')
-        
-    rawnav_q_stop_sum_dat.set_index(
-        ['fullpath', 'filename', 'file_id', 'wday', 'start_date_time', 'end_date_time',
-         'index_trip_start_in_clean_data', 'taglist', 'route_pattern', 'route', 'pattern'], 
-        inplace=True,
-        drop=True)
-        
     return rawnav_q_stop_sum_dat
-
-
 
 
 def get_first_last_stop_rawnav(nearest_rawnav_stop_dat):
@@ -455,26 +486,28 @@ def get_first_last_stop_rawnav(nearest_rawnav_stop_dat):
     first_last_stop_dat.drop(columns=['geometry', 'lat', 'long', 'pattern', 'route'], inplace=True)
     return first_last_stop_dat
 
+
 def make_target_rawnav_linestring(index_table):
     # Create a linestring geometry between the rawnav point and target point for visualization
     # Right now it's not strictly necessary
     # TODO: complete documentation, test function
-    
+
     geometry_nearest_rawnav_point = gpd.points_from_xy(index_table.long,
-                                                        index_table.lat)
-    
+                                                       index_table.lat)
+
     geometry_stop_on_route = gpd.points_from_xy(index_table.stop_lon,
                                                 index_table.stop_lat)
-        
+
     geometry = [LineString(list(xy)) for xy in zip(geometry_nearest_rawnav_point, geometry_stop_on_route)]
-    
+
     index_table = \
         gpd.GeoDataFrame(
-            index_table, 
-            geometry=geometry, 
+            index_table,
+            geometry=geometry,
             crs=index_table.crs)
 
     return index_table
+
 
 def plot_rawnav_trajectory_with_wmata_schedule_stops(rawnav_dat, wmata_schedule_stop_with_nearest_rawnav_point_dat):
     '''
@@ -492,7 +525,7 @@ def plot_rawnav_trajectory_with_wmata_schedule_stops(rawnav_dat, wmata_schedule_
     this_map: folium.Map
         map of rawnav trajectory and stops with nearest rawnav point
     '''
-    breakpoint() 
+    breakpoint()
     # TODO: right now, the conversion to linestring of the wmata_schedule_stop .etc file
     # needs to be done before this is run with the new function make_target_rawnav_linestring
     # i broke it - WT

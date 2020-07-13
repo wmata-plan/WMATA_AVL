@@ -8,18 +8,20 @@ Created on Fri May 15 15:36:49 2020
 # 0 Housekeeping. Clear variable space
 ########################################################################################################################
 from IPython import get_ipython  # run magic commands
-
 ipython = get_ipython()
 ipython.magic("reset -f")
 ipython = get_ipython()
-ipython.magic("autoreload")
+#https://stackoverflow.com/questions/36572282/ipython-autoreload-magic-function-not-found
+ipython.magic("load_ext autoreload")
 
 # 1 Import Libraries and Set Global Parameters
 ########################################################################################################################
 # 1.1 Import Python Libraries
 ############################################
 from datetime import datetime
-
+import pyarrow as pa
+import pyarrow.parquet as pq
+import shutil
 print(f"Run Section 1 Import Libraries and Set Global Parameters...")
 begin_time = datetime.now()
 import os, sys, pandas as pd, geopandas as gpd
@@ -38,7 +40,7 @@ if os.getlogin() == "WylieTimmerman":
     sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
     path_sp = r"C:\Users\WylieTimmerman\Documents\projects_local\wmata_avl_local"
     path_source_data = os.path.join(path_sp,"data","00-raw")
-    path_processed_data = os.path.join(path_sp, "data","02-processed)
+    path_processed_data = os.path.join(path_sp, "data","02-processed")
 elif os.getlogin() == "abibeka":
     # Working Paths
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
@@ -55,9 +57,9 @@ else:
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None
-restrict_n = 500
+restrict_n = None
 q_jump_route_list = ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
-                     'H8', 'W47']  # 16 Gb RAM can't handle all these at one go
+                     'H8', 'W47']
 analysis_routes = q_jump_route_list
 # analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
 # analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
@@ -74,54 +76,9 @@ executionTime = str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 1 Import Libraries and Set Global Parameters : {executionTime}")
 print("*" * 100)
 
-# 2 Analyze Route ---Subset RawNav data.
+# 2 Read, analyze and summarize Schedule data
 ########################################################################################################################
-print(f"Run Section 2 Analyze Route ---Subset RawNav Data...")
-begin_time = datetime.now()
-
-# 2.1 Rawnav data
-############################################
-rawnav_dat = wr.read_cleaned_rawnav(
-    analysis_routes_=analysis_routes,
-    path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
-    restrict=restrict_n,
-    analysis_days_=analysis_days)
-rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
-
-# 2.2 Summary data
-############################################
-rawnav_summary_dat, rawnav_trips_less_than_600sec_or_2miles = wr.read_summary_rawnav(
-    analysis_routes_=analysis_routes,
-    path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
-    restrict=restrict_n,
-    analysis_days_=analysis_days)
-rawnav_summary_dat = wr.fix_rawnav_names(rawnav_summary_dat)
-
-# 2.3 Filter Processed Rawnav Data Based on Trip Summary Information
-############################################
-rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_trip_start_in_clean_data']]
-rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col, on=['filename', 'index_trip_start_in_clean_data'],
-                                    how='right')
-
-# Remaining Type Conversions
-rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
-rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
-
-rawnav_qjump_gdf =  gpd.GeoDataFrame(
-            rawnav_qjump_dat, 
-            geometry = gpd.points_from_xy(rawnav_qjump_dat.long,rawnav_qjump_dat.lat),
-            crs='EPSG:4326').\
-            to_crs(epsg=wmata_crs)
-
-rawnav_summary_dat.route = rawnav_summary_dat.route.astype(str)
-
-executionTime = str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 2 Analyze Route ---Subset RawNav Data : {executionTime}")
-print("*" * 100)
-
-# 3 Read, analyze and summarize Schedule data
-########################################################################################################################
-print(f"Run Section 3 Read, analyze and summarize WMATA schedule data...")
+print(f"Run Section 2: Read, analyze and summarize rawnav, WMATA schedule data...")
 begin_time = datetime.now()
 # Read the Wmata_Schedule data
 wmata_schedule_dat = wr.read_sched_db_patterns(
@@ -136,18 +93,59 @@ wmata_schedule_gdf = gpd.GeoDataFrame(
             crs='EPSG:4326').\
             to_crs(epsg=wmata_crs)
 
+# Make Output Directory
+# TODO: Function or something that makes this safer?
+path_stop_summary = os.path.join(path_processed_data, "stop_summary.parquet")
+shutil.rmtree(path_stop_summary, ignore_errors=True)
+os.mkdir(path_stop_summary)
+
+path_stop_index = os.path.join(path_processed_data, "stop_index.parquet")
+shutil.rmtree(path_stop_index, ignore_errors=True)
+os.mkdir(path_stop_index)
+
 for analysis_route in analysis_routes:
     print("*" * 100)
     print(f'Processing analysis route {analysis_route}')
     for analysis_day in analysis_days:
         print(f'Processing {analysis_day}')
-        data_exist_dir = \
-            os.path.join(path_processed_data, 'wmata_schedule_based_sum_dat', str(analysis_route), analysis_day)
-        if os.path.isdir(data_exist_dir):
-            print(f'Skipping analysis route {analysis_route} for {analysis_day}: already processed')
-            continue
         print("*" * 50)
         print(f'Processing analysis route {analysis_route} for {analysis_day}...')
+        # Reload data
+        try:
+            rawnav_dat = wr.read_cleaned_rawnav(
+                path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
+                analysis_routes_=analysis_route,
+                analysis_days_=analysis_day,
+                restrict=restrict_n)
+        except Exception as e:
+            print(e)  # usually no data found or something similar
+            continue
+        else:
+            rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
+            rawnav_summary_dat, rawnav_trips_less_than_600sec_or_2miles = wr.read_summary_rawnav(
+                path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
+                analysis_routes_=analysis_route,
+                analysis_days_=analysis_day,
+                restrict=restrict_n)
+            rawnav_summary_dat = wr.fix_rawnav_names(rawnav_summary_dat)
+            # Subset Rawnav Data to Records Desired
+            rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_trip_start_in_clean_data']]
+            rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col,
+                                                on=['filename', 'index_trip_start_in_clean_data'],
+                                                how='right')
+
+            # Address Remaining Col Format issues
+            # TODO: resolve these elsewhere
+            rawnav_qjump_dat.pattern = rawnav_qjump_dat.pattern.astype('int')
+            rawnav_qjump_dat.route = rawnav_qjump_dat.route.astype(str)
+            rawnav_summary_dat.route = rawnav_summary_dat.route.astype(str)
+
+            rawnav_qjump_gdf = gpd.GeoDataFrame(
+                rawnav_qjump_dat,
+                geometry=gpd.points_from_xy(rawnav_qjump_dat.long, rawnav_qjump_dat.lat),
+                crs='EPSG:4326'). \
+                to_crs(epsg=wmata_crs)
+
         wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat = \
             wr.merge_rawnav_wmata_schedule(
                 analysis_route_=analysis_route,
@@ -159,13 +157,19 @@ for analysis_route in analysis_routes:
             print(f'No data on analysis route {analysis_route} for {analysis_day}')
             continue
 
-        wr.output_rawnav_wmata_schedule(
-            analysis_route_=analysis_route,
-            analysis_day_=analysis_day,
-            wmata_schedule_based_sum_dat_=wmata_schedule_based_sum_dat,
-            rawnav_wmata_schedule_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat,
-            path_processed_data_=path_processed_data)
-        
+        pq.write_to_dataset(
+            table=pa.Table.from_pandas(wmata_schedule_based_sum_dat),
+            root_path=path_stop_summary,
+            partition_cols=['route', 'wday'])
+        nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat=\
+            wr.drop_geometry(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat)
+        nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat=\
+            nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat.assign(wday=analysis_day)
+        pq.write_to_dataset(
+            table=pa.Table.from_pandas(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat),
+            root_path=path_stop_index,
+            partition_cols=['route', 'wday'])
+
 executionTime = str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 3 Read, analyze and summarize WMATA schedule data : {executionTime}")
+print(f"Run Time Section Section 2: Read, analyze and summarize rawnav, WMATA schedule data : {executionTime}")
 print("*" * 100)
