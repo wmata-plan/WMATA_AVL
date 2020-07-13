@@ -61,8 +61,8 @@ else:
 # In general, set analysis_routes to the largest set of routes you are likely to look at --
 # the list of routes can be subset further later.
 restrict_n = None
-# analysis_routes = ['W47'] 
-analysis_routes = ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4', 
+# analysis_routes = ['79'] 
+analysis_routes = ['S1', 'S2', 'S4', 'S9', '70', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4', 
                     'H8', 'W47'] 
 zip_parent_folder_name = "October 2019 Rawnav"
 # Assumes directory structure:
@@ -70,7 +70,8 @@ zip_parent_folder_name = "October 2019 Rawnav"
 #  -- zipped_files_dirs (e.g., Vehicles 0-2999.zip)
 #     -- file_universe (items in various zipped_files_dirs ala rawnav##########.txt.zip
 
-run_inventory = True # inventory (or re-inventory files), otherwise reload saved inventory if available
+run_inventory = False # inventory (or re-inventory files), otherwise reload saved inventory if available
+# TODO: add overwrite parameter -- currently defaults to overwriting existing data for any route
 
 # 1.3 Import User-Defined Package
 ############################################
@@ -142,6 +143,9 @@ for index, row in rawnav_inv_filt_first.iterrows():
     # TODO: I don't quite get the tag_line_info_no bit
     tag_info_line_no = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == row['filename']]
     reference = min(tag_info_line_no.line_num)
+    # -1 refers to the fact that the tag line identifying the start of a run will be removed, such
+    # that the second row associated with a run will become the first row of data. This helps to 
+    # ensure that indices of the processed data will line up with values in the rawnav inventory
     tag_info_line_no.loc[:, "new_line_no"] = tag_info_line_no.line_num - reference - 1
     temp = wr.load_rawnav_data(
         zip_folder_path=row['fullpath'],
@@ -171,6 +175,7 @@ for key, datadict in route_rawnav_tag_dict.items():
 
     rawnav_data_dict[key] = temp_dat['rawnavdata']
     summary_data_dict[key] = temp_dat['summary_data']
+        
 
 route_rawnav_tag_dict = None
 
@@ -183,7 +188,7 @@ begin_time = datetime.now()
 # 5.1 Output Summary Rawnav data
 ############################################
 
-# Combine summary files, filter to analysis routes, convert col types
+# Combine summary files, filter to analysis routes, convert col types once NAs removed
 summary_rawnav = pd.concat(summary_data_dict.values())
 
 summary_rawnav = summary_rawnav[summary_rawnav['route'].isin(analysis_routes)]
@@ -196,17 +201,27 @@ summary_rawnav = summary_rawnav[
     ~summary_rawnav.duplicated(['filename', 'index_run_start'], keep='last')]  
 
 # Output Summary Files
-path_summary_rawnav = os.path.join(path_processed_data,"summary_rawnav.parquet")
-shutil.rmtree(path_summary_rawnav, ignore_errors=True) 
-os.mkdir(path_summary_rawnav)
+path_summary_rawnav = os.path.join(path_processed_data,"rawnav_summary.parquet")
 
-summary_rawnav.to_parquet(
-    path = path_summary_rawnav,
-    partition_cols = ['route'],
-    index = False)
+if not os.path.isdir(path_summary_rawnav):
+    os.mkdir(path_summary_rawnav)
+    
+for analysis_route in analysis_routes:
+    shutil.rmtree(os.path.join(path_summary_rawnav,"route={}".format(analysis_route)), ignore_errors=True) 
+
+    summary_rawnav.to_parquet(
+        path = path_summary_rawnav,
+        partition_cols = ['route'],
+        index = False)
 
 # 5.2 Output Processed Rawnav data
 ############################################
+# Export Data
+path_rawnav_data = os.path.join(path_processed_data, "rawnav_data.parquet")
+
+if not os.path.isdir(path_rawnav_data):
+    os.mkdir(path_rawnav_data)
+
 for analysis_route in analysis_routes:
     
     # Merge Cleaned Rawnav Files Containing The Analysis Route
@@ -226,11 +241,8 @@ for analysis_route in analysis_routes:
 
     assert (out_rawnav_dat.groupby(['filename', 'index_run_start', 'index_loc'])['index_loc'].
             count().values.max() == 1)
-    
-    # Export Data
-    path_rawnav_data = os.path.join(path_processed_data, "rawnav_data.parquet")
-    shutil.rmtree(path_rawnav_data, ignore_errors=True)  
-    os.mkdir(path_rawnav_data) 
+        
+    shutil.rmtree(os.path.join(path_rawnav_data,"route={}".format(analysis_route)), ignore_errors=True) 
     
     pq.write_to_dataset(pa.Table.from_pandas(out_rawnav_dat), 
                         root_path=os.path.join(path_rawnav_data),
