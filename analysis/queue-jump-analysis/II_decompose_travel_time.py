@@ -181,7 +181,8 @@ rawnav_qjump_dat[['odom_ft_next','sec_past_st_next']] = (
         .shift(-1))
     
 rawnav_qjump_dat = (rawnav_qjump_dat
-                    .assign(fps_next = lambda x: x.odom_ft_next / x.sec_past_st_next))
+                    .assign(fps_next = lambda x: ((x.odom_ft_next - x.odom_ft) / 
+                                                  (x.sec_past_st_next - x.sec_past_st))))
     
 # but also want a bigger lag for more stable values for free flow speed
 rawnav_qjump_dat[['odom_ft_next3','sec_past_st_next3']] = (
@@ -189,9 +190,9 @@ rawnav_qjump_dat[['odom_ft_next3','sec_past_st_next3']] = (
         [['odom_ft','sec_past_st']]
         .shift(-3))
 
-rawnav_qjump_dat = (
-    rawnav_qjump_dat
-    .assign(fps_next3 = lambda x: x.odom_ft_next3 / x.sec_past_st_next3))
+rawnav_qjump_dat = (rawnav_qjump_dat
+                    .assign(fps_next3 = lambda x: ((x.odom_ft_next3 - x.odom_ft) / 
+                                   (x.sec_past_st_next3 - x.sec_past_st))))
 
 # 4 Calculate Free Flow Speed
 ####################################################################################################
@@ -199,7 +200,7 @@ rawnav_qjump_dat = (
 # TODO: Consider moving all of this to a function
 freeflow = []
 
-for seg in segments['seg_name_id']:
+for seg in segments['seg_name_id']: #['georgia_piney_branch_long']: #
     try:
         segment_summary_fil_seg = (
             segment_summary_fil
@@ -228,21 +229,21 @@ for seg in segments['seg_name_id']:
              
         freeflow_seg = (
             rawnav_qjump_dat_seg
-            .loc[lambda x: x.fps_next3 < 73.3, 'fps_next3']
+            .loc[lambda x: x.fps_next < 73.3, 'fps_next']
             .quantile([0.01, 0.05, 0.10, 0.15, 0.25, 0.5, 0.75, 0.85, 0.90, 0.95, 0.99])
             .to_frame()
-            .assign(mph = lambda x: x.fps_next3 / 1.467,
+            .assign(mph = lambda x: x.fps_next / 1.467,
                     seg_name_id = seg)
             )
+
         freeflow.append(freeflow_seg)
 
-freeflow = pd.concat(freeflow)
+freeflow = (pd.concat(freeflow)
+             .rename_axis('ntile')
+            .reset_index())
 
-# why does this transpose?
-freeflow_vals = (
-    freeflow
-    .loc[.95]
-    )
+# why does this transpose? oh python...
+freeflow_vals = freeflow.query('ntile == 0.95')
 
 # 4. Do Basic Decomposition of Travel Time by Run
 ####################################################################################################
