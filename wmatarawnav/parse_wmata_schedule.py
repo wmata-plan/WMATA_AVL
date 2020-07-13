@@ -406,9 +406,20 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
     rawnav_q_stop_dat = rawnav_q_stop_dat.query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
     rawnav_q_stop_dat = \
         rawnav_q_stop_dat[
-            ['filename', 'index_run_start', 'lat', 'long', 'heading', 'odom_ft', 'sec_past_st'
-                , 'first_stop_dist_nearest_point', 'trip_length', 'route_text', 'pattern_name', 'direction',
-             'pattern_destination', 'direction_id']]
+            ['filename', 
+             'index_run_start', 
+             'lat', 
+             'long',
+             'heading', 
+             'odom_ft', 
+             'sec_past_st',
+             'first_stop_dist_nearest_point', 
+             'trip_length', 
+             'route_text',
+             'pattern_name', 
+             'direction',
+             'pattern_destination', 
+             'direction_id']]
     Map1 = lambda x: max(x) - min(x)
     rawnav_q_stop_sum_dat = \
         rawnav_q_stop_dat.groupby(['filename', 'index_run_start']). \

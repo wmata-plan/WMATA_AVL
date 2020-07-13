@@ -57,7 +57,8 @@ def read_cleaned_rawnav(analysis_routes_, path, analysis_days_):
         try:
             rawnav_temp_dat = (
                 pq.read_table(source=os.path.join(path),
-                              filters=filter_parquet)
+                              filters=filter_parquet,
+                              use_pandas_metadata = True)
                 .to_pandas())
             
             # NOTE: could selectt fewer columns to save memory/time on read in, but don't expect
