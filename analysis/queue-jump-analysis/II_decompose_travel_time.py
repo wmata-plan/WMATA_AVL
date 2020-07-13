@@ -57,7 +57,7 @@ else:
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None
 restrict_n = 5000
-q_jump_route_list = ['W47']  #'H8'
+q_jump_route_list = ['79']  #'H8'
  # ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
                      # 16 Gb RAM can't handle all these at one go
 analysis_routes = q_jump_route_list
@@ -134,39 +134,38 @@ segments = gpd.read_file(
     to_crs(wmata_crs)
     
 # 4. Load rawnav data
-rawnav_dat = wr.read_cleaned_rawnav(
-                path_processed_route_data=os.path.join(path_processed_data, "RouteData"),
-                analysis_routes_=analysis_routes,
-                analysis_days_=analysis_days,
-                restrict=restrict_n)
-rawnav_dat = wr.fix_rawnav_names(rawnav_dat)
+rawnav_dat = (
+    wr.read_cleaned_rawnav(
+       analysis_routes_ = analysis_routes,
+       analysis_days_ = analysis_days,
+       path = os.path.join(path_processed_data, "rawnav_data.parquet"))
+    .drop(columns=['blank', 'lat_raw', 'long_raw', 'sat_cnt'])
+    )
 
 segment_summary =\
     pq.read_table(source = os.path.join(path_processed_data,"segment_summary.parquet"),
-                  # columns = [],
                   use_pandas_metadata = True,
-                  # filters = 
                   ).to_pandas()
 # 3 Filter Out Runs that Appear Problematic
 ####################################################################################################
 
-# TODO: need to change col name and add dist to last 'stop' 
+# TODO: need to add dist to last 'stop' and check that as well
 segment_summary_fil = segment_summary.query('dist_first_stop_segment < 30')
 
 # Reduce rawnav data to runs present in the summary file after filtering.
-# Don't want to do a straight merge -- that has issues in that some runs will appear twice in the 
+# Note that this file may have also been the product of a filtered rawnav_summary table
+# One doesn't want to do a straight merge -- that has issues in that some runs will appear twice in the 
 # segment summary file because they have multiple segments defined. This will keep them if they
 # meet criteria for any of their segments and will not duplicate. #TODO : test this.
 # Ideally we could shortcut this using the index, but the index for this table is a little different
 segment_summary_fil_runs = list(zip(segment_summary_fil.filename.values, 
-                                    segment_summary_fil.index_trip_start_in_clean_data.values))
+                                    segment_summary_fil.index_run_start.values))
 
-# Later we shouldn't need this
-rawnav_dat.set_index(['filename','index_trip_start_in_clean_data'], inplace = True)
+rawnav_dat.set_index(['filename','index_run_start'], inplace = True)
 
 rawnav_qjump_dat = rawnav_dat[rawnav_dat.index.isin(segment_summary_fil_runs)]
 
-# TODO: repeat for filtering problematic wmata schedule joins
+# TODO: repeat for filtering problematic wmata schedule joins to stop zone, etc.
 
 # Cleanup
 del rawnav_dat    
@@ -176,62 +175,66 @@ del segment_summary_fil_runs
 ####################################################################################################
 
 # We'll use the 'instantaneous' speed in some cases                 
-rawnav_qjump_dat[['odomt_ft_next','sec_past_st_next']] = (
-    rawnav_qjump_dat.groupby(['filename','index_trip_start_in_clean_data'], sort = False)\
-        [['odomt_ft','sec_past_st']]
+rawnav_qjump_dat[['odom_ft_next','sec_past_st_next']] = (
+    rawnav_qjump_dat.groupby(['filename','index_run_start'], sort = False)\
+        [['odom_ft','sec_past_st']]
         .shift(-1))
     
 rawnav_qjump_dat = (rawnav_qjump_dat
-                    .assign(fps_next = lambda x: x.odomt_ft_next / x.sec_past_st_next))
+                    .assign(fps_next = lambda x: x.odom_ft_next / x.sec_past_st_next))
     
 # but also want a bigger lag for more stable values for free flow speed
-rawnav_qjump_dat[['odomt_ft_next3','sec_past_st_next3']] = (
-    rawnav_qjump_dat.groupby(['filename','index_trip_start_in_clean_data'], sort = False)\
-        [['odomt_ft','sec_past_st']]
+rawnav_qjump_dat[['odom_ft_next3','sec_past_st_next3']] = (
+    rawnav_qjump_dat.groupby(['filename','index_run_start'], sort = False)\
+        [['odom_ft','sec_past_st']]
         .shift(-3))
 
 rawnav_qjump_dat = (
     rawnav_qjump_dat
-    .assign(fps_next3 = lambda x: x.odomt_ft_next3 / x.sec_past_st_next3))
+    .assign(fps_next3 = lambda x: x.odom_ft_next3 / x.sec_past_st_next3))
 
 # 4 Calculate Free Flow Speed
 ####################################################################################################
 
-# TODO: Consider moving to function
+# TODO: Consider moving all of this to a function
 freeflow = []
 
-for seg in ['irving_fifteenth_sixteenth']:   #segments['seg_name_id']:
-    segment_summary_fil_seg = (
-        segment_summary_fil
-        .query('seg_name_id == @seg')\
-        [['filename', 'index_trip_start_in_clean_data', 'start_odom_ft_segment', 'end_odom_ft_segment']]
-        )
-    
-    #not sure about directionality of join, shouldn't matter much
-    rawnav_qjump_dat_seg = (
-        rawnav_qjump_dat
-        .merge(segment_summary_fil_seg,
-               on=['filename', 'index_trip_start_in_clean_data'], how='right')
-        )
-  
-    # TODO: insert the index field into the summary file, then update this filter.
-    # effect is probably the same though
-    rawnav_qjump_dat_seg = (
-        rawnav_qjump_dat_seg
-        .query('odomt_ft >= start_odom_ft_segment & odomt_ft < end_odom_ft_segment')
-        .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
-        )
-         
-    freeflow_seg = (
-        rawnav_qjump_dat_seg
-        .loc[lambda x: x.fps_next3 < 73.3, 'fps_next3']
-        .quantile([0.01, 0.05, 0.10, 0.15, 0.25, 0.5, 0.75, 0.85, 0.90, 0.95, 0.99])
-        .to_frame()
-        .assign(mph = lambda x: x.fps_next3 / 1.467,
-                seg_name_id = seg)
-        )
-    
-    freeflow.append(freeflow_seg)
+for seg in segments['seg_name_id']:
+    try:
+        segment_summary_fil_seg = (
+            segment_summary_fil
+            .query('seg_name_id == @seg')\
+            [['filename', 'index_run_start', 'start_odom_ft_segment', 'end_odom_ft_segment']]
+            )
+        assert(len(segment_summary_fil_seg) != 0)
+    except:
+        print("No data found for segment {}".format(seg)) 
+        continue
+    else:
+        #not sure about directionality of join, shouldn't matter much
+        rawnav_qjump_dat_seg = (
+            rawnav_qjump_dat
+            .merge(segment_summary_fil_seg,
+                   on=['filename', 'index_run_start'], how='right')
+            )
+      
+        # TODO: insert the index field into the summary file, then update this filter.
+        # effect is probably the same though
+        rawnav_qjump_dat_seg = (
+            rawnav_qjump_dat_seg
+            .query('odom_ft >= start_odom_ft_segment & odom_ft < end_odom_ft_segment')
+            .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
+            )
+             
+        freeflow_seg = (
+            rawnav_qjump_dat_seg
+            .loc[lambda x: x.fps_next3 < 73.3, 'fps_next3']
+            .quantile([0.01, 0.05, 0.10, 0.15, 0.25, 0.5, 0.75, 0.85, 0.90, 0.95, 0.99])
+            .to_frame()
+            .assign(mph = lambda x: x.fps_next3 / 1.467,
+                    seg_name_id = seg)
+            )
+        freeflow.append(freeflow_seg)
 
 freeflow = pd.concat(freeflow)
 
@@ -239,7 +242,6 @@ freeflow = pd.concat(freeflow)
 freeflow_vals = (
     freeflow
     .loc[.95]
-    .to_frame()
     )
 
 # 4. Do Basic Decomposition of Travel Time by Run
