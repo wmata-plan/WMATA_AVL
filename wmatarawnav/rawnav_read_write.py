@@ -64,9 +64,7 @@ def read_cleaned_rawnav(analysis_routes_, path_processed_route_data, restrict, a
             rawnav_temp_dat.route = rawnav_temp_dat.route.astype('str')
             rawnav_temp_dat.drop(columns=['Blank', 'LatRaw', 'LongRaw', 'SatCnt', '__index_level_0__'], 
                                  inplace=True)
-            # Check for duplicate IndexLoc
-            assert (rawnav_temp_dat
-                    .groupby(['filename', 'IndexTripStartInCleanData', 'IndexLoc'])['IndexLoc'].count().values.max() == 1)
+
             rawnav_temp_list.append(rawnav_temp_dat)
     rawnav_dat = pd.concat(rawnav_temp_list)
     return rawnav_dat
