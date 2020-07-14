@@ -165,6 +165,8 @@ def merge_rawnav_wmata_schedule(analysis_route_,
             rawnav_dat=rawnav_subset_dat)
 
     # Assert and clean stop data
+    # TODO: confirm what happens if a route has no pings near a stop (unlikely, but is it dropped entirely
+    # from summary and index table?)
     nearest_rawnav_point_to_wmata_schedule_dat = \
         remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat)
 
@@ -177,11 +179,13 @@ def merge_rawnav_wmata_schedule(analysis_route_,
         rawnav_sum_dat=rawnav_sum_subset_dat,
         nearest_stop_dat=nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
     )
+    
     wmata_schedule_based_sum_dat = add_num_missing_stops_to_sum(
         rawnav_wmata_schedule_dat = nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat,
         wmata_schedule_dat_ = wmata_schedule_dat_,
         wmata_schedule_based_sum_dat_=wmata_schedule_based_sum_dat
     )
+    
     wmata_schedule_based_sum_dat.set_index(
         ['fullpath', 'filename', 'file_id', 'wday', 'start_date_time', 'end_date_time',
          'index_run_start', 'taglist', 'route_pattern', 'route', 'pattern'],
@@ -190,7 +194,10 @@ def merge_rawnav_wmata_schedule(analysis_route_,
     return wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
 
 
-def add_num_missing_stops_to_sum(rawnav_wmata_schedule_dat, wmata_schedule_dat_,wmata_schedule_based_sum_dat_):
+def add_num_missing_stops_to_sum(rawnav_wmata_schedule_dat, 
+                                 wmata_schedule_dat_
+                                 ,wmata_schedule_based_sum_dat_):
+
     rawnav_wmata_schedule_num_stops= \
         rawnav_wmata_schedule_dat.groupby(['filename', 'index_run_start']). \
             agg(route=('route','first'),
@@ -509,10 +516,22 @@ def get_first_last_stop_rawnav(nearest_rawnav_stop_dat):
 
 
 def make_target_rawnav_linestring(index_table):
+    '''
+    Parameters
+    ----------
+    index_table: pd.DataFrame
+        rawnav idnex data with cols lat, long, stop_lon, stop_lat
+    Returns
+    -------
+    index_table_mod: gpd.DataFrame
+        rawnav index table with linestring geometry between rawnav point and nearest
+    '''
     # Create a linestring geometry between the rawnav point and target point for visualization
     # Right now it's not strictly necessary
     # TODO: complete documentation, test function
 
+    # index_table = ll.drop_geometry(index_table)
+    
     geometry_nearest_rawnav_point = gpd.points_from_xy(index_table.long,
                                                        index_table.lat)
 
@@ -521,32 +540,32 @@ def make_target_rawnav_linestring(index_table):
 
     geometry = [LineString(list(xy)) for xy in zip(geometry_nearest_rawnav_point, geometry_stop_on_route)]
 
-    index_table = \
+    index_table_mod = \
         gpd.GeoDataFrame(
             index_table,
             geometry=geometry,
-            crs=index_table.crs)
+            crs='EPSG:4326')
 
-    return index_table
+    return index_table_mod
 
 
-def plot_rawnav_trajectory_with_wmata_schedule_stops(rawnav_dat, wmata_schedule_stop_with_nearest_rawnav_point_dat):
+def plot_rawnav_trajectory_with_wmata_schedule_stops(rawnav_dat, index_table_line):
     '''
     Parameters
     ----------
     rawnav_dat: pd.DataFrame
         rawnav data
-    wmata_schedule_stop_with_nearest_rawnav_point_dat: gpd.GeoDataFrame
+    index_table_line: gpd.GeoDataFrame
         cleaned data on nearest rawnav point to wmata schedule data where
             - stops whose ordering does not correspond to the index_loc/ time/ odometer are removed i.e. stops are
             removed if  order does not increase with index_loc or time or distance.
             - where all stops with closest rawnav point > 100 ft. are removed.
+            - line to nearest stop is geometry
     Returns
     -------
     this_map: folium.Map
         map of rawnav trajectory and stops with nearest rawnav point
     '''
-    breakpoint()
     # TODO: right now, the conversion to linestring of the wmata_schedule_stop .etc file
     # needs to be done before this is run with the new function make_target_rawnav_linestring
     # i broke it - WT
@@ -561,12 +580,12 @@ def plot_rawnav_trajectory_with_wmata_schedule_stops(rawnav_dat, wmata_schedule_
                      zoom_start=16, max_zoom=25, control_scale=True).add_to(this_map)
     folium.TileLayer('cartodbpositron', zoom_start=16, max_zoom=20, control_scale=True).add_to(this_map)
     folium.TileLayer('openstreetmap', zoom_start=16, max_zoom=20, control_scale=True).add_to(this_map)
-    fg = folium.FeatureGroup(name="Rawnav Trajectory")
+    fg = folium.FeatureGroup(name="Rawnav Pings")
     this_map.add_child(fg)
-    line_grp = folium.FeatureGroup(name="WMATA Schedule Stops and Nearest Rawnav Point")
+    line_grp = folium.FeatureGroup(name="WMATA Schedule Stops and Nearest Rawnav Pings")
     this_map.add_child(line_grp)
     plot_marker_clusters(this_map, rawnav_dat, "lat", "long", fg)
-    plot_lines_clusters(this_map, wmata_schedule_stop_with_nearest_rawnav_point_dat, line_grp)
+    plot_lines_clusters(this_map, index_table_line, line_grp)
     lat_longs = [[x, y] for x, y in zip(rawnav_dat.lat, rawnav_dat.long)]
     this_map.fit_bounds(lat_longs)
     folium.LayerControl(collapsed=True).add_to(this_map)
