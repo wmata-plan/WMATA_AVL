@@ -154,7 +154,9 @@ for index, row in rawnav_inv_filt_first.iterrows():
     if type(temp) != type(None):
         route_rawnav_tag_dict[row['filename']] = dict(RawData=temp, tagLineInfo=tag_info_line_no)
     else:
-        remove_file = row['filename']  # remove bad read files
+        # remove bad read files
+        # TODO: build tests around 'bad' reads and what's happening with these; only lose a handful of files
+        remove_file = row['filename']  
         rawnav_inventory_filtered_valid  = rawnav_inventory_filtered_valid.query('filename!= @remove_file')
 
 execution_time = str(datetime.now() - begin_time).split('.')[0]
@@ -168,7 +170,7 @@ rawnav_data_dict = {}
 summary_data_dict = {}
 
 for key, datadict in route_rawnav_tag_dict.items():
-
+    # TODO: look into cleaning issues with rawnav06437191018.txt (8664), rawnav06437191024.txt (*)
     temp_dat = wr.clean_rawnav_data(
         data_dict=datadict,
         filename=key)
@@ -273,7 +275,8 @@ for analysis_route in analysis_routes:
     temp = summary_rawnav[['filename', 'index_run_start', 'wday', 'start_date_time']]
     out_rawnav_dat = out_rawnav_dat.merge(temp, 
                                           on=['filename', 'index_run_start'], 
-                                          how='right')
+                                          how='inner')
+    #
 
     assert (out_rawnav_dat.groupby(['filename', 'index_run_start', 'index_loc'])['index_loc'].
             count().values.max() == 1)
@@ -281,7 +284,7 @@ for analysis_route in analysis_routes:
     # Column conversion after missing values removed
     out_rawnav_dat = out_rawnav_dat.assign(
         route=lambda x: x.route.astype('str'),
-        pattern=lambda x: x.pattern.astype('int32'))
+        pattern=lambda x: x.pattern.astype('double'))
 
     # Output    
     shutil.rmtree(os.path.join(path_rawnav_data,"route={}".format(analysis_route)), ignore_errors=True) 
