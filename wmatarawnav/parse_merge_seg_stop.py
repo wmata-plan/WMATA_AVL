@@ -32,19 +32,15 @@ def merge_rawnav_segment(rawnav_gdf_,
         ws.merge_rawnav_target(
             target_dat = target_,
             rawnav_dat = rawnav_gdf_)
+     
+    # Cleaning
+    index_run_segment_start_end_1 =\
+        remove_run_with_seg_dist_over_50ft(index_run_segment_start_end_1)
     
-
-    index_run_segment_start_end = ll.drop_geometry(index_run_segment_start_end_1)
-    # WAIT FOR APOORBA TO IMPLEMENT THIS FIRST
-    # I imagine we should do some double-checking that the results are about what we want for each run:
-    #  - Are the points nearest to the end of the segment within ~ X feet?
-    #  - Are the nearest points in order, such that the segment start point has a lower index value than the
+    #  - TODO: Are the nearest points in order, such that the segment start point has a lower index value than the
     #    segment end point (checks that the segment was drawn in the right direction and that any
     #    future bidirectional segment is actually drawn once for every segment)
-    #  -  Are rawnav points continuously within a buffer of ~Y feet around a segment?
-    # At this point, one could further filter the rawnav_run_iteration_frame created in #2 to those 
-    #   meeting certain criteria for quality (e.g., average speed not insanely high or low, total
-    #   travel time or travel distance not crazy).
+    #  -  TODO: Are rawnav points continuously within a buffer of ~Y feet around a segment?
     
     # Generate Summary
     summary_run_segment =\
@@ -80,7 +76,9 @@ def include_segment_summary(rawnav_q_dat,
     ########################################################################################
     first_last_stop_dat = ws.get_first_last_stop_rawnav(nearest_stop_dat)
     rawnav_q_target_dat = \
-        rawnav_q_dat.merge(first_last_stop_dat, on=['filename', 'index_run_start'], how='right')
+        rawnav_q_dat.merge(first_last_stop_dat,
+                           on=['filename', 'index_run_start'], 
+                           how='right')
     rawnav_q_target_dat = rawnav_q_target_dat.query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
     # TODO: The points after this are largely copied and slimmed down from the schedule merge
     # implementation. Not ideal by any stretch, but making this more flexible would be a significant
@@ -136,3 +134,26 @@ def include_segment_summary(rawnav_q_dat,
                                        how='left')
                 
     return rawnav_q_segment_summary
+
+def remove_run_with_seg_dist_over_50ft(index_table):
+    """
+    Parameters
+    ----------
+    index_table: gpd.GeoDataFrame
+        A geopandas dataframe with nearest rawnav point to each of the wmata schedule stops on that route.
+    Returns
+    -------
+    index_table: gpd.GeoDataFrame
+        cleaned data on nearest rawnav point to data where all stops with closest rawnav point > 100 ft.
+        are removed.
+    """
+    row_before = index_table.shape[0]
+    
+    index_table_fil =\
+        index_table[index_table.groupby(['filename','index_run_start'],sort = False)\
+                ['dist_to_nearest_point']\
+                .transform(lambda x: all(x.dist_to_nearest_point < 50))]
+    
+    row_after = index_table_fil.shape[0]
+    print(f'deleted {row_before - row_after} rows from {row_before} where nearest points to rawnav both not <50 ft.')
+    return index_table_fil
