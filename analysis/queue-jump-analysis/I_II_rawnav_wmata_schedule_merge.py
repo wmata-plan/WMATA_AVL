@@ -95,20 +95,19 @@ wmata_schedule_gdf = gpd.GeoDataFrame(
 # Make Output Directory
 # TODO: Function or something that makes this safer?
 path_stop_summary = os.path.join(path_processed_data, "stop_summary.parquet")
-shutil.rmtree(path_stop_summary, ignore_errors=True)
-os.mkdir(path_stop_summary)
+if not os.path.isdir(path_stop_summary):
+    os.mkdir(path_stop_summary)
 
 path_stop_index = os.path.join(path_processed_data, "stop_index.parquet")
-shutil.rmtree(path_stop_index, ignore_errors=True)
-os.mkdir(path_stop_index)
+if not os.path.isdir(path_stop_index):
+    os.mkdir(path_stop_index)
 
 for analysis_route in analysis_routes:
     print("*" * 100)
     print(f'Processing analysis route {analysis_route}')
     for analysis_day in analysis_days:
-        print(f'Processing {analysis_day}')
-        print("*" * 50)
         print(f'Processing analysis route {analysis_route} for {analysis_day}...')
+                
         # Reload data
         try:
             rawnav_dat = (
@@ -152,16 +151,28 @@ for analysis_route in analysis_routes:
         if type(stop_summary) == type(None):
             print(f'No data on analysis route {analysis_route} for {analysis_day}')
             continue
-
+        
+        # Write Summary Table 
+        shutil.rmtree(os.path.join(path_stop_summary,
+                                   "route={}".format(analysis_route),
+                                   "wday={}".format(analysis_day)),
+                      ignore_errors=True) 
+        
         pq.write_to_dataset(
             table=pa.Table.from_pandas(stop_summary),
             root_path=path_stop_summary,
             partition_cols=['route', 'wday'])
         
+        # Write Index Table
+        shutil.rmtree(os.path.join(path_stop_index,
+                                   "route={}".format(analysis_route),
+                                   "wday={}".format(analysis_day)),
+                      ignore_errors=True) 
+        
         stop_index = wr.drop_geometry(stop_index)
         
         stop_index = stop_index.assign(wday=analysis_day)
-        
+                
         pq.write_to_dataset(
             table=pa.Table.from_pandas(stop_index),
             root_path=path_stop_index,
