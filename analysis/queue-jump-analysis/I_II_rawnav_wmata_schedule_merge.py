@@ -142,30 +142,28 @@ for analysis_route in analysis_routes:
                 crs='EPSG:4326'). \
                 to_crs(epsg=wmata_crs)
 
-        wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat = \
+        stop_summary, stop_index = \
             wr.merge_rawnav_wmata_schedule(
                 analysis_route_=analysis_route,
                 analysis_day_=analysis_day,
                 rawnav_dat_=rawnav_qjump_gdf,
                 rawnav_sum_dat_=rawnav_summary_dat,
                 wmata_schedule_dat_=wmata_schedule_gdf)
-        if type(wmata_schedule_based_sum_dat) == type(None):
+        if type(stop_summary) == type(None):
             print(f'No data on analysis route {analysis_route} for {analysis_day}')
             continue
 
         pq.write_to_dataset(
-            table=pa.Table.from_pandas(wmata_schedule_based_sum_dat),
+            table=pa.Table.from_pandas(stop_summary),
             root_path=path_stop_summary,
             partition_cols=['route', 'wday'])
         
-        nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat=\
-            wr.drop_geometry(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat)
+        stop_index = wr.drop_geometry(stop_index)
         
-        nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat=\
-            nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat.assign(wday=analysis_day)
+        stop_index = stop_index.assign(wday=analysis_day)
         
         pq.write_to_dataset(
-            table=pa.Table.from_pandas(nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat),
+            table=pa.Table.from_pandas(stop_index),
             root_path=path_stop_index,
             partition_cols=['route', 'wday'])
 
