@@ -11,6 +11,7 @@ from scipy.spatial import cKDTree
 import numpy as np
 
 def tribble(columns, *data):
+    # I miss R
     return pd.DataFrame(
         data=list(zip(*[iter(data)]*len(columns))),
         columns=columns

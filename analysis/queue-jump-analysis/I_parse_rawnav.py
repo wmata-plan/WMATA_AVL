@@ -62,8 +62,9 @@ else:
 # the list of routes can be subset further later.
 restrict_n = None
 # analysis_routes = ['79'] 
-analysis_routes = ['S1', 'S2', 'S4', 'S9', '70', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4', 
-                    'H8', 'W47'] 
+analysis_routes = ['H8'] 
+# analysis_routes = ['S1', 'S2', 'S4', 'S9', '70', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4', 
+#                     'H8', 'W47'] 
 zip_parent_folder_name = "October 2019 Rawnav"
 # Assumes directory structure:
 # zip_parent_folder_name (e.g, October 2019 Rawnav)

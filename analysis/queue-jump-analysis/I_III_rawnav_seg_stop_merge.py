@@ -52,11 +52,9 @@ else:
                             ZippedFilesloc, and path_processed_data in a new elif block")
 
 # Globals
-# Restrict number of zip files to parse to this number for testing.
-# For all cases, use None
-q_jump_route_list = [  '79']  #'H8'
- # ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
-                     # 16 Gb RAM can't handle all these at one go
+q_jump_route_list = ['S1', 'S2', 'S4', 'S9', '70', '79',
+                     '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
+                      'H8', 'W47']
 analysis_routes = q_jump_route_list
 # analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
 # analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
