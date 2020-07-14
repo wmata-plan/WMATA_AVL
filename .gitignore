@@ -135,6 +135,5 @@ dmypy.json
 !docs/readme.txt
 !requirements.txt
 !data/00-raw/demo_data/*
-!TripSummaries_RouteH8_Restrict5000.csv
 *.xml
 .idea/WMATA_AVL.iml
