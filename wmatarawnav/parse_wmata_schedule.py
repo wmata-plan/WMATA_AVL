@@ -45,7 +45,7 @@ def read_sched_db_patterns(path,
         link1 = "https://ginesys.atlassian.net/wiki/spaces/PUB/pages/66617405/You+cannot+install+the+64-bit+version+of+Microsoft+Access+Database+Engine+because+you+currently+have+32-bit+Office+Product+installed+-+Error+message+shows+when+user+tries+to+install+a+64-bit+version+of+Microsoft+Access+Database+Engine"
         link2 = "https://knowledge.autodesk.com/support/autocad/learn-explore/caas/sfdcarticles/sfdcarticles/How-to-install-64-bit-Microsoft-Database-Drivers-alongside-32-bit-Microsoft-Office.html"
         raise pyodbc.InterfaceError("Likely issue with access database engine. Try the following links:\n"
-                                    f"link1 = {link1},\nlink2 = {link2}")
+                                    "link1 = {},\nlink2 = {}".format(link1,link2))
     # https://ginesys.atlassian.net/wiki/spaces/PUB/pages/66617405/You+cannot+install+the+64-bit+version+of+Microsoft+Access+Database+Engine+because+you+currently+have+32-bit+Office+Product+installed+-+Error+message+shows+when+user+tries+to+install+a+64-bit+version+of+Microsoft+Access+Database+Engine
     # https://knowledge.autodesk.com/support/autocad/learn-explore/caas/sfdcarticles/sfdcarticles/How-to-install-64-bit-Microsoft-Database-Drivers-alongside-32-bit-Microsoft-Office.html
     cnxn = pyodbc.connect(r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + path + \
