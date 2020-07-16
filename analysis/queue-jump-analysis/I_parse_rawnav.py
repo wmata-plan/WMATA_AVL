@@ -76,7 +76,7 @@ zip_parent_folder_name = "October 2019 Rawnav"
 #     -- file_universe (items in various zipped_files_dirs ala rawnav##########.txt.zip
 
 run_inventory = False # inventory (or re-inventory files), otherwise reload saved inventory if available
-# TODO: add overwrite parameter -- currently defaults to overwriting existing data for any route
+run_existing = False # whether to redo outputs that currently exist or skip over them
 
 # 1.3 Import User-Defined Package
 ############################################
@@ -212,50 +212,58 @@ path_summary_rawnav = os.path.join(path_processed_data,"rawnav_summary.parquet")
 
 if not os.path.isdir(path_summary_rawnav):
     os.mkdir(path_summary_rawnav)
-    
+      
 for analysis_route in analysis_routes:
-    shutil.rmtree(os.path.join(path_summary_rawnav,"route={}".format(analysis_route)), ignore_errors=True) 
     
-    rawnav_summary_schema = pa.schema([
-        pa.field('fullpath', pa.string()),
-        pa.field('filename', pa.string()),
-        pa.field('file_busid', pa.int64()),
-        pa.field('file_id', pa.string()),
-        pa.field('taglist', pa.string()),
-        pa.field('route_pattern', pa.string()),
-        pa.field('tag_busid', pa.float64()),
-        pa.field('route', pa.string()),
-        pa.field('pattern', pa.int32()),
-        pa.field('wday', pa.string()),
-        pa.field('start_date_time', pa.timestamp(unit = 'ns')),
-        pa.field('end_date_time', pa.timestamp(unit = 'ns')),
-        pa.field('index_run_start_original', pa.int32()),
-        pa.field('index_run_start', pa.int32()),
-        pa.field('index_run_end_original', pa.float64()),
-        pa.field('index_run_end', pa.int32()),
-        pa.field('sec_start', pa.int32()),
-        pa.field('odom_ft_start', pa.int32()),
-        pa.field('sec_end', pa.int32()),
-        pa.field('odom_ft_end', pa.int32()),
-        pa.field('run_duration_from_sec', pa.int32()),
-        pa.field('run_duration_from_tags', pa.string()),
-        pa.field('dist_odom_mi', pa.float64()),
-        pa.field('mph_odom',pa.float64()),
-        pa.field('mph_run_tag',pa.float64()),
-        pa.field('dist_crow_fly_mi',pa.float64()),
-        pa.field('lat_start',pa.float64()),
-        pa.field('long_start',pa.float64()),
-        pa.field('lat_end',pa.float64()),
-        pa.field('long_end',pa.float64())
-        ])
+    path_summary_route = os.path.join(path_summary_rawnav,"route={}".format(analysis_route))
     
-    table_summary = pa.Table.from_pandas(summary_rawnav,
-                                 schema = rawnav_summary_schema  
-                                 )
+    if (os.path.isdir(path_summary_route) and run_existing) or (not os.path.isdir(path_summary_route)): 
+        shutil.rmtree(os.path.join(path_summary_route), ignore_errors=True) 
     
-    pq.write_to_dataset(table_summary, 
-                        root_path=os.path.join(path_summary_rawnav),
-                        partition_cols=['route','wday'])
+        rawnav_summary_schema = pa.schema([
+            pa.field('fullpath', pa.string()),
+            pa.field('filename', pa.string()),
+            pa.field('file_busid', pa.int64()),
+            pa.field('file_id', pa.string()),
+            pa.field('taglist', pa.string()),
+            pa.field('route_pattern', pa.string()),
+            pa.field('tag_busid', pa.float64()),
+            pa.field('route', pa.string()),
+            pa.field('pattern', pa.int32()),
+            pa.field('wday', pa.string()),
+            pa.field('start_date_time', pa.timestamp(unit = 'ns')),
+            pa.field('end_date_time', pa.timestamp(unit = 'ns')),
+            pa.field('index_run_start_original', pa.int32()),
+            pa.field('index_run_start', pa.int32()),
+            pa.field('index_run_end_original', pa.float64()),
+            pa.field('index_run_end', pa.int32()),
+            pa.field('sec_start', pa.int32()),
+            pa.field('odom_ft_start', pa.int32()),
+            pa.field('sec_end', pa.int32()),
+            pa.field('odom_ft_end', pa.int32()),
+            pa.field('run_duration_from_sec', pa.int32()),
+            pa.field('run_duration_from_tags', pa.string()),
+            pa.field('dist_odom_mi', pa.float64()),
+            pa.field('mph_odom',pa.float64()),
+            pa.field('mph_run_tag',pa.float64()),
+            pa.field('dist_crow_fly_mi',pa.float64()),
+            pa.field('lat_start',pa.float64()),
+            pa.field('long_start',pa.float64()),
+            pa.field('lat_end',pa.float64()),
+            pa.field('long_end',pa.float64())
+            ])
+        
+        summary_rawnav_fil = summary_rawnav.query('route == @analysis_route')
+        
+        table_summary = pa.Table.from_pandas(summary_rawnav_fil,
+                                     schema = rawnav_summary_schema  
+                                     )
+        
+        pq.write_to_dataset(table_summary, 
+                            root_path=os.path.join(path_summary_rawnav),
+                            partition_cols=['route','wday'])
+    else:
+        print('skipping summary output of {}'.format(analysis_route))
     
 # 5.2 Output Processed Rawnav data
 ############################################
@@ -267,66 +275,76 @@ if not os.path.isdir(path_rawnav_data):
 
 for analysis_route in analysis_routes:
     
-    # Merge Cleaned Rawnav Files Containing The Analysis Route
-    out_rawnav_dat = wr.subset_rawnav_run(
-        rawnav_data_dict_=rawnav_data_dict,
-        rawnav_inventory_filtered_valid_=rawnav_inventory_filtered_valid,
-        analysis_routes_=analysis_route)
+    path_rawnav_route = os.path.join(path_rawnav_data,"route={}".format(analysis_route))
     
-    if out_rawnav_dat.shape == (0, 0):
-        continue
+    if (os.path.isdir(path_rawnav_route) and run_existing) or (not os.path.isdir(path_rawnav_route)): 
+        shutil.rmtree(os.path.join(path_rawnav_route), ignore_errors=True) 
     
-    # Filter to Runs and Join Additional Identifying Information
-    temp = summary_rawnav[['filename', 'index_run_start', 'wday', 'start_date_time']]
-    out_rawnav_dat = out_rawnav_dat.merge(temp, 
-                                          on=['filename', 'index_run_start'], 
-                                          how='inner')
-    #
-
-    assert (out_rawnav_dat.groupby(['filename', 'index_run_start', 'index_loc'])['index_loc'].
-            count().values.max() == 1)
+        # Merge Cleaned Rawnav Files Containing The Analysis Route
+        out_rawnav_dat = wr.subset_rawnav_run(
+            rawnav_data_dict_=rawnav_data_dict,
+            rawnav_inventory_filtered_valid_=rawnav_inventory_filtered_valid,
+            analysis_routes_=analysis_route)
+        
+        if out_rawnav_dat.shape == (0, 0):
+            continue
+        
+        # Join Additional Identifying Information
+        temp = summary_rawnav.query('route == @analysis_route')\
+            [['filename', 'index_run_start', 'wday', 'start_date_time']]
+                
+        out_rawnav_dat = out_rawnav_dat.merge(temp, 
+                                              on=['filename', 'index_run_start'], 
+                                              how='left')
     
-    # Column conversion after missing values removed
-    out_rawnav_dat = out_rawnav_dat.assign(
-        route=lambda x: x.route.astype('str'),
-        pattern=lambda x: x.pattern.astype('double'))
-
-    # Output    
-    shutil.rmtree(os.path.join(path_rawnav_data,"route={}".format(analysis_route)), ignore_errors=True) 
+        assert (out_rawnav_dat.groupby(['filename', 'index_run_start', 'index_loc'])['index_loc'].
+                count().values.max() == 1)
+        
+        # Column conversion after missing values removed
+        out_rawnav_dat = out_rawnav_dat.assign(
+            route=lambda x: x.route.astype('str'),
+            #should be okay as int32 if everything goes to plan, but for safety will keep as double
+            # and convert pattern later
+            pattern=lambda x: x.pattern.astype('double')) 
     
-    # TODO: move schema creation to wmatarawnav functions
-    rawnav_data_schema = pa.schema([
-        pa.field('index_loc', pa.float64()),
-        pa.field('lat', pa.float64()),
-        pa.field('long', pa.float64()),
-        pa.field('heading', pa.float64()),
-        pa.field('door_state', pa.string()),
-        pa.field('veh_state', pa.string()),
-        pa.field('odom_ft',pa.float64()),
-        pa.field('sec_past_st', pa.float64()),
-        pa.field('sat_cnt', pa.float64()),
-        pa.field('stop_window', pa.string()),
-        pa.field('blank', pa.float64()),
-        pa.field('lat_raw', pa.float64()),
-        pa.field('long_raw',pa.float64()),
-        pa.field('row_before_apc', pa.float64()),
-        pa.field('route_pattern', pa.string()),
-        pa.field('route', pa.string()),
-        pa.field('pattern', pa.float64()),
-        pa.field('index_run_start', pa.float64()),
-        pa.field('index_run_end', pa.float64()),
-        pa.field('filename', pa.string()),
-        pa.field('wday', pa.string()),
-        pa.field('start_date_time', pa.timestamp('us'))
-        ])
-    
-    table = pa.Table.from_pandas(out_rawnav_dat,
-                                 schema = rawnav_data_schema  
-                                 )
-    
-    pq.write_to_dataset(table, 
-                        root_path=os.path.join(path_rawnav_data),
-                        partition_cols=['route','wday'])
+        # Output    
+        shutil.rmtree(os.path.join(path_rawnav_data,"route={}".format(analysis_route)), ignore_errors=True) 
+        
+        # TODO: move schema creation to wmatarawnav functions
+        rawnav_data_schema = pa.schema([
+            pa.field('index_loc', pa.float64()),
+            pa.field('lat', pa.float64()),
+            pa.field('long', pa.float64()),
+            pa.field('heading', pa.float64()),
+            pa.field('door_state', pa.string()),
+            pa.field('veh_state', pa.string()),
+            pa.field('odom_ft',pa.float64()),
+            pa.field('sec_past_st', pa.float64()),
+            pa.field('sat_cnt', pa.float64()),
+            pa.field('stop_window', pa.string()),
+            pa.field('blank', pa.float64()),
+            pa.field('lat_raw', pa.float64()),
+            pa.field('long_raw',pa.float64()),
+            pa.field('row_before_apc', pa.float64()),
+            pa.field('route_pattern', pa.string()),
+            pa.field('route', pa.string()),
+            pa.field('pattern', pa.float64()),
+            pa.field('index_run_start', pa.float64()),
+            pa.field('index_run_end', pa.float64()),
+            pa.field('filename', pa.string()),
+            pa.field('wday', pa.string()),
+            pa.field('start_date_time', pa.timestamp('us'))
+            ])
+        
+        table = pa.Table.from_pandas(out_rawnav_dat,
+                                     schema = rawnav_data_schema  
+                                     )
+        
+        pq.write_to_dataset(table, 
+                            root_path=os.path.join(path_rawnav_data),
+                            partition_cols=['route','wday'])
+    else:
+        print('skipping output of {}'.format(analysis_route))
 
 execution_time = str(datetime.now() - begin_time).split('.')[0]
 print(f"Run Time Section 5 Output : {execution_time}")
