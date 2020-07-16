@@ -32,6 +32,7 @@ if not sys.warnoptions:
     # warnings.simplefilter("ignore")  # Stop Pandas warnings
 
 import os, sys
+import numpy as np
 import pandas as pd
 import geopandas as gpd
 import pyarrow as pa
@@ -85,25 +86,25 @@ import wmatarawnav as wr
 # geometry file. 'stop_id' matches the stop identifier in the WMATA schedule database.
 xwalk_seg_pattern_stop_in = wr.tribble(
              ['route',        'direction',                    'seg_name_id','stop_id'], 
-                 "79",            "SOUTH",               "georgia_columbia",    '5381',      
-                 "79",            "SOUTH",      "georgia_piney_branch_long",    '5401',
+                 "79",            "SOUTH",               "georgia_columbia",   10981, 
+                 "79",            "SOUTH",      "georgia_piney_branch_long",    4217, 
                  #not sure yet how to deal with second stop, but i think this works
-                 "70",            "SOUTH",                 "georgia_irving",    '5600',
-                 "70",            "SOUTH",                 "georgia_irving",    '5381', 
-                 "70",            "SOUTH",      "georgia_piney_branch_shrt",    '5401',
-                 "S1",            "NORTH",               "sixteenth_u_shrt",    '7848',
-                 "S2",            "NORTH",               "sixteenth_u_shrt",    '7848',
-                 "S4",            "NORTH",               "sixteenth_u_shrt",    '7848',
-                 "S9",            "NORTH",               "sixteenth_u_long",    '7848',
-                 "64",            "NORTH",            "eleventh_i_new_york",    '7627',
-                 "G8",             "EAST",            "eleventh_i_new_york",    '7627',
-                "D32",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
-                 "H1",            "NORTH",     "irving_fifteenth_sixteenth",    '7794',
-                 "H2",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
-                 "H3",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
-                 "H4",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
-                 "H8",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
-                "W47",             "EAST",     "irving_fifteenth_sixteenth",    '7794'
+                 "70",            "SOUTH",                 "georgia_irving",   19186, #irving stop
+                 "70",            "SOUTH",                 "georgia_irving",   10981, #columbia stop 
+                 "70",            "SOUTH",      "georgia_piney_branch_shrt",    4217,
+                 "S1",            "NORTH",               "sixteenth_u_shrt",   18042,
+                 "S2",            "NORTH",               "sixteenth_u_shrt",   18042,
+                 "S4",            "NORTH",               "sixteenth_u_shrt",   18042,
+                 "S9",            "NORTH",               "sixteenth_u_long",   18042,
+                 "64",            "NORTH",            "eleventh_i_new_york",   16490,
+                 "G8",             "EAST",            "eleventh_i_new_york",   16490,
+                "D32",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                 "H1",            "NORTH",     "irving_fifteenth_sixteenth",    2368,
+                 "H2",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                 "H3",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                 "H4",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                 "H8",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                "W47",             "EAST",     "irving_fifteenth_sixteenth",    2368
   )
 
 xwalk_wmata_route_dir_pattern = (
@@ -125,28 +126,27 @@ xwalk_seg_pattern_stop = (
 
 del xwalk_seg_pattern_stop_in
 
-# 2. create segment-pattern crosswalk 
-xwalk_seg_pattern = (xwalk_seg_pattern_stop.drop('stop_id', 1)
-                     .drop_duplicates())
-
 # 3. load shapes
 # Segments
 # Note unique identifier seg_name_id
 # Note that these are not yet updated to reflect the extension of the 11th street segment 
 # further south to give the stop more breathing room.
-segments = gpd.read_file(
-    os.path.join(path_processed_data,"segments.geojson")).\
-    to_crs(wmata_crs)
+segments = (
+    gpd.read_file(os.path.join(path_processed_data,"segments.geojson"))
+    .to_crs(wmata_crs)
+)
     
-segment_summary =\
-    pq.read_table(source = os.path.join(path_processed_data,"segment_summary.parquet"),
-                  use_pandas_metadata = True,
-                  ).to_pandas()
+segment_summary = (
+    pq.read_table(
+        source = os.path.join(path_processed_data,"segment_summary.parquet"),
+        use_pandas_metadata = True)
+    .to_pandas()
+)
 # 3 Filter Out Runs that Appear Problematic
 ###########################################\
 freeflow_list = []
 
-for seg in list(xwalk_seg_pattern.seg_name_id.drop_duplicates()):
+for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     print('now on {}'.format(seg))
     # 1. Read-in Data 
     #############################
@@ -158,9 +158,9 @@ for seg in list(xwalk_seg_pattern.seg_name_id.drop_duplicates()):
     # Ideally we could shortcut this using the index, but the index for this table is a little different
     # TODO: could use itertuples but i find that syntax really weird, frankly. SHould we change?
     
-    xwalk_seg_pattern_fil = xwalk_seg_pattern.query('seg_name_id == @seg')
-    
-    seg_routes = list(xwalk_seg_pattern_fil.route.drop_duplicates())
+    xwalk_seg_pattern_stop_fil = xwalk_seg_pattern_stop.query('seg_name_id == @seg')
+
+    seg_routes = list(xwalk_seg_pattern_stop_fil.route.drop_duplicates())
     
     rawnav_dat = (
         wr.read_cleaned_rawnav(
@@ -176,25 +176,80 @@ for seg in list(xwalk_seg_pattern.seg_name_id.drop_duplicates()):
                       use_pandas_metadata = True)
         .to_pandas()
     )
+    
+    stop_index = (
+        pq.read_table(source=os.path.join(path_processed_data,"stop_index.parquet"),
+                      filters=[[('route','=',route)] for route in seg_routes],
+                        columns = ['seg_name_id',
+                                    'route',
+                                    'pattern',
+                                    'stop_id',
+                                    'filename',
+                                    'index_run_start',
+                                    'index_loc',
+                                    'odom_ft',
+                                    'sec_past_st',
+                                    'geo_description'],
+                      use_pandas_metadata = True)
+        .to_pandas()
+        .assign(pattern = lambda x: x.pattern.astype('int32')) #  pattern is object not int? # TODO: fix
+        .rename(columns = {'odom_ft' : 'odom_ft_qj_stop'})
+    ) 
+    
+    # NOTE: this would be the place to filter out runs where a high number of stops don't match
+    # but we're okay with runs that we don't have complete data on
+    # Filter Stop index to the relevant QJ stops
+    stop_index_fil = (
+        stop_index
+        .merge(xwalk_seg_pattern_stop_fil,
+               on = ['route','pattern','stop_id'],
+               how = 'inner')   
+    )
+    
+    # 2 Join and Filter to Segment
+    #############################
     # Note that our segment_summary is already filtered to patterns that are in the correct 
-    # direction for our segments.
-        
-    rawnav_fil = (
-        rawnav_dat.merge(segment_summary[["filename",
-                                                    "index_run_start",
-                                                    "start_odom_ft_segment",
-                                                    "end_odom_ft_segment"]],
-                                  on = ["filename","index_run_start"],
-                                  how = "right")        
+    # direction for our segments. This join then filters our rawnav data to those relevant 
+    # runs.
+    rawnav_fil_1 = (
+        rawnav_dat
+        .merge(segment_summary[["filename",
+                                "index_run_start",
+                                "start_odom_ft_segment",
+                                "end_odom_ft_segment"]],
+               on = ["filename","index_run_start"],
+               how = "right")        
         .query('odom_ft >= start_odom_ft_segment & odom_ft < end_odom_ft_segment')
         .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
     )
     
     del rawnav_dat   
-
-    # 2 Add Additional Metrics to Rawnav Data 
-    #############################
     
+    # We'll also filter to those runs that have a match to the QJ stop while adding detail
+    # about the QJ stop zone, just in case any of these runs behaved normally at segment ends
+    # but oddly at the stop zone.
+    # TODO: rethink this for the multiple stop case, this won't always work
+    rawnav_fil = (
+        rawnav_fil_1
+        .merge(
+            stop_index_fil
+            .filter(items = ['filename','index_run_start','odom_ft_qj_stop','stop_id']),
+            on = ['filename','index_run_start'],
+            how = "left"
+        )
+    )
+
+    del rawnav_fil_1
+
+    # 3 Add Additional Metrics to Rawnav Data 
+    #############################
+    rawnav_fil[['odom_ft_next','sec_past_st_next']] = (
+        rawnav_fil
+        .groupby(['filename','index_run_start'], sort = False)\
+        [['odom_ft','sec_past_st']]
+        .shift(-1)
+    )
+
     # We'll use a bigger lag for more stable values for free flow speed
     rawnav_fil[['odom_ft_next3','sec_past_st_next3']] = (
         rawnav_fil
@@ -205,10 +260,14 @@ for seg in list(xwalk_seg_pattern.seg_name_id.drop_duplicates()):
     
     rawnav_fil = (
         rawnav_fil
-        .assign(fps_next3 = lambda x: ((x.odom_ft_next3 - x.odom_ft) / 
-                                       (x.sec_past_st_next3 - x.sec_past_st)))
+        .assign(
+            fps_next  = lambda x: ((x.odom_ft_next - x.odom_ft) / 
+                                       (x.sec_past_st_next - x.sec_past_st)),
+            fps_next3 = lambda x: ((x.odom_ft_next3 - x.odom_ft) / 
+                                       (x.sec_past_st_next3 - x.sec_past_st))
+        )
     )
-    # 3. Free Flow Calcs 
+    # 4. Free Flow Calcs 
     #############################
 
     freeflow_seg = (
@@ -221,6 +280,89 @@ for seg in list(xwalk_seg_pattern.seg_name_id.drop_duplicates()):
     )
 
     freeflow_list.append(freeflow_seg)
+    
+    # 5. Filter to Stop Area and Run Stop Area Decomposition
+    #############################
+    # TODO: think harder about how to handle the two-stop case for 70 in georgia/irving
+    rawnav_fil_stop_area_1 = (
+        rawnav_fil
+        .query('odom_ft >= (odom_ft_qj_stop - 150) & odom_ft < (odom_ft_qj_stop + 150)')
+    )
+    
+    rawnav_fil_stop_area_2 = (
+        rawnav_fil_stop_area_1
+        .assign(
+            # At the first door open, we'll start the clock on boarding time
+            door_state_binary=lambda x: np.where(x.door_state == "C", 0, 1),
+            door_state_changes=lambda x: x.door_state_binary.diff().ne(0).cumsum(),
+            # if bus is stopped at other points, want to know
+            move_state_binary=lambda x: np.where(x.fps_next == 0, 0, 1),
+            move_state_changes=lambda x: x.move_state_binary.diff().ne(0).cumsum()
+        )
+    )
+    
+    # this is casewhen, if you're wondering
+    rawnav_fil_stop_area_3 = rawnav_fil_stop_area_2
+    
+    rawnav_fil_stop_area_3['state'] = np.select(
+        [
+            (rawnav_fil_stop_area_3.door_state_changes < 2),
+            ((rawnav_fil_stop_area_3.door_state == "O") & (rawnav_fil_stop_area_3.door_state_changes == 2)),
+            (rawnav_fil_stop_area_3.door_state_changes > 2)
+        ], 
+        [
+            "t_decel_phase",
+            "t_stop1",
+            "t_accel_phase"
+        ], 
+        default="doh"
+    )
+        
+    breakpoint()
+    # TODO: finish here
+    # # in cases where bus is stopped around door open, we do special things
+    # rawnav_fil_stop_area_3_grp = (
+    #     rawnav_fil_stop_area_3
+    #     .groupby(['filename','index_run_start','move_state_changes']) #readd stopid
+    # )
+    
+    # rawnav_fil_stop_area_3_grp['state'] =  np.select(
+    #     [
+    #         ((rawnav_fil_stop_area_3_grp.state == "t_decel_phase") 
+    #              & (rawnav_fil_stop_area_3_grp.fps_next == 0 )
+    #              & (any(rawnav_fil_stop_area_3_grp.state == "t_stop1")))
+    #     ],
+    #     [
+    #         ('l_initial')
+    #     ],
+    #     default = rawnav_fil_stop_area_3_grp.state
+    # )
+        
+        
+        
+    #     .assign(
+    #         state=lambda x: x.door_state.where(
+    #             (x.state == "t_decel_phase") 
+    #             & (x.next_mph == 0 )
+    #             & (any(x.state == "t_stop1")), 
+    #             "L_initial"
+    #         ),
+    #         state=lambda x: x.door_state.where(
+    #             (x.state == "t_decel_phase") 
+    #             & (x.next_mph == 0 )
+    #             & (any(x.state == "t_stop1")), 
+    #             "L_initial"
+    #         )
+    #     )
+    # )
+    
+    # rawnav_fil_stop_area_3
+    
+    breakpoint()
+    
+    print('himom')
+    
+    
 
 freeflow = (
     pd.concat(freeflow_list)

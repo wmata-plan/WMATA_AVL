@@ -161,16 +161,19 @@ for seg in list(xwalk_seg_pattern.seg_name_id.drop_duplicates()):
         pq.read_table(source=os.path.join(path_processed_data,"stop_index.parquet"),
                       filters=[[('route','=',route)] for route in seg_routes],
                         columns = ['seg_name_id',
-                                   'route',
-                                   'pattern',
-                                   'stop_id',
-                                   'filename',
-                                   'index_run_start',
-                                   'index_loc',
-                                   'geo_description'],
+                                    'route',
+                                    'pattern',
+                                    'stop_id',
+                                    'filename',
+                                    'index_run_start',
+                                    'index_loc',
+                                    'odom_ft',
+                                    'sec_past_st',
+                                    'geo_description'],
                       use_pandas_metadata = True)
         .to_pandas()
         .assign(pattern = lambda x: x.pattern.astype('int32')) #  pattern is object not int? # TODO: fix
+        .rename(columns = {'odom_ft' : 'odom_ft_qj_stop'})
     ) 
     
     # Filter Stop index to the relevant QJ stops
@@ -188,15 +191,23 @@ for seg in list(xwalk_seg_pattern.seg_name_id.drop_duplicates()):
            path = os.path.join(path_processed_data, "rawnav_data.parquet"))
         .drop(columns=['blank', 'lat_raw', 'long_raw', 'sat_cnt'])
     )
-    
+
     # Add the QJ stop identifiers in
     rawnav_add_stop_detail = (
         rawnav_dat
         .merge(stop_index_fil
-               .filter(items = ['filename','index_run_start','index_loc','geo_description','stop_id']),
-               on = ['filename','index_run_start', 'index_loc'],
-               how = "left")
+               .filter(items = ['filename','index_run_start','odom_ft_qj_stop']),
+               on = ['filename','index_run_start'],
+               how = "inner")
     )
+    
+    # Filter to the window
+    rawnav_add_stop_detail_filter = (
+        rawnav_add_stop_detail
+        .query('odom_ft >= (odom_ft_qj_stop - 150) & odom_ft < (odom_ft_qj_stop + 150)')
+    )
+    
+        
     
     # On a rolling basis, look for the points X feet behind and Y feet ahead 
     
