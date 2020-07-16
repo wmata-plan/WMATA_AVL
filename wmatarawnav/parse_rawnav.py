@@ -274,7 +274,7 @@ def subset_rawnav_run(rawnav_data_dict_, rawnav_inventory_filtered_valid_, analy
         fin_dat.reset_index(drop=True, inplace=True)
         fin_dat = fin_dat.query("route in @analysis_routes_")
     except KeyError as kerr:
-        print(f'Route {analysis_routes_} not found. Error. {kerr}')
+        print('Route {} not found. Error. {}'.format(analysis_routes_,kerr))
     return fin_dat
 
 

@@ -217,8 +217,10 @@ def add_num_missing_stops_to_sum(rawnav_wmata_schedule_dat,
                                                                           'route','pattern'],
                                                                       how='left')
     return wmata_schedule_based_sum_dat_with_missing_stop
+
 def output_rawnav_wmata_schedule(analysis_route_, analysis_day_, wmata_schedule_based_sum_dat_,
                                  rawnav_wmata_schedule_dat, path_processed_data_):
+    # TODO: I think this is moot, right?
     '''
     Parameters
     ----------
@@ -250,12 +252,12 @@ def output_rawnav_wmata_schedule(analysis_route_, analysis_day_, wmata_schedule_
     if not os.path.exists(save_dir3): os.makedirs(save_dir3)
     # Output Summary Files
     sum_out_file = os.path.join(save_dir3,
-                                f'wmata_schedule_trip_summaries-{analysis_route_}_{analysis_day_}.xlsx')
+                                'wmata_schedule_trip_summaries-{}_{}.xlsx'.format(analysis_route_,analysis_day_))
     wmata_schedule_based_sum_dat_.to_excel(sum_out_file, merge_cells=False)
     # Output GTFS+Rawnav Merged Files
     wmata_schedule_rawnav_out_file = os.path.join(
         save_dir3,
-        f'wmata_schedule_stop_locations_inventory-{analysis_route_}_{analysis_day_}.xlsx'
+        'wmata_schedule_stop_locations_inventory-{}_{}.xlsx'.format(analysis_route_,analysis_day_)
     )
     rawnav_wmata_schedule_dat.to_excel(wmata_schedule_rawnav_out_file)
     return None
@@ -342,7 +344,8 @@ def remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat
     nearest_rawnav_point_to_wmata_schedule_data_ = \
         nearest_rawnav_point_to_wmata_schedule_data_.query('dist_to_nearest_point < 100')
     row_after = nearest_rawnav_point_to_wmata_schedule_data_.shape[0]
-    print(f'deleted {row_before - row_after} rows from {row_before} with distance to the nearest stop > 100 ft.')
+    row_diff = row_before - row_after
+    print('deleted {} rows of {} rows with distance to the nearest stop > 100 ft. from index table'.format(row_diff,row_before))
     return nearest_rawnav_point_to_wmata_schedule_data_
 
 
@@ -371,7 +374,8 @@ def assert_clean_stop_order_increase_with_odom(nearest_rawnav_point_to_wmata_sch
         nearest_rawnav_point_to_wmata_schedule_data_ = \
             delete_rows_with_incorrect_stop_order(nearest_rawnav_point_to_wmata_schedule_data_)
     row_after = nearest_rawnav_point_to_wmata_schedule_data_.shape[0]
-    print(f'deleted {row_before - row_after} from {row_before} stops with incorrect order')
+    row_diff = row_before - row_after
+    print('deleted {} of {} stops with incorrect order from index table'.format(row_diff,row_before))
     return nearest_rawnav_point_to_wmata_schedule_data_
 
 
