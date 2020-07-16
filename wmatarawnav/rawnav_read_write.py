@@ -13,10 +13,12 @@ from itertools import product
 from . import low_level_fns as ll
 
 
-def read_cleaned_rawnav(analysis_routes_, analysis_days_, path):
+def read_cleaned_rawnav(path, analysis_routes_, analysis_days_ = None):
     """
     Parameters
     ----------
+    path: str,
+       path where the parquet files for cleaned data is kept
     analysis_routes_: list,
         routes for which rawnav data is needed. Should be a subset of following:
         ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
@@ -24,8 +26,7 @@ def read_cleaned_rawnav(analysis_routes_, analysis_days_, path):
     analysis_days_: list,
         days of the week for which data is needed. Should be a subset of following:
         ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-    path: str,
-       path where the parquet files for cleaned data is kept
+
     Returns
     -------
     rawnav_dat: pd.DataFrame,
@@ -33,6 +34,11 @@ def read_cleaned_rawnav(analysis_routes_, analysis_days_, path):
     """
     
     # Parameter Checks
+    day_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    
+    if analysis_days_ is None:
+        analysis_days_ = day_of_week
+    
     # Convert back to list if not already
     analysis_routes_ = ll.check_convert_list(analysis_routes_)    
     analysis_days_ = ll.check_convert_list(analysis_days_)
