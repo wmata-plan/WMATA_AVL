@@ -23,7 +23,7 @@ from datetime import datetime
 import pyarrow as pa
 import pyarrow.parquet as pq
 import shutil
-print(f"Run Section 1 Import Libraries and Set Global Parameters...")
+print("Run Section 1 Import Libraries and Set Global Parameters...")
 begin_time = datetime.now()
 import os, sys, pandas as pd, geopandas as gpd
 
@@ -77,12 +77,12 @@ wmata_crs = 2248
 import wmatarawnav as wr
 
 executionTime = str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 1 Import Libraries and Set Global Parameters : {executionTime}")
+print("Run Time Section 1 Import Libraries and Set Global Parameters : {}".format(executionTime))
 print("*" * 100)
 
 # 2 Read, analyze and summarize Schedule data
 ########################################################################################################################
-print(f"Run Section 2: Read, analyze and summarize rawnav, WMATA schedule data...")
+print("Run Section 2: Read, analyze and summarize rawnav, WMATA schedule data...")
 begin_time = datetime.now()
 # Read the Wmata_Schedule data
 wmata_schedule_dat = wr.read_sched_db_patterns(
@@ -109,9 +109,9 @@ if not os.path.isdir(path_stop_index):
 
 for analysis_route in analysis_routes:
     print("*" * 100)
-    print(f'Processing analysis route {analysis_route}')
+    print('Processing analysis route {}'.format(analysis_route))
     for analysis_day in analysis_days:
-        print(f'Processing analysis route {analysis_route} for {analysis_day}...')
+        print('Processing analysis route {} for {}...'.format(analysis_route,analysis_day))
                 
         # Reload data
         try:
@@ -155,7 +155,7 @@ for analysis_route in analysis_routes:
                 wmata_schedule_dat_=wmata_schedule_gdf)
         
         if type(stop_summary) == type(None):
-            print(f'No data on analysis route {analysis_route} for {analysis_day}')
+            print('No data on analysis route {} for {}'.format(analysis_route,analysis_day))
             continue
         
         # Write Summary Table 
@@ -185,5 +185,5 @@ for analysis_route in analysis_routes:
             partition_cols=['route', 'wday'])
 
 executionTime = str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section Section 2: Read, analyze and summarize rawnav, WMATA schedule data : {executionTime}")
+print("Run Time Section Section 2: Read, analyze and summarize rawnav, WMATA schedule data : {}".format(executionTime))
 print("*" * 100)

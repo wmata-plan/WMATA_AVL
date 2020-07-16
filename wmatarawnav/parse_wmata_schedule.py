@@ -315,7 +315,7 @@ def merge_rawnav_target(target_dat, rawnav_dat, quiet=True):
                            ll.ckdnearest(target_dat_relevant, rawnav_group)])
         except:
             if (quiet == False):
-                print(f"No target geometry found for {name[0]} - {name[1]}")
+                print("No target geometry found for {} - {}".format(name[0],name[1]))
     
     # TODO: set index? 
     nearest_rawnav_point_to_target_dat = (
@@ -650,7 +650,10 @@ def plot_lines_clusters(this_map, dat, feature_grp):
     popup_field_list.remove('geometry')
     for i, row in dat.iterrows():
         temp_grp = \
-            plugins.FeatureGroupSubGroup(feature_grp, f"{row.stop_sort_order}-{row.geo_description}-{row.pattern}")
+            plugins.FeatureGroupSubGroup(feature_grp,
+                                         "{}-{}-{}".format(row.stop_sort_order,
+                                                           row.geo_description,
+                                                           row.pattern))
         this_map.add_child(temp_grp)
         label = '<br>'.join([field + ': ' + str(row[field]) for field in popup_field_list])
         # https://deparkes.co.uk/2019/02/27/folium-lines-and-markers/

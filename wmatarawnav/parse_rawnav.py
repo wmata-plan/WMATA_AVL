@@ -158,7 +158,7 @@ def load_rawnav_data(zip_folder_path, skiprows):
         raw_data = pd.read_csv(zf.open(zip_file_name), skiprows=skiprows, header=None)
     except ParserError as parseerr:
         print("*" * 100)
-        print(f"More number of ',' in a file {zip_file_name}. pandas has issue with tokenizing data. Error: {parseerr}")
+        print("More number of ',' in a file {}. pandas has issue with tokenizing data. Error: {}".format(zip_file_name,parseerr))
         print("*" * 100)
         raw_data = None
     return raw_data
@@ -195,7 +195,7 @@ def clean_rawnav_data(data_dict, filename):
             infopat = '^\s*(\S+),(\d{1,5}),(\d{2}\/\d{2}\/\d{2}),(\d{2}:\d{2}:\d{2}),(\S+),(\S+)'
             assert ((~check_tag_line_data.taglist.str.match(infopat, re.S)).sum() == 0)
     except:
-        print(f"TagLists Did not match in file {filename}")
+        print("TagLists Did not match in file {}".format(filename))
     
     rawnavdata.reset_index(inplace=True);
     # TODO: This line prevents the function from being rerun, need to address later.
@@ -567,13 +567,13 @@ def find_all_tags(zip_folder_path, quiet=True):
             tag_line_elements.append(',,,,,,')
     except BadZipfile as BadZipEr:
         print("*" * 100)
-        print(f"issue with opening zipped file: {zip_folder_path}. Error: {BadZipEr}")
+        print("issue with opening zipped file: {}. Error: {}".format(zip_folder_path,BadZipEr))
         print("*" * 100)
         tag_line_elements = []
         tag_line_elements.append(',,,,,,')
     except KeyError as keyerr:
         print("*" * 100)
-        print(f"Text file name doesn't match parent zip folder for': {zip_folder_path}. Error: {keyerr}")
+        print("Text file name doesn't match parent zip folder for': {}. Error: {}".format(zip_folder_path,keyerr))
         print("*" * 100)
         tag_line_elements = []
         tag_line_elements.append(',,,,,,')

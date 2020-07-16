@@ -22,7 +22,7 @@ ipython.magic("autoreload")
 from datetime import datetime
 
 begin_time = datetime.now()  ##
-print(f"Begin Time : {begin_time}")
+print("Begin Time : {}".format(begin_time))
 import pandas as pd, os, sys, glob, shutil
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -83,7 +83,7 @@ run_existing = False # whether to redo outputs that currently exist or skip over
 import wmatarawnav as wr
 
 execution_time = str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 1 Import Libraries and Set Global Parameters : {execution_time}")
+print("Run Time Section 1 Import Libraries and Set Global Parameters : {}".format(execution_time))
 
 # 2 Identify Relevant Files for Analysis Routes
 ########################################################################################################################
@@ -131,7 +131,7 @@ if len(rawnav_inventory_filtered) == 0:
     raise Exception("No Analysis Routes found in file_universe")
 
 execution_time = str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 2 Identify Relevant Files for Analysis Routes : {execution_time}")
+print("Run Time Section 2 Identify Relevant Files for Analysis Routes : {}".format(execution_time))
 
 # 3 Load Raw RawNav data
 ########################################################################################################################
@@ -165,7 +165,7 @@ for index, row in rawnav_inv_filt_first.iterrows():
         rawnav_inventory_filtered_valid  = rawnav_inventory_filtered_valid.query('filename!= @remove_file')
 
 execution_time = str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 3 Load Raw RawNav Data : {execution_time}")
+print("Run Time Section 3 Load Raw RawNav Data : {}".format(execution_time))
 
 # 4 Clean RawNav data
 ########################################################################################################################
@@ -175,7 +175,6 @@ rawnav_data_dict = {}
 summary_data_dict = {}
 
 for key, datadict in route_rawnav_tag_dict.items():
-    # TODO: look into cleaning issues with rawnav06437191018.txt (8664), rawnav06437191024.txt (*)
     temp_dat = wr.clean_rawnav_data(
         data_dict=datadict,
         filename=key)
@@ -187,7 +186,7 @@ for key, datadict in route_rawnav_tag_dict.items():
 route_rawnav_tag_dict = None
 
 execution_time = str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 4 Clean RawNav Data : {execution_time}")
+print("Run Time Section 4 Clean RawNav Data : {}".format(execution_time))
 
 # 5 Output
 ########################################################################################################################
@@ -347,8 +346,8 @@ for analysis_route in analysis_routes:
         print('skipping output of {}'.format(analysis_route))
 
 execution_time = str(datetime.now() - begin_time).split('.')[0]
-print(f"Run Time Section 5 Output : {execution_time}")
+print("Run Time Section 5 Output : {}".format(execution_time))
 end_time = datetime.now()
-print(f"End Time : {end_time}")
+print("End Time : {}".format(end_time))
 ########################################################################################################################
 ########################################################################################################################
