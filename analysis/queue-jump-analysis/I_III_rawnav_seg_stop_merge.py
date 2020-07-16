@@ -12,7 +12,8 @@ from IPython import get_ipython  # run magic commands
 ipython = get_ipython()
 ipython.magic("reset -f")
 ipython = get_ipython()
-ipython.magic("autoreload")
+ipython.magic("load_ext autoreload")
+ipython.magic("autoreload 2")
 
 # 1 Import Libraries and Set Global Parameters
 ####################################################################################################
@@ -52,9 +53,10 @@ else:
                             ZippedFilesloc, and path_processed_data in a new elif block")
 
 # Globals
-q_jump_route_list = ['S1', 'S2', 'S4', 'S9', '70', '79',
-                     '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
-                      'H8', 'W47']
+q_jump_route_list = ['S1', 'S2', 'S4', 'S9', 
+                     '70', '79', 
+                     '64', 'G8', 
+                     'D32', 'H1', 'H2', 'H3', 'H4', 'H8', 'W47']
 analysis_routes = q_jump_route_list
 # analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
 # analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
@@ -127,9 +129,6 @@ segments = gpd.read_file(
     os.path.join(path_processed_data,"segments.geojson")).\
     to_crs(wmata_crs)
 
-# Intersections
-# WT: TBD -- Will do some of this work in ArCGIS first
-
 # 2.2 Segment Reformat ########################
 # A bit of a hack for now, but we'll reformat the segments file and segments crosswalk to make a 
 # file similar in key to the wmata patterns file. Then we'll be able to reuse that function in 
@@ -145,7 +144,7 @@ seg_pattern_first_last = wr.explode_first_last(seg_pattern_shape)
 # 3.1 Rawnav-Segment ########################
 
 # Make Output Directory
-# TODO: Function or something that makes this safer?
+# TODO: Update to match method in I_II
 path_seg_summary = os.path.join(path_processed_data, "segment_summary.parquet")
 shutil.rmtree(path_seg_summary, ignore_errors=True) 
 os.mkdir(path_seg_summary)
@@ -156,8 +155,10 @@ os.mkdir(path_seg_index)
 
 # Iterate
 for analysis_route in analysis_routes:
+    print("*" * 100)
+    print(f'Processing analysis route {analysis_route}')
     for analysis_day in analysis_days:
-        # TODO: reinsert the checks, print statements
+        print(f'Processing analysis route {analysis_route} for {analysis_day}...')
         
         # Reload data
         try:
@@ -168,8 +169,9 @@ for analysis_route in analysis_routes:
                    path = os.path.join(path_processed_data, "rawnav_data.parquet"))
                 .drop(columns=['blank', 'lat_raw', 'long_raw', 'sat_cnt'])
                 )
-        except Exception as e:
-            print(e) #usually no data found or something similar
+        except:
+            print(f'No data on analysis route {analysis_route} for {analysis_day}')
+            # print(e) #usually no data found or something similar
             continue
         else:
    
@@ -181,13 +183,11 @@ for analysis_route in analysis_routes:
             # Subset Rawnav Data to Records Desired
             rawnav_summary_dat = rawnav_summary_dat.query('not (run_duration_from_sec < 600 | dist_odom_mi < 2)')
             
-            # Subset Rawnav Data to Records Desired
-            rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_run_start']]
-            rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col, on=['filename', 'index_run_start'],
+            rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_dat[['filename', 'index_run_start']], 
+                                                on=['filename', 'index_run_start'],
                                                 how='right')
             
             # Address Remaining Col Format issues
-   
             rawnav_qjump_gdf = gpd.GeoDataFrame(
                 rawnav_qjump_dat, 
                 geometry = gpd.points_from_xy(rawnav_qjump_dat.long,rawnav_qjump_dat.lat),
@@ -198,11 +198,17 @@ for analysis_route in analysis_routes:
             xwalk_seg_pattern_subset = xwalk_seg_pattern.query('route == @analysis_route')
     
             for seg in xwalk_seg_pattern_subset.seg_name_id:
+                print('Processing segment {} ...'.format(seg))
+
+                # TODO: should we actually partition by seg_name_id and then wday? 
                 index_run_segment_start_end, summary_run_segment = \
                     wr.merge_rawnav_segment(
                         rawnav_gdf_=rawnav_qjump_gdf,
                         rawnav_sum_dat_=rawnav_summary_dat,
                         target_=seg_pattern_first_last.query('seg_name_id == @seg and route == @analysis_route'))
+                # Note that because seg_pattern_first_last is defined for route and pattern,
+                # our summary will implicitly drop any runs that are on 'wrong' pattern(s) for 
+                # a route. 
                 
                 index_run_segment_start_end['wday'] = analysis_day
                 summary_run_segment['wday'] = analysis_day

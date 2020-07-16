@@ -61,10 +61,14 @@ else:
 # In general, set analysis_routes to the largest set of routes you are likely to look at --
 # the list of routes can be subset further later.
 restrict_n = None
-# analysis_routes = ['79'] 
-analysis_routes = ['H8'] 
-# analysis_routes = ['S1', 'S2', 'S4', 'S9', '70', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4', 
-#                     'H8', 'W47'] 
+
+# List of Routes 
+q_jump_route_list = ['S1', 'S2', 'S4', 'S9', 
+                     '70', '79', 
+                     '64', 'G8', 
+                     'D32', 'H1', 'H2', 'H3', 'H4', 'H8', 'W47']
+# If desired, a subset of routes above or the entire list. Code will iterate on the analysis_routes list
+analysis_routes = q_jump_route_list
 zip_parent_folder_name = "October 2019 Rawnav"
 # Assumes directory structure:
 # zip_parent_folder_name (e.g, October 2019 Rawnav)

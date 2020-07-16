@@ -149,11 +149,10 @@ def remove_run_with_seg_dist_over_50ft(index_table):
     """
     row_before = index_table.shape[0]
     
-    index_table_fil =\
-        index_table[index_table.groupby(['filename','index_run_start'],sort = False)\
-                ['dist_to_nearest_point']\
-                .transform(lambda x: all(x.dist_to_nearest_point < 50))]
-    
+    index_table_fil = (
+        index_table.groupby(['filename','index_run_start'],sort = False)
+                   .filter(lambda x: (x.dist_to_nearest_point < 50).all()))
+
     row_after = index_table_fil.shape[0]
     print(f'deleted {row_before - row_after} rows from {row_before} where nearest points to rawnav both not <50 ft.')
     return index_table_fil

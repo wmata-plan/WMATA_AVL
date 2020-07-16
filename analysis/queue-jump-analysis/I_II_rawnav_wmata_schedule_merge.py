@@ -57,16 +57,18 @@ else:
 
 # Globals
 
-# q_jump_route_list = ['S1', 'S2', 'S4', 'S9', '70', '79',
-#                      '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
-#                       'H8', 'W47']
-q_jump_route_list = ['H8']
+q_jump_route_list = ['S1', 'S2', 'S4', 'S9', 
+                     '70', '79', 
+                     '64', 'G8', 
+                     'D32', 'H1', 'H2', 'H3', 'H4', 'H8', 'W47']
+
 analysis_routes = q_jump_route_list
+# analysis_routes = ['W47']
 # analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
 # analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
 # analysis_routes = ['S2','S4','H1','H2','H3','79','W47']
-# analysis_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-analysis_days = ['Sunday']
+analysis_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+# analysis_days = ['Friday']
 # EPSG code for WMATA-area work
 wmata_crs = 2248
 
@@ -151,6 +153,7 @@ for analysis_route in analysis_routes:
                 rawnav_dat_=rawnav_qjump_gdf,
                 rawnav_sum_dat_=rawnav_summary_dat,
                 wmata_schedule_dat_=wmata_schedule_gdf)
+        
         if type(stop_summary) == type(None):
             print(f'No data on analysis route {analysis_route} for {analysis_day}')
             continue
