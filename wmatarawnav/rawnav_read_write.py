@@ -100,3 +100,81 @@ def read_cleaned_rawnav(path, analysis_routes_, analysis_days_ = None):
         rawnav_temp_dat.pattern = rawnav_temp_dat.pattern.astype('int') 
 
     return rawnav_temp_dat
+
+def rawnav_data_schema():
+    """
+    Returns
+    -------
+    rawnav_data_schema: pa.schema,
+      a schema for rawnav data, put here to keep code a bit tidier
+    """
+    
+    rawnav_data_schema = pa.schema([
+        pa.field('index_loc', pa.float64()),
+        pa.field('lat', pa.float64()),
+        pa.field('long', pa.float64()),
+        pa.field('heading', pa.float64()),
+        pa.field('door_state', pa.string()),
+        pa.field('veh_state', pa.string()),
+        pa.field('odom_ft',pa.float64()),
+        pa.field('sec_past_st', pa.float64()),
+        pa.field('sat_cnt', pa.float64()),
+        pa.field('stop_window', pa.string()),
+        pa.field('blank', pa.float64()),
+        pa.field('lat_raw', pa.float64()),
+        pa.field('long_raw',pa.float64()),
+        pa.field('row_before_apc', pa.float64()),
+        pa.field('route_pattern', pa.string()),
+        pa.field('route', pa.string()),
+        pa.field('pattern', pa.float64()),
+        pa.field('index_run_start', pa.float64()),
+        pa.field('index_run_end', pa.float64()),
+        pa.field('filename', pa.string()),
+        pa.field('wday', pa.string()),
+        pa.field('start_date_time', pa.timestamp('us'))
+    ])
+        
+    return rawnav_data_schema
+
+def rawnav_summary_schema():
+    """
+    Returns
+    -------
+    rawnav_summary_schema: pa.schema,
+      a schema for rawnav data, put here to keep code a bit tidier
+    """
+    
+    rawnav_summary_schema = pa.schema([
+        pa.field('fullpath', pa.string()),
+        pa.field('filename', pa.string()),
+        pa.field('file_busid', pa.int64()),
+        pa.field('file_id', pa.string()),
+        pa.field('taglist', pa.string()),
+        pa.field('route_pattern', pa.string()),
+        pa.field('tag_busid', pa.float64()),
+        pa.field('route', pa.string()),
+        pa.field('pattern', pa.int32()),
+        pa.field('wday', pa.string()),
+        pa.field('start_date_time', pa.timestamp(unit = 'ns')),
+        pa.field('end_date_time', pa.timestamp(unit = 'ns')),
+        pa.field('index_run_start_original', pa.int32()),
+        pa.field('index_run_start', pa.int32()),
+        pa.field('index_run_end_original', pa.float64()),
+        pa.field('index_run_end', pa.int32()),
+        pa.field('sec_start', pa.int32()),
+        pa.field('odom_ft_start', pa.int32()),
+        pa.field('sec_end', pa.int32()),
+        pa.field('odom_ft_end', pa.int32()),
+        pa.field('run_duration_from_sec', pa.int32()),
+        pa.field('run_duration_from_tags', pa.string()),
+        pa.field('dist_odom_mi', pa.float64()),
+        pa.field('mph_odom',pa.float64()),
+        pa.field('mph_run_tag',pa.float64()),
+        pa.field('dist_crow_fly_mi',pa.float64()),
+        pa.field('lat_start',pa.float64()),
+        pa.field('long_start',pa.float64()),
+        pa.field('lat_end',pa.float64()),
+        pa.field('long_end',pa.float64())
+    ])
+    
+    return rawnav_summary_schema
