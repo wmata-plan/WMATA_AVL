@@ -452,39 +452,47 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
                  'direction': ['first'],
                  'pattern_destination': ['first'],
                  'direction_id': ['first']})
-    rawnav_q_stop_sum_dat.columns = ['start_odom_ft_wmata_schedule', 
-                                     'end_odom_ft_wmata_schedule',
-                                     'run_dist_mi_odom_wmata_schedule', 
-                                     'start_sec_wmata_schedule',
-                                     'end_sec_wmata_schedule', 
-                                     'run_dur_sec_wmata_schedule',
-                                     'start_lat_wmata_schedule', 
-                                     'end_lat_wmata_schedule',
-                                     'start_long_wmata_schedule', 
-                                     'end_long_wmata_schedule',
-                                     'dist_first_stop_wmata_schedule', 
-                                     'trip_dist_mi_direct_wmata_schedule',
-                                     'route_text_wmata_schedule', 
-                                     'pattern_name_wmata_schedule',
-                                     'direction_wmata_schedule', 
-                                     'pattern_destination_wmata_schedule',
-                                     'direction_id_wmata_schedule']
-    rawnav_q_stop_sum_dat.loc[:, ['run_dist_mi_odom_wmata_schedule']] = \
-        rawnav_q_stop_sum_dat.loc[:, ['run_dist_mi_odom_wmata_schedule']] / 5280
-    rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_direct_wmata_schedule']] = \
-        rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_direct_wmata_schedule']] / 5280
-    rawnav_q_stop_sum_dat.loc[:, 'trip_speed_mph_wmata_schedule'] = \
-        round(3600 *
-              rawnav_q_stop_sum_dat.run_dist_mi_odom_wmata_schedule /
-              rawnav_q_stop_sum_dat.run_dur_sec_wmata_schedule, 2)
-    rawnav_q_stop_sum_dat.loc[:, ['run_dist_mi_odom_wmata_schedule', 
-                                  'dist_first_stop_wmata_schedule',
-                                  'trip_dist_mi_direct_wmata_schedule']] = \
-        round(rawnav_q_stop_sum_dat.loc[:, ['run_dist_mi_odom_wmata_schedule',
-                                            'dist_first_stop_wmata_schedule',
-                                            'trip_dist_mi_direct_wmata_schedule']], 2)
-    rawnav_q_stop_sum_dat = \
-        rawnav_q_stop_sum_dat.merge(rawnav_sum_dat, on=['filename', 'index_run_start'], how='left')
+    
+    # i don't make up the rules
+    rawnav_q_stop_sum_dat.columns = ["_".join(x) for x in rawnav_q_stop_sum_dat.columns.ravel()]
+
+    rawnav_q_stop_sum_dat = (
+        rawnav_q_stop_sum_dat
+        .rename(columns = {'odom_ft_min':'start_odom_ft_wmata_schedule',
+                           'odom_ft_max':'end_odom_ft_wmata_schedule',
+                           'odom_ft_<lambda_0>':'run_dist_mi_odom_wmata_schedule', 
+                           'sec_past_st_min':'start_sec_wmata_schedule',
+                           'sec_past_st_max':'end_sec_wmata_schedule', 
+                           'sec_past_st_<lambda_0>':'run_dur_sec_wmata_schedule',
+                           'lat_first':'start_lat_wmata_schedule', 
+                           'lat_last':'end_lat_wmata_schedule',
+                           'long_first':'start_long_wmata_schedule', 
+                           'long_last': 'end_long_wmata_schedule',
+                           'first_stop_dist_nearest_point_first':'dist_first_stop_wmata_schedule', 
+                           'trip_length_first':'trip_dist_mi_direct_wmata_schedule',
+                           'route_text_first':'route_text_wmata_schedule', 
+                           'pattern_name_first':'pattern_name_wmata_schedule',
+                           'direction_first':'direction_wmata_schedule', 
+                           'pattern_destination_first':'pattern_destination_wmata_schedule',
+                           'direction_id_first':'direction_id_wmata_schedule'})
+    )
+        
+    # Mutate columns and add original summary information
+    rawnav_q_stop_sum_dat = (
+        rawnav_q_stop_sum_dat
+        .assign(
+            run_dist_mi_odom_wmata_schedule = lambda x: round(x.run_dist_mi_odom_wmata_schedule / 5280, 2),
+            trip_dist_mi_direct_wmata_schedule = lambda x: round(x.trip_dist_mi_direct_wmata_schedule / 5280, 2),
+            dist_first_stop_wmata_schedule = lambda x: round(x.dist_first_stop_wmata_schedule, 2),
+            trip_speed_mph_wmata_schedule = lambda x: round(
+                3600 * 
+                x.run_dist_mi_odom_wmata_schedule /
+                x.run_dur_sec_wmata_schedule, 
+                2)
+        )
+        .merge(rawnav_sum_dat, on=['filename', 'index_run_start'], how='left')
+    )
+
     return rawnav_q_stop_sum_dat
 
 
