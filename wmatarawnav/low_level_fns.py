@@ -17,6 +17,16 @@ def tribble(columns, *data):
         columns=columns
     )
 
+def reorder_first_cols(df,first_cols_list):
+    # i miss tidyselect::everything()
+    assert(isinstance(first_cols_list, list))
+    
+    new_cols_order = first_cols_list + [col for col in df.columns if col not in first_cols_list]
+    
+    df = df[new_cols_order]
+    
+    return df
+
 def check_convert_list(possible_list):
     if isinstance(possible_list,str):
         return ([possible_list])

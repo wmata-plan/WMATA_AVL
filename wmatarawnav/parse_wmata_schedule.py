@@ -202,7 +202,7 @@ def add_num_missing_stops_to_sum(rawnav_wmata_schedule_dat,
         rawnav_wmata_schedule_dat.groupby(['filename', 'index_run_start']). \
             agg(route=('route','first'),
                 pattern=('pattern','first'),
-                num_stops_in_trip=('stop_id','count')).reset_index()
+                num_stops_in_run=('stop_id','count')).reset_index()
     rawnav_wmata_schedule_num_stops=\
         pd.DataFrame(rawnav_wmata_schedule_num_stops)
     wmata_schedule_stops_all= \
@@ -211,7 +211,7 @@ def add_num_missing_stops_to_sum(rawnav_wmata_schedule_dat,
                                                                             on=['route','pattern'],
                                                                             how='left')
     rawnav_wmata_schedule_num_stops=\
-        rawnav_wmata_schedule_num_stops.assign(num_missin_stops=lambda x: x.wmata_stops_all-x.num_stops_in_trip)
+        rawnav_wmata_schedule_num_stops.assign(num_missing_stops=lambda x: x.wmata_stops_all-x.num_stops_in_run)
     wmata_schedule_based_sum_dat_with_missing_stop = wmata_schedule_based_sum_dat_.merge(rawnav_wmata_schedule_num_stops,
                                                                       on=['filename','index_run_start',
                                                                           'route','pattern'],
@@ -316,7 +316,13 @@ def merge_rawnav_target(target_dat, rawnav_dat, quiet=True):
         except:
             if (quiet == False):
                 print(f"No target geometry found for {name[0]} - {name[1]}")
-
+    
+    # TODO: set index? 
+    nearest_rawnav_point_to_target_dat = (
+        ll.reorder_first_cols(nearest_rawnav_point_to_target_dat,
+                              ['filename','index_run_start','index_loc'])
+    )
+        
     return nearest_rawnav_point_to_target_dat
 
 
@@ -444,35 +450,35 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
                  'direction_id': ['first']})
     rawnav_q_stop_sum_dat.columns = ['start_odom_ft_wmata_schedule', 
                                      'end_odom_ft_wmata_schedule',
-                                     'trip_dist_mi_odom_and_wmata_schedule', 
+                                     'run_dist_mi_odom_wmata_schedule', 
                                      'start_sec_wmata_schedule',
                                      'end_sec_wmata_schedule', 
-                                     'trip_dur_sec_wmata_schedule',
+                                     'run_dur_sec_wmata_schedule',
                                      'start_lat_wmata_schedule', 
                                      'end_lat_wmata_schedule',
                                      'start_long_wmata_schedule', 
                                      'end_long_wmata_schedule',
                                      'dist_first_stop_wmata_schedule', 
-                                     'trip_length_mi_direct_wmata_schedule',
+                                     'trip_dist_mi_direct_wmata_schedule',
                                      'route_text_wmata_schedule', 
                                      'pattern_name_wmata_schedule',
                                      'direction_wmata_schedule', 
                                      'pattern_destination_wmata_schedule',
                                      'direction_id_wmata_schedule']
-    rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule']] = \
-        rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule']] / 5280
-    rawnav_q_stop_sum_dat.loc[:, ['trip_length_mi_direct_wmata_schedule']] = \
-        rawnav_q_stop_sum_dat.loc[:, ['trip_length_mi_direct_wmata_schedule']] / 5280
+    rawnav_q_stop_sum_dat.loc[:, ['run_dist_mi_odom_wmata_schedule']] = \
+        rawnav_q_stop_sum_dat.loc[:, ['run_dist_mi_odom_wmata_schedule']] / 5280
+    rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_direct_wmata_schedule']] = \
+        rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_direct_wmata_schedule']] / 5280
     rawnav_q_stop_sum_dat.loc[:, 'trip_speed_mph_wmata_schedule'] = \
         round(3600 *
-              rawnav_q_stop_sum_dat.trip_dist_mi_odom_and_wmata_schedule /
-              rawnav_q_stop_sum_dat.trip_dur_sec_wmata_schedule, 2)
-    rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule', 
+              rawnav_q_stop_sum_dat.run_dist_mi_odom_wmata_schedule /
+              rawnav_q_stop_sum_dat.run_dur_sec_wmata_schedule, 2)
+    rawnav_q_stop_sum_dat.loc[:, ['run_dist_mi_odom_wmata_schedule', 
                                   'dist_first_stop_wmata_schedule',
-                                  'trip_length_mi_direct_wmata_schedule']] = \
-        round(rawnav_q_stop_sum_dat.loc[:, ['trip_dist_mi_odom_and_wmata_schedule',
+                                  'trip_dist_mi_direct_wmata_schedule']] = \
+        round(rawnav_q_stop_sum_dat.loc[:, ['run_dist_mi_odom_wmata_schedule',
                                             'dist_first_stop_wmata_schedule',
-                                            'trip_length_mi_direct_wmata_schedule']], 2)
+                                            'trip_dist_mi_direct_wmata_schedule']], 2)
     rawnav_q_stop_sum_dat = \
         rawnav_q_stop_sum_dat.merge(rawnav_sum_dat, on=['filename', 'index_run_start'], how='left')
     return rawnav_q_stop_sum_dat
