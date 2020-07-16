@@ -83,7 +83,7 @@ def ckdnearest(gdA, gdB):
     dist, idx = btree.query(nA, k=1)
     gdf = pd.concat(
         [gdA.reset_index(drop=True),
-         gdB.loc[idx, ['filename', 'index_run_start', 'index_loc', 'lat', 'long']].reset_index(
+         gdB.loc[idx, ['filename', 'index_run_start', 'index_loc', 'odom_ft', 'sec_past_st', 'lat', 'long']].reset_index(
              drop=True),
          pd.Series(dist, name='dist_to_nearest_point')], axis=1)
     return gdf

@@ -409,7 +409,8 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
     ########################################################################################
     first_last_stop_dat = get_first_last_stop_rawnav(nearest_stop_dat)
     rawnav_q_stop_dat = \
-        rawnav_q_dat.merge(first_last_stop_dat, on=['filename', 'index_run_start'], how='right')
+        rawnav_q_dat.merge(first_last_stop_dat.drop(['odom_ft','sec_past_st'], axis = 1),
+                           on=['filename', 'index_run_start'], how='right')
     rawnav_q_stop_dat = rawnav_q_stop_dat.query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
     rawnav_q_stop_dat = \
         rawnav_q_stop_dat[
