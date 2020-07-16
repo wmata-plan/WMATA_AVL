@@ -14,12 +14,16 @@ from IPython import get_ipython
 ipython = get_ipython()
 ipython.magic("reset -f")
 ipython = get_ipython()
-ipython.magic("autoreload")
+ipython.magic("load_ext autoreload")
+ipython.magic("autoreload 2")
+
 # 1 Import Libraries and Set Global Parameters
 ####################################################################################################
 # 1.1 Import Python Libraries
 ############################################
 from datetime import datetime
+print("Run Section 1 Import Libraries and Set Global Parameters...")
+begin_time = datetime.now()
 
 import os, sys, shutil
 
@@ -54,27 +58,24 @@ else:
                             ZippedFilesloc, and path_processed_data in a new elif block")
                             
 # Globals
-# Restrict number of zip files to parse to this number for testing.
-# For all cases, use None
-restrict_n = 5000
-q_jump_route_list = ['79']  #'H8'
- # ['S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3', 'H4',
-                     # 16 Gb RAM can't handle all these at one go
+# Queue Jump Routes
+q_jump_route_list = ['S1', 'S2', 'S4', 'S9', 
+                     '70', '79', 
+                     '64', 'G8', 
+                     'D32', 'H1', 'H2', 'H3', 'H4', 'H8', 'W47']
 analysis_routes = q_jump_route_list
-# analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
-# analysis_routes = ['S1', 'S9', 'H4', 'G8', '64']
-# analysis_routes = ['S2','S4','H1','H2','H3','79','W47']
-analysis_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
 # EPSG code for WMATA-area work
 wmata_crs = 2248
+
+# maximum feet per second allowable for freeflow speeds (50 mph ~ 73.3 fps)
+max_fps = 73.3
                             
 # 1.3 Import User-Defined Package
 ############################################
 import wmatarawnav as wr
 
 # 1.4 Reload Relevant Files 
-####################################################################################################
+############################################
 # TODO: Should we move this to a project specific folder or something? Right now I'm just recopying it
 # 2.1. Load segment-pattern-stop crosswalk 
 # This crosswalk is used to connect segment shapes to rawnav data. The 'route' field must 
@@ -105,22 +106,26 @@ xwalk_seg_pattern_stop_in = wr.tribble(
                 "W47",             "EAST",     "irving_fifteenth_sixteenth",    '7794'
   )
 
-xwalk_wmata_route_dir_pattern = wr.read_sched_db_patterns(
-    path = os.path.join(path_source_data,
-                        "wmata_schedule_data",
-                        "Schedule_082719-201718.mdb"),
-    analysis_routes = analysis_routes)\
-    [['direction', 'route','pattern']]\
+xwalk_wmata_route_dir_pattern = (
+    wr.read_sched_db_patterns(
+        path = os.path.join(path_source_data,
+                            "wmata_schedule_data",
+                            "Schedule_082719-201718.mdb"),
+            analysis_routes = analysis_routes)
+    .filter(items = ['direction','route','pattern'])
     .drop_duplicates()
+)
     
-xwalk_seg_pattern_stop = (xwalk_seg_pattern_stop_in
-                          .merge(xwalk_wmata_route_dir_pattern, on = ['route','direction'])
-                          .drop('direction', 1)
-                          .reindex(columns = ['route','pattern','seg_name_id','stop_id']))
+xwalk_seg_pattern_stop = (
+    xwalk_seg_pattern_stop_in
+    .merge(xwalk_wmata_route_dir_pattern, on = ['route','direction'])
+    .drop('direction', 1)
+    .reindex(columns = ['route','pattern','seg_name_id','stop_id'])
+)
 
 del xwalk_seg_pattern_stop_in
 
-# 2. load segment-pattern crosswalk (could be loaded separately or summarized from above)
+# 2. create segment-pattern crosswalk 
 xwalk_seg_pattern = (xwalk_seg_pattern_stop.drop('stop_id', 1)
                      .drop_duplicates())
 
@@ -133,116 +138,98 @@ segments = gpd.read_file(
     os.path.join(path_processed_data,"segments.geojson")).\
     to_crs(wmata_crs)
     
-# 4. Load rawnav data
-rawnav_dat = (
-    wr.read_cleaned_rawnav(
-       analysis_routes_ = analysis_routes,
-       analysis_days_ = analysis_days,
-       path = os.path.join(path_processed_data, "rawnav_data.parquet"))
-    .drop(columns=['blank', 'lat_raw', 'long_raw', 'sat_cnt'])
-    )
-
 segment_summary =\
     pq.read_table(source = os.path.join(path_processed_data,"segment_summary.parquet"),
                   use_pandas_metadata = True,
                   ).to_pandas()
 # 3 Filter Out Runs that Appear Problematic
-####################################################################################################
+###########################################\
+freeflow_list = []
 
-# TODO: need to add dist to last 'stop' and check that as well
-segment_summary_fil = segment_summary.query('dist_first_stop_segment < 30')
-
-# Reduce rawnav data to runs present in the summary file after filtering.
-# Note that this file may have also been the product of a filtered rawnav_summary table
-# One doesn't want to do a straight merge -- that has issues in that some runs will appear twice in the 
-# segment summary file because they have multiple segments defined. This will keep them if they
-# meet criteria for any of their segments and will not duplicate. #TODO : test this.
-# Ideally we could shortcut this using the index, but the index for this table is a little different
-segment_summary_fil_runs = list(zip(segment_summary_fil.filename.values, 
-                                    segment_summary_fil.index_run_start.values))
-
-rawnav_dat.set_index(['filename','index_run_start'], inplace = True)
-
-rawnav_qjump_dat = rawnav_dat[rawnav_dat.index.isin(segment_summary_fil_runs)]
-
-# TODO: repeat for filtering problematic wmata schedule joins to stop zone, etc.
-
-# Cleanup
-del rawnav_dat    
-del segment_summary_fil_runs
-
-# 2 Add Additional Metrics to Rawnav Data (Temporary)
-####################################################################################################
-
-# We'll use the 'instantaneous' speed in some cases                 
-rawnav_qjump_dat[['odom_ft_next','sec_past_st_next']] = (
-    rawnav_qjump_dat.groupby(['filename','index_run_start'], sort = False)\
-        [['odom_ft','sec_past_st']]
-        .shift(-1))
+for seg in list(xwalk_seg_pattern.seg_name_id.drop_duplicates()):
+    print('now on {}'.format(seg))
+    # 1. Read-in Data 
+    #############################
+    # Reduce rawnav data to runs present in the summary file after filtering.
+    # Note that this file may have also been the product of a filtered rawnav_summary table
+    # One doesn't want to do a straight merge -- that has issues in that some runs will appear twice in the 
+    # segment summary file because they have multiple segments defined. This will keep them if they
+    # meet criteria for any of their segments and will not duplicate. #TODO : test this.
+    # Ideally we could shortcut this using the index, but the index for this table is a little different
+    # TODO: could use itertuples but i find that syntax really weird, frankly. SHould we change?
     
-rawnav_qjump_dat = (rawnav_qjump_dat
-                    .assign(fps_next = lambda x: ((x.odom_ft_next - x.odom_ft) / 
-                                                  (x.sec_past_st_next - x.sec_past_st))))
+    xwalk_seg_pattern_fil = xwalk_seg_pattern.query('seg_name_id == @seg')
     
-# but also want a bigger lag for more stable values for free flow speed
-rawnav_qjump_dat[['odom_ft_next3','sec_past_st_next3']] = (
-    rawnav_qjump_dat.groupby(['filename','index_run_start'], sort = False)\
+    seg_routes = list(xwalk_seg_pattern_fil.route.drop_duplicates())
+    
+    rawnav_dat = (
+        wr.read_cleaned_rawnav(
+           analysis_routes_ = seg_routes,
+           
+           path = os.path.join(path_processed_data, "rawnav_data.parquet"))
+        .drop(columns=['blank', 'lat_raw', 'long_raw', 'sat_cnt'])
+    )
+            
+    segment_summary = (
+        pq.read_table(source = os.path.join(path_processed_data,"segment_summary.parquet"),
+                      filters = [['seg_name_id', "=", seg]],
+                      use_pandas_metadata = True)
+        .to_pandas()
+    )
+    # Note that our segment_summary is already filtered to patterns that are in the correct 
+    # direction for our segments.
+        
+    rawnav_fil = (
+        rawnav_dat.merge(segment_summary[["filename",
+                                                    "index_run_start",
+                                                    "start_odom_ft_segment",
+                                                    "end_odom_ft_segment"]],
+                                  on = ["filename","index_run_start"],
+                                  how = "right")        
+        .query('odom_ft >= start_odom_ft_segment & odom_ft < end_odom_ft_segment')
+        .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
+    )
+    
+    del rawnav_dat   
+
+    # 2 Add Additional Metrics to Rawnav Data 
+    #############################
+    
+    # We'll use a bigger lag for more stable values for free flow speed
+    rawnav_fil[['odom_ft_next3','sec_past_st_next3']] = (
+        rawnav_fil
+        .groupby(['filename','index_run_start'], sort = False)\
         [['odom_ft','sec_past_st']]
-        .shift(-3))
+        .shift(-3)
+    )
+    
+    rawnav_fil = (
+        rawnav_fil
+        .assign(fps_next3 = lambda x: ((x.odom_ft_next3 - x.odom_ft) / 
+                                       (x.sec_past_st_next3 - x.sec_past_st)))
+    )
+    # 3. Free Flow Calcs 
+    #############################
 
-rawnav_qjump_dat = (rawnav_qjump_dat
-                    .assign(fps_next3 = lambda x: ((x.odom_ft_next3 - x.odom_ft) / 
-                                   (x.sec_past_st_next3 - x.sec_past_st))))
+    freeflow_seg = (
+        rawnav_fil
+        .loc[lambda x: x.fps_next3 < max_fps, 'fps_next3']
+        .quantile([0.01, 0.05, 0.10, 0.15, 0.25, 0.5, 0.75, 0.85, 0.90, 0.95, 0.99])
+        .to_frame()
+        .assign(mph = lambda x: x.fps_next3 / 1.467,
+                seg_name_id = seg)
+    )
 
-# 4 Calculate Free Flow Speed
-####################################################################################################
+    freeflow_list.append(freeflow_seg)
 
-# TODO: Consider moving all of this to a function
-freeflow = []
+freeflow = (
+    pd.concat(freeflow_list)
+    .rename_axis('ntile')
+    .reset_index()
+)
 
-for seg in segments['seg_name_id']: #['georgia_piney_branch_long']: #
-    try:
-        segment_summary_fil_seg = (
-            segment_summary_fil
-            .query('seg_name_id == @seg')\
-            [['filename', 'index_run_start', 'start_odom_ft_segment', 'end_odom_ft_segment']]
-            )
-        assert(len(segment_summary_fil_seg) != 0)
-    except:
-        print("No data found for segment {}".format(seg)) 
-        continue
-    else:
-        #not sure about directionality of join, shouldn't matter much
-        rawnav_qjump_dat_seg = (
-            rawnav_qjump_dat
-            .merge(segment_summary_fil_seg,
-                   on=['filename', 'index_run_start'], how='right')
-            )
-      
-        # TODO: insert the index field into the summary file, then update this filter.
-        # effect is probably the same though
-        rawnav_qjump_dat_seg = (
-            rawnav_qjump_dat_seg
-            .query('odom_ft >= start_odom_ft_segment & odom_ft < end_odom_ft_segment')
-            .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
-            )
-             
-        freeflow_seg = (
-            rawnav_qjump_dat_seg
-            .loc[lambda x: x.fps_next < 73.3, 'fps_next']
-            .quantile([0.01, 0.05, 0.10, 0.15, 0.25, 0.5, 0.75, 0.85, 0.90, 0.95, 0.99])
-            .to_frame()
-            .assign(mph = lambda x: x.fps_next / 1.467,
-                    seg_name_id = seg)
-            )
+freeflow.to_csv(os.path.join(path_processed_data,"freeflow.csv"))
 
-        freeflow.append(freeflow_seg)
-
-freeflow = (pd.concat(freeflow)
-             .rename_axis('ntile')
-            .reset_index())
-
-# why does this transpose? oh python...
 freeflow_vals = freeflow.query('ntile == 0.95')
 
 # 4. Do Basic Decomposition of Travel Time by Run
