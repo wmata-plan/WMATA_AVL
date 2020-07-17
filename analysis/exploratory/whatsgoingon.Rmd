@@ -1,0 +1,148 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(plotly)
+
+rawnav <- read_csv(file = "C:/OD/Foursquare ITP/Foursquare ITP SharePoint Site - Shared Documents/WMATA Queue Jump Analysis/Client Shared Folder/data/01-interim/ourpoints.csv")
+```
+
+how is it possible that there's no lost time before or after the stop? these are our averages v
+```{r}
+rawnav %>%
+  group_by(filename, index_run_start, stop_area_state) %>%
+  summarize(tot_secs = sum(secs_marg, na.rm = TRUE)) %>%
+  group_by(stop_area_state) %>% 
+  summarize(avg = mean(tot_secs, na.rm = TRUE))
+```
+
+what are the routes we're looking at here?
+
+```{r}
+rawnav %>%
+  glimpse()
+```
+
+
+```{r}
+rawnav %>%
+  pull(route) %>%
+  unique()
+```
+
+
+are there cases of reopening doors? we would expect some, right?
+```{r}
+rawnav %>% 
+  group_by(filename, index_run_start) %>%
+  summarize(openings = max((max(door_state_changes) - 2),0)) %>%
+  pull(openings) %>%
+  summary()
+```
+
+ooh, we get some with no openings at all? let's look
+```{r}
+runs_w_no_openings <- 
+  rawnav %>% 
+  group_by(filename, index_run_start) %>%
+  filter(max(door_state_changes) ==1) %>%
+  distinct(filename, index_run_start)
+
+```
+94 runs! out of how many?
+
+```{r}
+rawnav %>%
+  distinct(filename, index_run_start) %>%
+  nrow()
+```
+a bunch, so like 5% don't open doors at all.
+
+
+take the first one
+```{r}
+
+```
+
+
+
+let's look at these
+```{r}
+plotdf <-
+  rawnav %>%
+  unite(busrun, filename, index_run_start, remove = FALSE) %>%
+  group_by(busrun) %>%
+  mutate(odom_ft_stop_area = odom_ft - min(odom_ft),
+         secs_stop_area = sec_past_st - min(sec_past_st)) %>%
+  ungroup()
+
+```
+
+```{r}
+plot <-
+  ggplot(plotdf,
+         aes(x = odom_ft_stop_area, y = fps_next3, group = busrun)) + 
+  geom_line(alpha = .1) + 
+  scale_x_continuous(labels = scales::comma) +
+  labs(x = "Distance Traveled (ft) in Stop Area", y = "Speed (fps) over next 3 observations")
+
+plot
+
+```
+
+Let's do some cool space-time diagrams.
+
+I need to go back and figure out what the heck is going on with these
+```{r}
+ggplot(plotdf,
+         aes(x = secs_stop_area, 
+             y = odom_ft_stop_area, 
+             group = busrun)) + 
+    geom_line(alpha = .1) + 
+    scale_y_continuous(labels = scales::comma,
+                       name = "Distance Traveled (ft) in Stop Area") +
+    scale_x_continuous(labels = scales::comma,
+                       name = "Time (secs) in Stop Area") 
+
+```
+
+Let's just filter out these and then add in some decomp stuff
+
+```{r}
+plotdf2 <-
+  plotdf %>%
+  group_by(busrun) %>%
+  filter(max(secs_stop_area) < 250)
+```
+
+Part of the offset lines could be a few things: they're pulling up a little shy of the stop itself. but some are stopping like 50 feet away, holy cow. that could be be
+
+THe more likely explanation is that we use the ping nearest the stop to become our stop point, but that ping will be in slightly different places for each route. 
+```{r}
+ggplot(plotdf2,
+         aes(x = secs_stop_area, 
+             y = odom_ft_stop_area, 
+             color = stop_area_state,
+             group = busrun)) + 
+    geom_line(alpha = .1) + 
+    scale_y_continuous(labels = scales::comma,
+                       name = "Distance Traveled (ft) in Stop Area") +
+    scale_x_continuous(labels = scales::comma,
+                       name = "Time (secs) in Stop Area") +
+    scale_color_manual(values = c("t_decel_phase" = "yellow",
+                                  "t_stop1" = "red",
+                                  "t_accel_phase" = "green"))
+```
+
+so, this makes it clear that our working decomposition puts the buses that don't stop at all in the t_decel_phase for good (see top left of chart), which doesn't quite seem right.
+
+kind of makes me worry that all of the signal time is captured with tstp1 right now. how is that possible ? as soon as dooor closes, they go, but that doesn't seem right. drivers can't possibly be that consistent
+
+
+```{r}
+
+```
+

@@ -284,6 +284,15 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     
     # 5. Filter to Stop Area and Run Stop Area Decomposition
     #############################
+    # Run identifers, including file, date, and run identifier
+        # seg_name_id = segment identifier (ala "sixteenth_u") 
+        # stop_zone_id = Stop identifier (likely the stop ID) 
+        # t_decel_phase = time from start of segment to zero speed (or door open) (used to estimate adec)
+        # t_l_inital = time from first door open back to beginning of zero speed, if any
+        # t_stop1 = Stop zone door open time defined as first instance of door opening.
+        # t_l_addl = time from first door close to acceleration
+        # t_accel_phase = time from acceleration to exiting stop zone (used to help estimate aacc
+        # t_sz_total = total time in stop zone
     # TODO: think harder about how to handle the two-stop case for 70 in georgia/irving
     rawnav_fil_stop_area_1 = (
         rawnav_fil
@@ -372,7 +381,9 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
              
     basic_decomp_list.append(basic_decomp_seg)
     
-
+    rawnav_fil_stop_area_4.to_csv(os.path.join(path_processed_data,"ourpoints_{}.csv".format(seg)))
+    
+    
 freeflow = (
     pd.concat(freeflow_list)
     .rename_axis('ntile')
@@ -388,52 +399,9 @@ freeflow.to_csv(os.path.join(path_processed_data,"freeflow.csv"))
 
 freeflow_vals = freeflow.query('ntile == 0.95')
 
-# 4. Do Basic Decomposition of Travel Time by Run
-####################################################################################################
-# Goal here is to tease out values that we can use to run the currently proposed t_stop2 process
-#   or other possible decompositions that may arise later.
+basic_decomp.to_csv(os.path.join(path_processed_data,"basic_decomp.csv"))
 
-# Some complex logic here to implement in a function wr.calc_basic_decomp(). Idea is that we do
-#   a basic decomposition here that will be used to extract t_decel_phase and t_accel_phase for 
-#   use in the approach outlined by Burak to create a a_acc and a_dec in the methodology workshop
-#   Powerpoint. But regardless of how we calculate that, these items are useful. 
-
-# Example result table shown in Powerpoint. Field names can vary to match what we already have! 
-#   run_basic_decomp = ...
-# Run identifers, including file, date, and run identifier
-        # seg_name_id = segment identifier (ala "sixteenth_u") 
-        # stop_zone_id = Stop identifier (likely the stop ID) 
-        # t_decel_phase = time from start of segment to zero speed (or door open) (used to estimate adec)
-        # t_l_inital = time from first door open back to beginning of zero speed, if any
-        # t_stop1 = Stop zone door open time defined as first instance of door opening.
-        # t_l_addl = time from first door close to acceleration
-        # t_accel_phase = time from acceleration to exiting stop zone (used to help estimate aacc
-        # t_sz_total = total time in stop zone
-
-# Function inputs include:
-    #   - A rawnav file (pulled from Parquet storage, may include many runs and even multiple routes or segments)
-    #   - The index_stop_zone_start_end table with one record for the start or stop of each stop zone -- rawnav run -- evaluation segment combination 
-    #   - The segment-pattern crosswalk (may be moot given the above)
-
-# Major Steps:
-#   - Filter to rawnav records in applicable stop zones (note that because stop zones will not differ
-#       even if several variants of a segment are defined, we don't have to do the segment-by-segment
-#       iteration here).
-#   - Group by run-segment-stop
-#   - Calculate a few new fields:
-    #   - Calculate a new column door_state_change that increments every time door_state changes, 
-    #     ala R's data.table::rleid() function. 
-    #     https://www.rdocumentation.org/packages/data.table/versions/1.12.8/topics/rleid
-    #   - Calculate a new column SecsPastSt_marg that is the marginal number of seconds past start 
-    #       between the current observation and the next observation.
-    #       TODO: this could be calculated earlier - this is a recalculation.
-    #   - Calculate a new indicator for door_state_stop_zone that is:
-    #          - "open" when door_open == "O" and the earliest door_state_change value among door_open records 
-    #          - "closed" otherwise 
-    #   - See mark up of a rawnav table at this location for more pointers on how the rest of hte
-    #       fields above would show up: https://foursquareitp.sharepoint.com/:x:/r/Shared%20Documents/WMATA%20Queue%20Jump%20Analysis/Client%20Shared%20Folder/data/01-interim/run_basic_decomp_example.xlsx?d=w41a23c96379b4187992714719acbc002&csf=1&web=1&e=YfZHo9
-#   - Summarize...
-
+rawnav_fil_stop_area_4.to_csv(os.path.join(path_processed_data,"ourpoints.csv"))
 
 # Calculate Stop-level Baseline Accel-Decel Time (input to t_stop2)
 ####################################################################################################
