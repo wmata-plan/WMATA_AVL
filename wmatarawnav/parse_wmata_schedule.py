@@ -394,7 +394,11 @@ def delete_rows_with_incorrect_stop_order(nearest_rawnav_point_to_wmata_schedule
         nearest_rawnav_point_to_wmata_schedule_data_.groupby(['filename', 'index_run_start']). \
             index_loc.diff().fillna(0)
     wrong_snapping_dat = nearest_rawnav_point_to_wmata_schedule_data_.query('diff_index<0')
-    nearest_rawnav_point_to_wmata_schedule_data_ = nearest_rawnav_point_to_wmata_schedule_data_.query('diff_index>=0')
+    nearest_rawnav_point_to_wmata_schedule_data_ = (
+        nearest_rawnav_point_to_wmata_schedule_data_
+        .query('diff_index>=0')
+        .drop(columns = ['diff_index'])
+    )
     return nearest_rawnav_point_to_wmata_schedule_data_
 
 
