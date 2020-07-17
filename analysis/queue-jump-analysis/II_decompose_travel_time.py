@@ -287,20 +287,30 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     rawnav_fil_stop_area_1 = (
         rawnav_fil
         .query('odom_ft >= (odom_ft_qj_stop - 150) & odom_ft < (odom_ft_qj_stop + 150)')
+        .reset_index()
     )
     
+    # Add variables
     rawnav_fil_stop_area_2 = (
         rawnav_fil_stop_area_1
         .assign(
-            # At the first door open, we'll start the clock on boarding time
-            door_state_binary=lambda x: np.where(x.door_state == "C", 0, 1),
-            door_state_changes=lambda x: x.door_state_binary.diff().ne(0).cumsum(),
-            # if bus is stopped at other points, want to know
-            move_state_binary=lambda x: np.where(x.fps_next == 0, 0, 1),
-            move_state_changes=lambda x: x.move_state_binary.diff().ne(0).cumsum()
+            door_state_closed=lambda x: x.door_state == "C",
+            veh_state_moving=lambda x: x.fps_next > 0,
         )
     )
     
+    rawnav_fil_stop_area_2['veh_state_changes'] = (
+            rawnav_fil_stop_area_2
+            .groupby(['filename','index_run_start'])['veh_state_moving']
+            .transform(lambda x: x.diff().ne(0).cumsum())
+    )
+    
+    rawnav_fil_stop_area_2['door_state_changes'] = (
+        rawnav_fil_stop_area_2
+        .groupby(['filename','index_run_start'])['door_state_closed']
+        .transform(lambda x: x.diff().ne(0).cumsum())
+    )
+
     # this is casewhen, if you're wondering
     rawnav_fil_stop_area_3 = rawnav_fil_stop_area_2
     
