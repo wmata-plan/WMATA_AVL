@@ -145,6 +145,7 @@ segment_summary = (
 # 3 Filter Out Runs that Appear Problematic
 ###########################################\
 freeflow_list = []
+basic_decomp_list = []
 
 for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     print('now on {}'.format(seg))
@@ -245,26 +246,26 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     #############################
     rawnav_fil[['odom_ft_next','sec_past_st_next']] = (
         rawnav_fil
-        .groupby(['filename','index_run_start'], sort = False)\
-        [['odom_ft','sec_past_st']]
+        .groupby(['filename','index_run_start'], sort = False)[['odom_ft','sec_past_st']]
         .shift(-1)
     )
 
     # We'll use a bigger lag for more stable values for free flow speed
     rawnav_fil[['odom_ft_next3','sec_past_st_next3']] = (
         rawnav_fil
-        .groupby(['filename','index_run_start'], sort = False)\
-        [['odom_ft','sec_past_st']]
+        .groupby(['filename','index_run_start'], sort = False)[['odom_ft','sec_past_st']]
         .shift(-3)
     )
     
     rawnav_fil = (
         rawnav_fil
         .assign(
-            fps_next  = lambda x: ((x.odom_ft_next - x.odom_ft) / 
-                                       (x.sec_past_st_next - x.sec_past_st)),
-            fps_next3 = lambda x: ((x.odom_ft_next3 - x.odom_ft) / 
-                                       (x.sec_past_st_next3 - x.sec_past_st))
+            secs_marg=lambda x: x.sec_past_st_next - x.sec_past_st,
+            odom_ft_marg=lambda x: x.odom_ft_next - x.odom_ft,
+            fps_next=lambda x: ((x.odom_ft_next - x.odom_ft) / 
+                                (x.sec_past_st_next - x.sec_past_st)),
+            fps_next3=lambda x: ((x.odom_ft_next3 - x.odom_ft) / 
+                                 (x.sec_past_st_next3 - x.sec_past_st))
         )
     )
     # 4. Free Flow Calcs 
@@ -299,6 +300,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
         )
     )
     
+    # Add a sequential numbering that increments each time door or vehicle state changes in group
     rawnav_fil_stop_area_2['veh_state_changes'] = (
             rawnav_fil_stop_area_2
             .groupby(['filename','index_run_start'])['veh_state_moving']
@@ -314,10 +316,12 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     # this is casewhen, if you're wondering
     rawnav_fil_stop_area_3 = rawnav_fil_stop_area_2
     
-    rawnav_fil_stop_area_3['state'] = np.select(
+    rawnav_fil_stop_area_3['rough_state'] = np.select(
         [
             (rawnav_fil_stop_area_3.door_state_changes < 2),
-            ((rawnav_fil_stop_area_3.door_state == "O") & (rawnav_fil_stop_area_3.door_state_changes == 2)),
+            ((rawnav_fil_stop_area_3.door_state == "O") 
+             # first door state change has sequential ID 2
+              & (rawnav_fil_stop_area_3.door_state_changes == 2)),
             (rawnav_fil_stop_area_3.door_state_changes > 2)
         ], 
         [
@@ -328,55 +332,55 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
         default="doh"
     )
         
-    breakpoint()
-    # TODO: finish here
-    # # in cases where bus is stopped around door open, we do special things
-    # rawnav_fil_stop_area_3_grp = (
-    #     rawnav_fil_stop_area_3
-    #     .groupby(['filename','index_run_start','move_state_changes']) #readd stopid
-    # )
+    # in cases where bus is stopped around door open, we do special things
+    rawnav_fil_stop_area_3['at_stop']= (
+        rawnav_fil_stop_area_3
+        .groupby(['filename','index_run_start','veh_state_changes'])['rough_state']
+        .transform(lambda var: var.isin(['t_stop1']))
+    )
     
-    # rawnav_fil_stop_area_3_grp['state'] =  np.select(
-    #     [
-    #         ((rawnav_fil_stop_area_3_grp.state == "t_decel_phase") 
-    #              & (rawnav_fil_stop_area_3_grp.fps_next == 0 )
-    #              & (any(rawnav_fil_stop_area_3_grp.state == "t_stop1")))
-    #     ],
-    #     [
-    #         ('l_initial')
-    #     ],
-    #     default = rawnav_fil_stop_area_3_grp.state
-    # )
-        
-        
-        
-    #     .assign(
-    #         state=lambda x: x.door_state.where(
-    #             (x.state == "t_decel_phase") 
-    #             & (x.next_mph == 0 )
-    #             & (any(x.state == "t_stop1")), 
-    #             "L_initial"
-    #         ),
-    #         state=lambda x: x.door_state.where(
-    #             (x.state == "t_decel_phase") 
-    #             & (x.next_mph == 0 )
-    #             & (any(x.state == "t_stop1")), 
-    #             "L_initial"
-    #         )
-    #     )
-    # )
+    rawnav_fil_stop_area_3['at_stop_state'] = np.select(
+        [
+            ((rawnav_fil_stop_area_3.at_stop) 
+                 & (rawnav_fil_stop_area_3.fps_next == 0)
+                 & (rawnav_fil_stop_area_3.rough_state == "t_decel_phase")),
+            ((rawnav_fil_stop_area_3.at_stop) 
+                & (rawnav_fil_stop_area_3.fps_next == 0)
+                & (rawnav_fil_stop_area_3.rough_state == "t_accel_phase"))
+        ],
+        [
+            "t_l_initial",
+            "t_l_addl"
+        ],
+        default = "NA"
+    )
+
+    rawnav_fil_stop_area_4 = (
+        rawnav_fil_stop_area_3
+        .assign(stop_area_state = lambda x: np.where(x.at_stop_state != "NA",
+                                                     x.at_stop_state,
+                                                     x.rough_state))
+    )
     
-    # rawnav_fil_stop_area_3
-    
-    breakpoint()
-    
-    print('himom')
-    
+    basic_decomp_seg = (
+        rawnav_fil_stop_area_4
+        .groupby(['filename','index_run_start','stop_area_state'])[['secs_marg','odom_ft_marg']]
+        .sum()
+        .reset_index()
+        .assign(seg_name_id = seg)
+    )
+             
+    basic_decomp_list.append(basic_decomp_seg)
     
 
 freeflow = (
     pd.concat(freeflow_list)
     .rename_axis('ntile')
+    .reset_index()
+)
+
+basic_decomp = (
+    pd.concat(basic_decomp_list)
     .reset_index()
 )
 
