@@ -183,6 +183,9 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
         .to_pandas()
     )
     
+    # TODO: fix the segment code so this is unneccessary -- not sure why this is doing this now
+    segment_summary = segment_summary[~segment_summary.duplicated(['filename', 'index_run_start'], keep='last')] 
+    
     stop_index = (
         pq.read_table(source=os.path.join(path_processed_data,"stop_index.parquet"),
                       filters=[[('route','=',route)] for route in seg_routes],
