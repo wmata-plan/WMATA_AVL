@@ -80,25 +80,25 @@ import wmatarawnav as wr
 # geometry file. 'stop_id' matches the stop identifier in the WMATA schedule database.
 xwalk_seg_pattern_stop_in = wr.tribble(
              ['route',        'direction',                    'seg_name_id','stop_id'], 
-                 "79",            "SOUTH",               "georgia_columbia",    '5381',      
-                 "79",            "SOUTH",      "georgia_piney_branch_long",    '5401',
+                 "79",            "SOUTH",               "georgia_columbia",   10981, 
+                 "79",            "SOUTH",      "georgia_piney_branch_long",    4217, 
                  #not sure yet how to deal with second stop, but i think this works
-                 "70",            "SOUTH",                 "georgia_irving",    '5600',
-                 "70",            "SOUTH",                 "georgia_irving",    '5381', 
-                 "70",            "SOUTH",      "georgia_piney_branch_shrt",    '5401',
-                 "S1",            "NORTH",               "sixteenth_u_shrt",    '7848',
-                 "S2",            "NORTH",               "sixteenth_u_shrt",    '7848',
-                 "S4",            "NORTH",               "sixteenth_u_shrt",    '7848',
-                 "S9",            "NORTH",               "sixteenth_u_long",    '7848',
-                 "64",            "NORTH",            "eleventh_i_new_york",    '7627',
-                 "G8",             "EAST",            "eleventh_i_new_york",    '7627',
-                "D32",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
-                 "H1",            "NORTH",     "irving_fifteenth_sixteenth",    '7794',
-                 "H2",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
-                 "H3",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
-                 "H4",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
-                 "H8",             "EAST",     "irving_fifteenth_sixteenth",    '7794',
-                "W47",             "EAST",     "irving_fifteenth_sixteenth",    '7794'
+                 "70",            "SOUTH",                 "georgia_irving",   19186, #irving stop
+                 "70",            "SOUTH",                 "georgia_irving",   10981, #columbia stop 
+                 "70",            "SOUTH",      "georgia_piney_branch_shrt",    4217,
+                 "S1",            "NORTH",               "sixteenth_u_shrt",   18042,
+                 "S2",            "NORTH",               "sixteenth_u_shrt",   18042,
+                 "S4",            "NORTH",               "sixteenth_u_shrt",   18042,
+                 "S9",            "NORTH",               "sixteenth_u_long",   18042,
+                 "64",            "NORTH",            "eleventh_i_new_york",   16490,
+                 "G8",             "EAST",            "eleventh_i_new_york",   16490,
+                "D32",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                 "H1",            "NORTH",     "irving_fifteenth_sixteenth",    2368,
+                 "H2",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                 "H3",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                 "H4",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                 "H8",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                "W47",             "EAST",     "irving_fifteenth_sixteenth",    2368
   )
 
 xwalk_wmata_route_dir_pattern = wr.read_sched_db_patterns(

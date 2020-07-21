@@ -1,0 +1,291 @@
+---
+title: "WMATA Queue Jump Effectiveness: First Look at Early Decomposition Values"
+output: 
+  html_notebook:
+    toc: true
+    toc_depth: 2
+    toc_float: yes
+    df_print: paged
+    number_sections: false
+    theme: simplex
+---
+
+This notebook examines the outputs of the `wmatarawnav` Python package and QJ Effectiveness study code for the October 2019 period on various study routes and segments. This notebook does not present a complete decomposition of runs, but presents some of the inputs that will feed into the decomposition calculation. Later, relevant parts of this analysis will be done in Python, but are done in R here to speed up certain analysis and visualization tasks.
+
+```{r message=FALSE, warning=FALSE}
+# Environment setup
+library(tidyverse)
+library(plotly)
+library(sf)
+library(mapview)
+library(leaflet)
+
+if (any(Sys.info() =="WylieTimmerman")){
+  path_project <- "C:/Users/WylieTimmerman/Documents/projects_local/wmata_avl_local"  
+} else {
+  stop('set paths')
+}
+
+path_data <- file.path(path_project,"data","02-processed","rawnav_stop_areas")
+
+```
+
+
+# Freeflow Speeds
+We'll take a first look at freeflow speeds by segment. These were calculated based on a three-ping average speed, excluding any very high speed values above 50 mph.
+```{r message=FALSE, warning=FALSE}
+freeflow <- read_csv(file = file.path(path_data,"freeflow.csv"),
+                     col_types = cols(
+                       X1 = col_double(),
+                       ntile = col_double(),
+                       fps_next3 = col_double(),
+                       mph = col_double(),
+                       seg_name_id = col_character()
+                     )) %>%
+  select(-X1)
+
+freeflow_spread <-
+  freeflow %>%
+  select(-fps_next3) %>%
+  filter(ntile %in% c(.25,.5,.75,.9,.95,.99)) %>%
+  mutate(mph = round(mph)) %>%
+  pivot_wider(id_cols = seg_name_id, names_from = ntile, values_from = mph) %>%
+  arrange(desc(`0.95`))
+
+freeflow_spread
+```
+
+So far, these seem plausible. 
+
+# Data Load 
+
+Though the Python code generates summaries of freeflow speeds, tstop1 (door open time), and other decomposition inputs (accel time, decel time, etc.), below we'll look at the underlying rawnav pings *within stop areas (+/- 150 feet around a stop)*. We'll load all evaluation segments except for Georgia and Irving and exclude a few runs that have extremely high values. Currently, the Georgia-Irving case where Route 70 serves two stops, a special case not yet handled in the processing code. 
+```{r message=FALSE, warning=FALSE}
+
+filelist <- list.files(path_data, pattern = "ourpoints", full.names = TRUE)
+
+filelist_named <- set_names(filelist,
+                            nm = str_match(filelist,"ourpoints_([\\s\\S]*).csv$")[,2])
+
+rawnav_stop_area_raw <- 
+  imap_dfr(filelist_named,
+           ~ readr::read_csv(.x,
+                             col_types =  cols(
+                               X1 = col_double(),
+                               index = col_double(),
+                               index_loc = col_double(),
+                               lat = col_double(),
+                               long = col_double(),
+                               heading = col_double(),
+                               door_state = col_character(),
+                               veh_state = col_character(),
+                               odom_ft = col_double(),
+                               sec_past_st = col_double(),
+                               stop_window = col_character(),
+                               row_before_apc = col_double(),
+                               route_pattern = col_character(),
+                               pattern = col_double(),
+                               index_run_start = col_double(),
+                               index_run_end = col_double(),
+                               filename = col_character(),
+                               start_date_time = col_datetime(format = ""),
+                               route = col_double(),
+                               wday = col_character(),
+                               odom_ft_qj_stop = col_double(),
+                               stop_id = col_double(),
+                               odom_ft_next = col_double(),
+                               sec_past_st_next = col_double(),
+                               odom_ft_next3 = col_double(),
+                               sec_past_st_next3 = col_double(),
+                               fps_next = col_double(),
+                               fps_next3 = col_double(),
+                               secs_marg = col_double(),
+                               odom_ft_marg = col_double(),
+                               door_state_closed = col_logical(),
+                               veh_state_moving = col_logical(),
+                               veh_state_changes = col_double(),
+                               door_state_changes = col_double(),
+                               rough_state = col_character(),
+                               at_stop = col_logical(),
+                               at_stop_state = col_logical(),
+                               stop_area_state = col_character()
+                             )),
+           .id = "seg_name_id"
+  )
+  
+# some light claculation of fields and filtering
+rawnav_stop_area <-
+  rawnav_stop_area_raw %>%
+  unite(busrun, filename, index_run_start, remove = FALSE) %>%
+  mutate(mph_next = fps_next / 1.467,
+         mph_next3 = fps_next3 / 1.467) %>%
+  mutate(stop_area_state = factor(stop_area_state,
+                                  levels = c("t_decel_phase",
+                                             "t_l_initial",
+                                             "t_stop1",
+                                             "t_l_addl",
+                                             "t_accel_phase",
+                                             "t_nostop"))) %>%
+  group_by(busrun, seg_name_id) %>%
+  mutate(odom_ft_stop_area = odom_ft - min(odom_ft),
+         secs_stop_area = sec_past_st - min(sec_past_st)) %>%
+  # there also issues with odometer resets in some cases
+  filter(max(secs_stop_area) < 500) %>%
+  ungroup() %>%
+  # issues with t his for now
+  filter(seg_name_id != "georgia_irving")
+
+```
+
+Across all our segments, how long does a bus spend in each zone, excluding runs that go straight through? 
+```{r}
+rawnav_stop_area %>%
+  group_by(busrun,seg_name_id) %>%
+  filter(!any(stop_area_state %in% c("t_nostop"))) %>% 
+  group_by(busrun, seg_name_id, stop_area_state) %>%
+  summarize(tot_secs = sum(secs_marg, na.rm = TRUE)) %>%
+  group_by(stop_area_state) %>% 
+  summarize(avg_seconds = mean(tot_secs, na.rm = TRUE))
+```
+
+So far, this seems plausible. A few terms are worth defining. Collectively, these comprehensively describe the sequence a typical bus run will undergo in a stop area:
+
+* t_decel_phase: time from entering the stop area until the bus reaches a stop and is about to open its doors.
+* t_l_initial: lost time where the bus is stopped at the stop but the doors are still closed. 
+* t_stop1: time where the bus has its doors open. If the doors are closed and reopened, subsequent door open times are *not* included in this value.
+* t_l_addl: additional lost time between the closing of the doors in t_stop1 until the vehicle begins to move and depart the stop zone. Notably, if a vehicle opens its doors, closes them, moves forward slightly, and then reopens its doors and re-closes them, the extra time spent opening and cl
+* t_accel_phase: the time after the last door closure through the acceleration phase to the end of the stop area.
+
+Notably, runs that do not open their doors to passengers are categorized as "t_nostop" throughout.
+
+What does the data we're looking at look like?
+```{r}
+rawnav_stop_area %>%
+  glimpse()
+```
+
+Are there cases of reopening doors? 
+```{r}
+rawnav_stop_area %>% 
+  group_by(busrun,seg_name_id) %>%
+  # Door_state_changes is a special var that increments every time the door state changes
+  # and is better than just counting rows with door_state = "O". We have 
+  # to do a little more work though to get a value, however.
+  summarize(openings = max(door_state_changes)) %>% 
+  mutate(openings = (openings - 1)/2) %>%
+  pull(openings) %>%
+  summary()
+```
+
+Most buses will open their doors just once, but there's a long tail to the right.
+
+This is the total number of run-segment combinations with no openings...
+```{r}
+runs_w_no_openings <- 
+  rawnav_stop_area %>% 
+  group_by(busrun, seg_name_id) %>%
+  filter(max(door_state_changes) ==1) %>%
+  distinct(busrun)
+
+nrow(runs_w_no_openings)
+```
+...out of ...
+
+```{r}
+distinct(rawnav_stop_area,busrun, seg_name_id) %>%
+  nrow()
+```
+Around `r scales::percent((nrow(runs_w_no_openings)/nrow(distinct(rawnav_stop_area,busrun,seg_name_id))))` of runs! This seems pretty high! Why might this be? 
+
+So we see both many runs with no door openings and some with several. What's the distribution? 
+
+```{r message=FALSE, warning=FALSE}
+run_openings <- 
+  rawnav_stop_area %>% 
+  group_by(seg_name_id,busrun) %>%
+  summarize(openings = max(door_state_changes)) %>% 
+  mutate(openings = (openings - 1)/2)
+
+binw = 1
+
+ggplot(run_openings, aes(x = openings)) + 
+  geom_histogram() +
+  geom_histogram(aes(fill=seg_name_id), binwidth=binw, colour="grey20", lwd=0.2) +
+  stat_bin(binwidth=binw, geom="text", colour="white", size=3.5,
+           aes(label=..count.., group=seg_name_id), position=position_stack(vjust=0.5)) +
+  scale_x_continuous(breaks=seq(-1,7, binw), limits = c(-1,7))
+```
+
+# Examining Georgia-Columbia
+
+let's look at Georgia-Columbia on the 79 as we dive into the data more deeply.
+```{r}
+plotdf <-
+  rawnav_stop_area %>%
+  filter(seg_name_id == "georgia_columbia") %>%
+  plotly::highlight_key(., ~busrun)
+
+```
+
+Here we replicate the speed by distance chart from earlier notebooks. All run odometers are reset such that the rawnav point nearest a stop comes at 150 ft. We see that some of these runs come to a stop before the 150 ft mark. This could be the result of several things:
+
+* Buses are pulling up a little shy of the stop itself to let passengers on and off. This could be the case if a vehicle is in the bus zone.
+* Buses are stopping short of the bus zone and then edging forward at slow speeds into the bus zone. 
+* The rawnav ping nearest the bus stop will in fact vary slightly by run, such that for some this ping is slightly downstream of the stop and for others it is slightly upstream. Collectively, this would result in a larger 'spread ' of lines around the stop. This latter point has implications for ideas to automatically 'detect' a stop location that are not discussed here.
+```{r}
+plot <-
+  ggplot(plotdf,
+         aes(x = odom_ft_stop_area, y = mph_next3, group = busrun)) + 
+  geom_line(alpha = .1) + 
+  scale_x_continuous(labels = scales::comma) +
+  labs(x = "Distance Traveled (ft) in Stop Area", y = "Speed (mph) over next 3 observations")
+
+plot %>% ggplotly(tooltip = "busrun")
+
+```
+
+The spacetime diagrams tell a similar story, with a few exceptions.
+
+* It's more apparent that some bus runs do not let passengers alight at all and proceed directly along in a straight vertical line. 
+* Some runs are dwelling at the stop for a considerable amount of time. Note that runs with stop area travel time above 500 seconds are removed from this dataset.
+
+
+```{r}
+stringline <- 
+  ggplot(plotdf,
+         aes(x = secs_stop_area, 
+             y = odom_ft_stop_area, 
+             group = busrun)) + 
+  geom_line(alpha = .1) + 
+  scale_y_continuous(labels = scales::comma,
+                     name = "Distance Traveled (ft) in Stop Area") +
+  scale_x_continuous(labels = scales::comma,
+                     name = "Time (secs) in Stop Area") 
+
+stringline
+```
+
+Let's add some of the initial decomposition breakdown for an individual run into these charts. This does not reflect the final decomposition (t_stop2 calculations are still to be made), but help to indicate how these values are shaping up. 
+
+```{r}
+singleline <- 
+  rawnav_stop_area %>%
+  filter(busrun == "rawnav02805191009.txt_1528", seg_name_id == "georgia_columbia") %>%
+  ggplot(.,
+         aes(x = secs_stop_area, 
+             y = odom_ft_stop_area, 
+             color = stop_area_state,
+             group = busrun,
+             label = stop_area_state)) + 
+  geom_line(alpha = 1, size = 2) + 
+  # geom_label() +
+  scale_y_continuous(labels = scales::comma,
+                     name = "Distance Traveled (ft) in Stop Area") +
+  scale_x_continuous(labels = scales::comma,
+                     name = "Time (secs) in Stop Area") +
+  scale_color_brewer(palette = "RdYlGn", type = "div")
+
+singleline
+```
+This concludes the look at the data so far.
+

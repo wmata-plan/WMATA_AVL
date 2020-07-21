@@ -12,7 +12,8 @@ from IPython import get_ipython  # run magic commands
 ipython = get_ipython()
 ipython.magic("reset -f")
 ipython = get_ipython()
-ipython.magic("autoreload")
+ipython.magic("load_ext autoreload")
+ipython.magic("autoreload 2")
 
 # 1 Import Libraries and Set Global Parameters
 ########################################################################################################################
