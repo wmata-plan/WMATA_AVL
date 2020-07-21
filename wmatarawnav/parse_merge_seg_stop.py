@@ -41,6 +41,8 @@ def merge_rawnav_segment(rawnav_gdf_,
     #    segment end point (checks that the segment was drawn in the right direction and that any
     #    future bidirectional segment is actually drawn once for every segment)
     #  -  TODO: Are rawnav points continuously within a buffer of ~Y feet around a segment?
+    #  - TODO: do we get first and last points for each run? later we filter on cases where we have
+    #       both, but it'd be good to know in advance what we have.
     
     # Generate Summary
     summary_run_segment =\
@@ -76,13 +78,14 @@ def include_segment_summary(rawnav_q_dat,
     ########################################################################################
     first_last_stop_dat = ws.get_first_last_stop_rawnav(nearest_stop_dat)
     rawnav_q_target_dat = \
-        rawnav_q_dat.merge(first_last_stop_dat,
+        rawnav_q_dat.merge(first_last_stop_dat.drop(['odom_ft','sec_past_st'], axis = 1),
                            on=['filename', 'index_run_start'], 
                            how='right')
     rawnav_q_target_dat = rawnav_q_target_dat.query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
     # TODO: The points after this are largely copied and slimmed down from the schedule merge
     # implementation. Not ideal by any stretch, but making this more flexible would be a significant
     # chore given the variety of columns and aggregations that need to be applied in each case. 
+    
     rawnav_q_target_dat = \
         rawnav_q_target_dat[
             ['filename',
