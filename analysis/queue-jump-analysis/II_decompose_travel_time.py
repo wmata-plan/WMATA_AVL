@@ -153,7 +153,7 @@ path_stop_area_dump = os.path.join(path_processed_data,"rawnav_stop_areas")
 if not os.path.isdir(path_stop_area_dump ):
     os.mkdir(path_stop_area_dump )
 
-for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
+for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleventh_i_new_york"]: #list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     print('now on {}'.format(seg))
     # 1. Read-in Data 
     #############################
@@ -172,7 +172,6 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     rawnav_dat = (
         wr.read_cleaned_rawnav(
            analysis_routes_ = seg_routes,
-           
            path = os.path.join(path_processed_data, "rawnav_data.parquet"))
         .drop(columns=['blank', 'lat_raw', 'long_raw', 'sat_cnt'])
     )
@@ -218,6 +217,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     # Note that our segment_summary is already filtered to patterns that are in the correct 
     # direction for our segments. This join then filters our rawnav data to those relevant 
     # runs.
+
     rawnav_fil_1 = (
         rawnav_dat
         .merge(segment_summary[["filename",
@@ -328,17 +328,26 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
         .transform(lambda x: x.diff().ne(0).cumsum())
     )
         
-    # To identify the case that's the first door opening at a stop, we'll summarize to a different
-    # dataframe and rejoin. This is almost always 2, but we're extra careful here.
+    # To identify the case that's the first door opening at a stop (and the last),
+    # we'll summarize to a different dataframe and rejoin. 
+    # min is almost always 2, but we're extra careful here.  
+    # max will be interesting - we'll add anything after the first door closing to the last as
+    # 'lost time'
     lowest_door_open_case = (
-            rawnav_fil_stop_area_2
-            .loc[rawnav_fil_stop_area_2.door_state == "O"]
-            .groupby(['filename','index_run_start','door_state'])['door_state_changes']
-            .min()
-            .to_frame()
-            .reset_index()
-            .rename(columns = {"door_state_changes": "lowest_door_open"})
-            .drop(columns = ['door_state'])
+        rawnav_fil_stop_area_2
+        .loc[rawnav_fil_stop_area_2.door_state == "O"]
+        .groupby(['filename','index_run_start','door_state'])
+        .agg({"door_state_changes" : ['min','max']})
+        .reset_index()
+    )
+    
+    lowest_door_open_case.columns = ["_".join(x) for x in lowest_door_open_case.columns.ravel()]
+
+    lowest_door_open_case = (
+        lowest_door_open_case.
+        rename(columns = {"filename_" : "filename",
+                          "index_run_start_": "index_run_start"})
+        .drop(columns = ['door_state_'])
     )
     
     rawnav_fil_stop_area_3 = (
@@ -351,12 +360,12 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     # this is casewhen, if you're wondering
     rawnav_fil_stop_area_3['rough_state'] = np.select(
         [
-            (rawnav_fil_stop_area_3.door_state_changes < rawnav_fil_stop_area_3.lowest_door_open),
+            (rawnav_fil_stop_area_3.door_state_changes < rawnav_fil_stop_area_3.door_state_changes_min),
             ((rawnav_fil_stop_area_3.door_state == "O") 
              # first door state change has sequential ID 2
-              & (rawnav_fil_stop_area_3.door_state_changes == rawnav_fil_stop_area_3.lowest_door_open)),
-            (rawnav_fil_stop_area_3.door_state_changes > rawnav_fil_stop_area_3.lowest_door_open),
-            (rawnav_fil_stop_area_3.lowest_door_open.isnull())
+              & (rawnav_fil_stop_area_3.door_state_changes == rawnav_fil_stop_area_3.door_state_changes_min)),
+            (rawnav_fil_stop_area_3.door_state_changes > rawnav_fil_stop_area_3.door_state_changes_min),
+            (rawnav_fil_stop_area_3.door_state_changes_min.isnull())
         ], 
         [
             "t_decel_phase",
@@ -371,16 +380,19 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     rawnav_fil_stop_area_3['at_stop']= (
         rawnav_fil_stop_area_3
         .groupby(['filename','index_run_start','veh_state_changes'])['rough_state']
-        .transform(lambda var: var.isin(['t_stop1']))
+        .transform(lambda var: var.isin(['t_stop1']).any())
     )
-    
+
     rawnav_fil_stop_area_3['at_stop_state'] = np.select(
         [
             ((rawnav_fil_stop_area_3.at_stop) 
-                 & (rawnav_fil_stop_area_3.fps_next == 0)
+             # TODO: consider condition that is less sensitive. Maybe speed under 2 mph?
+             # Note that we don't use a test on fps_next because 0 dist and 0 second ping could
+             # lead to NA value
+                 & (rawnav_fil_stop_area_3.odom_ft_marg == 0)
                  & (rawnav_fil_stop_area_3.rough_state == "t_decel_phase")),
             ((rawnav_fil_stop_area_3.at_stop) 
-                & (rawnav_fil_stop_area_3.fps_next == 0)
+                & (rawnav_fil_stop_area_3.odom_ft_marg == 0)
                 & (rawnav_fil_stop_area_3.rough_state == "t_accel_phase"))
         ],
         [
@@ -392,11 +404,21 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
 
     rawnav_fil_stop_area_4 = (
         rawnav_fil_stop_area_3
+        # assign the at_stop_state corrections
         .assign(stop_area_state = lambda x: np.where(x.at_stop_state != "NA",
                                                      x.at_stop_state,
                                                      x.rough_state))
+        # assign the additional records between the first door closing to last door closing to
+        # t_l_addl as well
+        .assign(stop_area_state = lambda x: np.where(
+            (x.stop_area_state == "t_accel_phase")
+            & (x.door_state_changes <= x.door_state_changes_max),
+            "t_l_addl",
+            x.stop_area_state
+            )
+        )
     )
-    
+
     basic_decomp_seg = (
         rawnav_fil_stop_area_4
         .groupby(['filename','index_run_start','stop_area_state'])[['secs_marg','odom_ft_marg']]
