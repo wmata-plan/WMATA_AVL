@@ -321,17 +321,35 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
         .groupby(['filename','index_run_start'])['door_state_closed']
         .transform(lambda x: x.diff().ne(0).cumsum())
     )
-
-    # this is casewhen, if you're wondering
-    rawnav_fil_stop_area_3 = rawnav_fil_stop_area_2
+    breakpoint()
+    # To identify the case that's the first door opening at a stop, we'll summarize to a different
+    # dataframe and rejoin. This is almost always 2, but we're extra careful here.
+    lowest_door_open_case = (
+            rawnav_fil_stop_area_2
+            .loc[rawnav_fil_stop_area_2.door_state == "O"]
+            .groupby(['filename','index_run_start','door_state'])['door_state_changes']
+            .min()
+            .to_frame()
+            .reset_index()
+            .rename(columns = {"door_state_changes": "lowest_door_open"})
+            .drop(columns = ['door_state'])
+    )
     
+    rawnav_fil_stop_area_3 = (
+        rawnav_fil_stop_area_2
+        .merge(lowest_door_open_case,
+               on = ['filename','index_run_start'],
+               how = 'left')
+    )
+    
+    # this is casewhen, if you're wondering
     rawnav_fil_stop_area_3['rough_state'] = np.select(
         [
-            (rawnav_fil_stop_area_3.door_state_changes < 2),
+            (rawnav_fil_stop_area_3.door_state_changes < rawnav_fil_stop_area_3.lowest_door_open),
             ((rawnav_fil_stop_area_3.door_state == "O") 
              # first door state change has sequential ID 2
-              & (rawnav_fil_stop_area_3.door_state_changes == 2)),
-            (rawnav_fil_stop_area_3.door_state_changes > 2)
+              & (rawnav_fil_stop_area_3.door_state_changes == rawnav_fil_stop_area_3.lowest_door_open)),
+            (rawnav_fil_stop_area_3.door_state_changes > rawnav_fil_stop_area_3.lowest_door_open)
         ], 
         [
             "t_decel_phase",
@@ -361,7 +379,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
             "t_l_initial",
             "t_l_addl"
         ],
-        default = "NA"
+        default = "NA" # NA values aren't problematic here, to be clear
     )
 
     rawnav_fil_stop_area_4 = (
