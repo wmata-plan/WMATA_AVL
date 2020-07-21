@@ -147,6 +147,12 @@ segment_summary = (
 freeflow_list = []
 basic_decomp_list = []
 
+# Set up folder to dump results to
+# TODO: improve path / save behavior
+path_stop_area_dump = os.path.join(path_processed_data,"rawnav_stop_areas")
+if not os.path.isdir(path_stop_area_dump ):
+    os.mkdir(path_stop_area_dump )
+
 for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     print('now on {}'.format(seg))
     # 1. Read-in Data 
@@ -321,7 +327,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
         .groupby(['filename','index_run_start'])['door_state_closed']
         .transform(lambda x: x.diff().ne(0).cumsum())
     )
-    breakpoint()
+        
     # To identify the case that's the first door opening at a stop, we'll summarize to a different
     # dataframe and rejoin. This is almost always 2, but we're extra careful here.
     lowest_door_open_case = (
@@ -349,14 +355,16 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
             ((rawnav_fil_stop_area_3.door_state == "O") 
              # first door state change has sequential ID 2
               & (rawnav_fil_stop_area_3.door_state_changes == rawnav_fil_stop_area_3.lowest_door_open)),
-            (rawnav_fil_stop_area_3.door_state_changes > rawnav_fil_stop_area_3.lowest_door_open)
+            (rawnav_fil_stop_area_3.door_state_changes > rawnav_fil_stop_area_3.lowest_door_open),
+            (rawnav_fil_stop_area_3.lowest_door_open.isnull())
         ], 
         [
             "t_decel_phase",
             "t_stop1",
-            "t_accel_phase"
+            "t_accel_phase",
+            "t_nostop"
         ], 
-        default="doh"
+        default="doh" 
     )
         
     # in cases where bus is stopped around door open, we do special things
@@ -399,7 +407,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
              
     basic_decomp_list.append(basic_decomp_seg)
     
-    rawnav_fil_stop_area_4.to_csv(os.path.join(path_processed_data,"ourpoints_{}.csv".format(seg)))
+    rawnav_fil_stop_area_4.to_csv(os.path.join(path_stop_area_dump,"ourpoints_{}.csv".format(seg)))
     
     
 freeflow = (
@@ -413,13 +421,14 @@ basic_decomp = (
     .reset_index()
 )
 
-freeflow.to_csv(os.path.join(path_processed_data,"freeflow.csv"))
+# Quick dump of values
+# TODO: improve path / save behavior
+freeflow.to_csv(os.path.join(path_stop_area_dump,"freeflow.csv"))
 
 freeflow_vals = freeflow.query('ntile == 0.95')
 
-basic_decomp.to_csv(os.path.join(path_processed_data,"basic_decomp.csv"))
+basic_decomp.to_csv(os.path.join(path_stop_area_dump,"basic_decomp.csv"))
 
-rawnav_fil_stop_area_4.to_csv(os.path.join(path_processed_data,"ourpoints.csv"))
 
 # Calculate Stop-level Baseline Accel-Decel Time (input to t_stop2)
 ####################################################################################################
