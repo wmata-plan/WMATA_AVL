@@ -52,6 +52,13 @@ def get_zipped_files_from_zip_dir(zip_dir_list, zipped_files_dir_parent, glob_se
         if not os.path.exists(ZipDir.split('.zip')[0]):
             with zipfile.ZipFile(ZipDir, 'r') as zip:
                 zip.extractall(zipped_files_dir_parent)
+                #Fixme: causes issue with the July 7th data format. We need to define the folder/ file structure of
+                # the input. Maybe ask the user to unzip the files like Vehicles 0-2999.zip
+                # July 7th data is in the following format:
+                # #July 2020 Rawnav-->Vehicles-->Rawnav Files
+                # #October 2019 data is in the following format:
+                # #October 2019 Rawnav-->Vehicle0-2999.zip-->Vehicle0-2999-->Rawnav Files
+                # This code doesn't handle July 2020 Rawnav folder structure
         zip_dir1 = ZipDir.split('.zip')[0]  # Will work even for Unzipped folders
         list_files = glob.glob(os.path.join(zip_dir1, glob_search))
         file_universe.extend(list_files)
