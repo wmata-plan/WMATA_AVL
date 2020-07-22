@@ -324,7 +324,9 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
             .groupby(['filename','index_run_start'])['veh_state_moving']
             .transform(lambda x: x.diff().ne(0).cumsum())
     )
-    
+    # Axb: can we use apply instead of tranform above? transform implies that the shape of the returned series is not
+    # the same as the number of rows in the orignal dataframe. Same for the lines below:
+
     rawnav_fil_stop_area_2['door_state_changes'] = (
         rawnav_fil_stop_area_2
         .groupby(['filename','index_run_start'])['door_state_closed']
@@ -359,7 +361,8 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
                on = ['filename','index_run_start'],
                how = 'left')
     )
-    
+
+    #Axb: This is awesome!
     # this is casewhen, if you're wondering
     rawnav_fil_stop_area_3['rough_state'] = np.select(
         [
