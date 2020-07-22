@@ -32,7 +32,7 @@ path_data <- file.path(path_project,"data","02-processed","rawnav_stop_areas")
 
 
 # Freeflow Speeds
-We'll take a first look at freeflow speeds by segment. These were calculated based on a three-ping average speed, excluding any very high speed values above 50 mph.
+We'll take a first look at freeflow speeds by segment. First, speeds were calculated between each rawnav ping and a ping three pings later (for a total of three intervals between four points). These speeds were calculated on a rolling basis, such that the interval between two rawnav pings may be reflected in several speed values. Any speed values above 50 mph were excluded from the percentile calculations. In the table below, speeds are sorted in descending order based on the 95th percentile.
 ```{r message=FALSE, warning=FALSE}
 freeflow <- read_csv(file = file.path(path_data,"freeflow.csv"),
                      col_types = cols(
@@ -113,7 +113,7 @@ rawnav_stop_area_raw <-
            .id = "seg_name_id"
   )
   
-# some light claculation of fields and filtering
+# some light calculation of fields and filtering
 rawnav_stop_area <-
   rawnav_stop_area_raw %>%
   unite(busrun, filename, index_run_start, remove = FALSE) %>%
@@ -132,12 +132,19 @@ rawnav_stop_area <-
   # there also issues with odometer resets in some cases
   filter(max(secs_stop_area) < 500) %>%
   ungroup() %>%
-  # issues with t his for now
+  # issues with this one b/c of multiple stops, setting aside for now
   filter(seg_name_id != "georgia_irving")
 
 ```
 
-Across all our segments, how long does a bus spend in each zone, excluding runs that go straight through? 
+Briefly, what does our data look like?
+
+```{r}
+rawnav_stop_area %>%
+  glimpse()
+```
+
+Across all our segments, how long does a bus spend in each zone, excluding runs that go straight through without opening doors to pick up passengers? 
 ```{r}
 rawnav_stop_area %>%
   group_by(busrun,seg_name_id) %>%
@@ -158,25 +165,42 @@ So far, this seems plausible. A few terms are worth defining. Collectively, thes
 
 Notably, runs that do not open their doors to passengers are categorized as "t_nostop" throughout.
 
-What does the data we're looking at look like?
+We can visualize these phases for a single trip. Again, this does not reflect the final decomposition (t_stop2 calculations are still to be made), but help to indicate how these values are shaping up. 
+
 ```{r}
-rawnav_stop_area %>%
-  glimpse()
+singleline <- 
+  rawnav_stop_area %>%
+  filter(busrun == "rawnav02805191009.txt_1528", seg_name_id == "georgia_columbia") %>%
+  ggplot(.,
+         aes(x = secs_stop_area, 
+             y = odom_ft_stop_area, 
+             color = stop_area_state,
+             group = busrun,
+             label = stop_area_state)) + 
+  geom_line(alpha = 1, size = 2) + 
+  scale_y_continuous(labels = scales::comma,
+                     name = "Distance Traveled (ft) in Stop Area") +
+  scale_x_continuous(labels = scales::comma,
+                     name = "Time (secs) in Stop Area") +
+  scale_color_brewer(palette = "RdYlGn", 
+                     type = "div")
+
+singleline
 ```
 
-Are there cases of reopening doors? 
+
+Are there cases of reopening doors in our dataset? Yes. 
 ```{r}
 rawnav_stop_area %>% 
   group_by(busrun,seg_name_id) %>%
   # Door_state_changes is a special var that increments every time the door state changes
   # and is better than just counting rows with door_state = "O". We have 
-  # to do a little more work though to get a value, however.
-  summarize(openings = max(door_state_changes)) %>% 
-  mutate(openings = (openings - 1)/2) %>%
+  # to do a little more work though to get a count of values, however.
+  summarize(tot_changes = max(door_state_changes)) %>% 
+  mutate(openings = (tot_changes - 1)/2) %>%
   pull(openings) %>%
   summary()
 ```
-
 Most buses will open their doors just once, but there's a long tail to the right.
 
 This is the total number of run-segment combinations with no openings...
@@ -212,13 +236,14 @@ ggplot(run_openings, aes(x = openings)) +
   geom_histogram() +
   geom_histogram(aes(fill=seg_name_id), binwidth=binw, colour="grey20", lwd=0.2) +
   stat_bin(binwidth=binw, geom="text", colour="white", size=3.5,
-           aes(label=..count.., group=seg_name_id), position=position_stack(vjust=0.5)) +
+           aes(label=scales::comma(..count..), group=seg_name_id), 
+           position=position_stack(vjust=0.5)) +
   scale_x_continuous(breaks=seq(-1,7, binw), limits = c(-1,7))
 ```
 
 # Examining Georgia-Columbia
 
-let's look at Georgia-Columbia on the 79 as we dive into the data more deeply.
+Let's look at Georgia-Columbia on the 79 as we dive into the data more deeply.
 ```{r}
 plotdf <-
   rawnav_stop_area %>%
@@ -227,10 +252,10 @@ plotdf <-
 
 ```
 
-Here we replicate the speed by distance chart from earlier notebooks. All run odometers are reset such that the rawnav point nearest a stop comes at 150 ft. We see that some of these runs come to a stop before the 150 ft mark. This could be the result of several things:
+Here we replicate the speed by distance chart from earlier notebooks, but focus on only the stop area (for each run, +/- 150 feet around the a rawnav ping nearest to the stop). All run odometer distances are set such that the rawnav point nearest a stop comes at 150 ft. We see that some of these runs come to a stop before the 150 ft mark. This could be the result of several things:
 
 * Buses are pulling up a little shy of the stop itself to let passengers on and off. This could be the case if a vehicle is in the bus zone.
-* Buses are stopping short of the bus zone and then edging forward at slow speeds into the bus zone. 
+* Buses are stopping short of the bus zone and then edging forward at slow speeds to the bus zone. 
 * The rawnav ping nearest the bus stop will in fact vary slightly by run, such that for some this ping is slightly downstream of the stop and for others it is slightly upstream. Collectively, this would result in a larger 'spread ' of lines around the stop. This latter point has implications for ideas to automatically 'detect' a stop location that are not discussed here.
 ```{r}
 plot <-
@@ -246,8 +271,7 @@ plot %>% ggplotly(tooltip = "busrun")
 
 The spacetime diagrams tell a similar story, with a few exceptions.
 
-* It's more apparent that some bus runs do not let passengers alight at all and proceed directly along in a straight vertical line. 
-* Some runs are dwelling at the stop for a considerable amount of time. Note that runs with stop area travel time above 500 seconds are removed from this dataset.
+* It's more apparent that some bus runs do not let passengers alight at all and proceed directly along in a straight vertical line. * Some runs are dwelling at the stop for a considerable amount of time. Note that runs with stop area travel time above 500 seconds are removed from this dataset.
 
 
 ```{r}
@@ -264,28 +288,4 @@ stringline <-
 
 stringline
 ```
-
-Let's add some of the initial decomposition breakdown for an individual run into these charts. This does not reflect the final decomposition (t_stop2 calculations are still to be made), but help to indicate how these values are shaping up. 
-
-```{r}
-singleline <- 
-  rawnav_stop_area %>%
-  filter(busrun == "rawnav02805191009.txt_1528", seg_name_id == "georgia_columbia") %>%
-  ggplot(.,
-         aes(x = secs_stop_area, 
-             y = odom_ft_stop_area, 
-             color = stop_area_state,
-             group = busrun,
-             label = stop_area_state)) + 
-  geom_line(alpha = 1, size = 2) + 
-  # geom_label() +
-  scale_y_continuous(labels = scales::comma,
-                     name = "Distance Traveled (ft) in Stop Area") +
-  scale_x_continuous(labels = scales::comma,
-                     name = "Time (secs) in Stop Area") +
-  scale_color_brewer(palette = "RdYlGn", type = "div")
-
-singleline
-```
-This concludes the look at the data so far.
 
