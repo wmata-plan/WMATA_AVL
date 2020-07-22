@@ -196,7 +196,9 @@ for analysis_route in analysis_routes:
     
             # Iterate on over Pattern-Segments Combinations
             xwalk_seg_pattern_subset = xwalk_seg_pattern.query('route == @analysis_route')
-    
+            #FIXME: This loop is running multiple times for a routes where we have 2 or more pattern. For instance
+            # it will run twice for S9 at sixteenth_u_long; once for pattern 2 and 2nd time for pattern 3. We might want
+            # to use .unique() in xwalk_seg_pattern_subset.seg_name_id in the following for loop
             for seg in xwalk_seg_pattern_subset.seg_name_id:
                 print('Processing segment {} ...'.format(seg))
 
