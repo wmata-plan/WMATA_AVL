@@ -104,7 +104,10 @@ xwalk_seg_pattern_stop_in = wr.tribble(
                  "H3",             "EAST",     "irving_fifteenth_sixteenth",    2368,
                  "H4",             "EAST",     "irving_fifteenth_sixteenth",    2368,
                  "H8",             "EAST",     "irving_fifteenth_sixteenth",    2368,
-                "W47",             "EAST",     "irving_fifteenth_sixteenth",    2368
+                "W47",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                 "64",            "NORTH",                    "nh_3rd_test",   17329, #4th street
+                 "64",            "NORTH",                    "nh_3rd_test",   25370, #3rd street
+                 "G8",             "EAST",                 "ri_lincoln_test",  26282
   )
 
 xwalk_wmata_route_dir_pattern = (
