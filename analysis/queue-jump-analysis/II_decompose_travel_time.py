@@ -146,7 +146,6 @@ segments = (
 # 3 Filter Out Runs that Appear Problematic
 ###########################################\
 freeflow_list = []
-basic_decomp_list = []
 
 # Set up folder to dump results to
 # TODO: improve path / save behavior
@@ -294,7 +293,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     
     # 5. Filter to Stop Area and Run Stop Area Decomposition
     #############################
-    # Run identifers, including file, date, and run identifier
+    # Create phase identifers, including file, date, and run identifier
         # seg_name_id = segment identifier (ala "sixteenth_u") 
         # stop_zone_id = Stop identifier (likely the stop ID) 
         # t_decel_phase = time from start of segment to zero speed (or door open) (used to estimate adec)
@@ -302,7 +301,6 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
         # t_stop1 = Stop zone door open time defined as first instance of door opening.
         # t_l_addl = time from first door close to acceleration
         # t_accel_phase = time from acceleration to exiting stop zone (used to help estimate aacc
-        # t_sz_total = total time in stop zone
     # TODO: think harder about how to handle the two-stop case for 70 in georgia/irving
     rawnav_fil_stop_area_1 = (
         rawnav_fil
@@ -310,12 +308,13 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
         .reset_index()
     )
     
-    # Add variables
+    # Add binary variables
     rawnav_fil_stop_area_2 = (
         rawnav_fil_stop_area_1
         .assign(
             door_state_closed=lambda x: x.door_state == "C",
-            veh_state_moving=lambda x: x.fps_next > 0,
+            # note this returns False when fps_next is undefined. 
+            veh_state_moving=lambda x: x.fps_next > 0                                                                                               
         )
     )
     
@@ -333,11 +332,11 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     )
         
     # To identify the case that's the first door opening at a stop (and the last),
-    # we'll summarize to a different dataframe and rejoin. 
+    # we'll summarize to a different dataframe and rejoin. (Grouped mutates don't play well in pandas) 
     # min is almost always 2, but we're extra careful here.  
-    # max will be interesting - we'll add anything after the first door closing to the last as
-    # 'lost time'
     lowest_door_open_case = (
+    # max will be interesting - we'll add anything after the first door closing to the last reclosing
+    # as signal delay, essentially.
         rawnav_fil_stop_area_2
         .loc[rawnav_fil_stop_area_2.door_state == "O"]
         .groupby(['filename','index_run_start','door_state'])
@@ -442,18 +441,13 @@ freeflow = (
     .reset_index()
 )
 
-basic_decomp = (
-    pd.concat(basic_decomp_list)
-    .reset_index()
-)
-
 # Quick dump of values
 # TODO: improve path / save behavior
 freeflow.to_csv(os.path.join(path_stop_area_dump,"freeflow.csv"))
 
 freeflow_vals = freeflow.query('ntile == 0.95')
 
-basic_decomp.to_csv(os.path.join(path_stop_area_dump,"basic_decomp.csv"))
+# basic_decomp.to_csv(os.path.join(path_stop_area_dump,"basic_decomp.csv"))
 
 
 # Calculate Stop-level Baseline Accel-Decel Time (input to t_stop2)
