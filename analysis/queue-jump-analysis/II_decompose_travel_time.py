@@ -48,12 +48,16 @@ if os.getlogin() == "WylieTimmerman":
     path_sp = r"C:\Users\WylieTimmerman\Documents\projects_local\wmata_avl_local"
     path_source_data = os.path.join(path_sp,"data","00-raw")
     path_processed_data = os.path.join(path_sp, "data","02-processed")
+    path_segments = os.path.join(path_working,"data","02-processed")
+
 elif os.getlogin() == "abibeka":
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
     os.chdir(os.path.join(path_working))
     sys.path.append(path_working)
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
     path_processed_data = os.path.join(path_source_data, "ProcessedData")
+    path_segments = path_processed_data
+
 else:
     raise FileNotFoundError("Define the path_working, path_source_data, gtfs_dir, \
                             ZippedFilesloc, and path_processed_data in a new elif block")
@@ -104,10 +108,10 @@ xwalk_seg_pattern_stop_in = wr.tribble(
                  "H3",             "EAST",     "irving_fifteenth_sixteenth",    2368,
                  "H4",             "EAST",     "irving_fifteenth_sixteenth",    2368,
                  "H8",             "EAST",     "irving_fifteenth_sixteenth",    2368,
-                "W47",             "EAST",     "irving_fifteenth_sixteenth",    2368,
-                 "64",            "NORTH",                    "nh_3rd_test",   17329, #4th street
-                 "64",            "NORTH",                    "nh_3rd_test",   25370, #3rd street
-                 "G8",             "EAST",                 "ri_lincoln_test",  26282
+                "W47",             "EAST",     "irving_fifteenth_sixteenth",    2368
+                 # "64",            "NORTH",                    "nh_3rd_test",   17329, #4th street
+                 # "64",            "NORTH",                    "nh_3rd_test",   25370, #3rd street
+                 # "G8",             "EAST",                 "ri_lincoln_test",  26282
   )
 
 xwalk_wmata_route_dir_pattern = (
@@ -135,16 +139,10 @@ del xwalk_seg_pattern_stop_in
 # Note that these are not yet updated to reflect the extension of the 11th street segment 
 # further south to give the stop more breathing room.
 segments = (
-    gpd.read_file(os.path.join(path_processed_data,"segments.geojson"))
+    gpd.read_file(os.path.join(path_segments,"segments.geojson"))
     .to_crs(wmata_crs)
 )
     
-segment_summary = (
-    pq.read_table(
-        source = os.path.join(path_processed_data,"segment_summary.parquet"),
-        use_pandas_metadata = True)
-    .to_pandas()
-)
 # 3 Filter Out Runs that Appear Problematic
 ###########################################\
 freeflow_list = []
