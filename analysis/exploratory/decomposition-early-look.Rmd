@@ -19,6 +19,9 @@ library(plotly)
 library(sf)
 library(mapview)
 library(leaflet)
+library(patchwork)
+
+set.seed(1)
 
 if (any(Sys.info() =="WylieTimmerman")){
   path_project <- "C:/Users/WylieTimmerman/Documents/projects_local/wmata_avl_local"  
@@ -108,7 +111,7 @@ rawnav_stop_area_raw <-
                                rough_state = col_character(),
                                at_stop = col_logical(),
                                at_stop_state = col_logical(),
-                               stop_area_state = col_character()
+                               stop_area_phase = col_character()
                              )),
            .id = "seg_name_id"
   )
@@ -119,13 +122,15 @@ rawnav_stop_area <-
   unite(busrun, filename, index_run_start, remove = FALSE) %>%
   mutate(mph_next = fps_next / 1.467,
          mph_next3 = fps_next3 / 1.467) %>%
-  mutate(stop_area_state = factor(stop_area_state,
+  mutate(stop_area_phase = factor(stop_area_phase,
                                   levels = c("t_decel_phase",
                                              "t_l_initial",
                                              "t_stop1",
+                                             "t_stop",
                                              "t_l_addl",
                                              "t_accel_phase",
-                                             "t_nostop"))) %>%
+                                             "t_nostopnopax",
+                                             "t_nopax"))) %>%
   group_by(busrun, seg_name_id) %>%
   mutate(odom_ft_stop_area = odom_ft - min(odom_ft),
          secs_stop_area = sec_past_st - min(sec_past_st)) %>%
@@ -144,14 +149,14 @@ rawnav_stop_area %>%
   glimpse()
 ```
 
-Across all our segments, how long does a bus spend in each zone, excluding runs that go straight through without opening doors to pick up passengers? 
+Across all our segments, how long does a bus spend in each zone, excluding runs that go straight through without opening doors to pick up passengers and those that stop but don't pick up passengers? 
 ```{r}
 rawnav_stop_area %>%
   group_by(busrun,seg_name_id) %>%
-  filter(!any(stop_area_state %in% c("t_nostop"))) %>% 
-  group_by(busrun, seg_name_id, stop_area_state) %>%
+  filter(any_veh_stopped & any_door_open) %>% 
+  group_by(busrun, seg_name_id, stop_area_phase) %>%
   summarize(tot_secs = sum(secs_marg, na.rm = TRUE)) %>%
-  group_by(stop_area_state) %>% 
+  group_by(stop_area_phase) %>% 
   summarize(avg_seconds = mean(tot_secs, na.rm = TRUE))
 ```
 
@@ -168,22 +173,40 @@ Notably, runs that do not open their doors to passengers are categorized as "t_n
 We can visualize these phases for a single trip. Again, this does not reflect the final decomposition (t_stop2 calculations are still to be made), but help to indicate how these values are shaping up. 
 
 ```{r}
+make_basic_timespace <- function(df){
+  ggplot(df,
+         aes(x = secs_stop_area, 
+             y = odom_ft_stop_area, 
+             color = stop_area_phase,
+             group = busrun,
+             label = stop_area_phase)) + 
+    geom_line(alpha = 1, size = 2) + 
+    scale_y_continuous(labels = scales::comma,
+                       name = "Dist (ft) in Stop Area") +
+    scale_x_continuous(labels = scales::comma,
+                       name = "Time (secs) in Stop Area") +
+    scale_color_manual(
+      values = c(
+        "t_decel_phase" = "#D7191C",
+        "t_l_initial" = "#FDAE61",
+        "t_stop1" = "#FFFFBF",
+        "t_l_addl" = "#A6D96A",
+        "t_accel_phase" = "#1A9641",
+        "t_nostop" = "#6a3d9a"
+      )
+    ) +
+    guides(color = guide_legend( direction = "horizontal",
+                                 nrow = 2,
+                                 title = NULL,
+                                 byrow = TRUE)) +
+    theme(legend.position = "top")
+}
+
 singleline <- 
   rawnav_stop_area %>%
   filter(busrun == "rawnav02805191009.txt_1528", seg_name_id == "georgia_columbia") %>%
-  ggplot(.,
-         aes(x = secs_stop_area, 
-             y = odom_ft_stop_area, 
-             color = stop_area_state,
-             group = busrun,
-             label = stop_area_state)) + 
-  geom_line(alpha = 1, size = 2) + 
-  scale_y_continuous(labels = scales::comma,
-                     name = "Distance Traveled (ft) in Stop Area") +
-  scale_x_continuous(labels = scales::comma,
-                     name = "Time (secs) in Stop Area") +
-  scale_color_brewer(palette = "RdYlGn", 
-                     type = "div")
+  make_basic_timespace()
+
 
 singleline
 ```
@@ -236,7 +259,7 @@ ggplot(run_openings, aes(x = openings)) +
   geom_histogram() +
   geom_histogram(aes(fill=seg_name_id), binwidth=binw, colour="grey20", lwd=0.2) +
   stat_bin(binwidth=binw, geom="text", colour="white", size=3.5,
-           aes(label=scales::comma(..count..), group=seg_name_id), 
+           aes(label=scales::comma(..count.., accuracy = 1), group=seg_name_id), 
            position=position_stack(vjust=0.5)) +
   scale_x_continuous(breaks=seq(-1,7, binw), limits = c(-1,7))
 ```
@@ -244,13 +267,6 @@ ggplot(run_openings, aes(x = openings)) +
 # Examining Georgia-Columbia
 
 Let's look at Georgia-Columbia on the 79 as we dive into the data more deeply.
-```{r}
-plotdf <-
-  rawnav_stop_area %>%
-  filter(seg_name_id == "georgia_columbia") %>%
-  plotly::highlight_key(., ~busrun)
-
-```
 
 Here we replicate the speed by distance chart from earlier notebooks, but focus on only the stop area (for each run, +/- 150 feet around the a rawnav ping nearest to the stop). All run odometer distances are set such that the rawnav point nearest a stop comes at 150 ft. We see that some of these runs come to a stop before the 150 ft mark. This could be the result of several things:
 
@@ -259,7 +275,10 @@ Here we replicate the speed by distance chart from earlier notebooks, but focus 
 * The rawnav ping nearest the bus stop will in fact vary slightly by run, such that for some this ping is slightly downstream of the stop and for others it is slightly upstream. Collectively, this would result in a larger 'spread ' of lines around the stop. This latter point has implications for ideas to automatically 'detect' a stop location that are not discussed here.
 ```{r}
 plot <-
-  ggplot(plotdf,
+  rawnav_stop_area %>%
+  filter(seg_name_id == "georgia_columbia") %>%
+  plotly::highlight_key(., ~busrun) %>%
+  ggplot(.,
          aes(x = odom_ft_stop_area, y = mph_next3, group = busrun)) + 
   geom_line(alpha = .1) + 
   scale_x_continuous(labels = scales::comma) +
@@ -276,7 +295,9 @@ The spacetime diagrams tell a similar story, with a few exceptions.
 
 ```{r}
 stringline <- 
-  ggplot(plotdf,
+  rawnav_stop_area %>%
+  filter(seg_name_id == "georgia_columbia") %>%
+  ggplot(.,
          aes(x = secs_stop_area, 
              y = odom_ft_stop_area, 
              group = busrun)) + 
@@ -287,5 +308,342 @@ stringline <-
                      name = "Time (secs) in Stop Area") 
 
 stringline
+```
+Let's look once more at our speed over distance chart, with the added benefit of colors
+```{r}
+make_basic_speeddist <- function(df, alpha = .1, size = 1, lt = "solid", legend = "right"){
+  ggplot(df,
+         aes(x = odom_ft_stop_area,
+             y = mph_next3, 
+             group = busrun, 
+             color = stop_area_phase)) + 
+    geom_line(alpha = alpha, 
+              size = size,
+              linetype = lt) + 
+    scale_color_manual(
+      values = c(
+        "t_decel_phase" = "#D7191C",
+        "t_l_initial" = "#FDAE61",
+        "t_stop1" = "#FFFFBF",
+        "t_stop" = "#FFFFBF",
+        "t_l_addl" = "#A6D96A",
+        "t_accel_phase" = "#1A9641",
+        "t_nostopnopax" = "#6a3d9a"
+      )
+    ) + 
+    scale_x_continuous(labels = scales::comma) +
+    scale_y_continuous(limits = c(0, 40), n.breaks = 5) +
+    labs(x = "Dist. (ft) in Stop Area",
+         y = "Speed (mph) next 3 obs.") +
+    guides(color = guide_legend(reverse = TRUE)) +
+    theme(legend.position = legend)
+  
+}
+
+plot_color <-
+  rawnav_stop_area %>%
+  filter(seg_name_id == "georgia_columbia") %>%
+  plotly::highlight_key(., ~busrun) %>%
+  make_basic_speeddist()
+
+plot_color
+```
+  
+
+## Decomposition
+
+We continue with a decomposition based on the inputs thus far. For now, we dump this code in, will break out components and discuss later.
+
+```{r}
+freeflow_to_join <-
+  freeflow %>%
+  filter(ntile == .95) %>%
+  select(seg_name_id,
+         freeflow_fps = fps_next3)
+
+# Let's add in the decel phase here instead
+no_stop_decomp <-
+  rawnav_stop_area %>%
+  # Though we're not expecting to find other values in this category, we'll 
+  # be a little careful still
+  group_by(busrun, seg_name_id) %>%
+  filter(stop_area_phase %in% c("t_nostopnopax","t_decel_phase")) %>%  #shouldn't see "t_nopax" at all
+  group_by(busrun, seg_name_id) %>%
+  summarize(
+            delay_source = paste0(unique(stop_area_phase), collapse =","),
+            tot_secs = sum(secs_marg, na.rm = TRUE),
+            tot_odom_ft = sum(odom_ft_marg, na.rm = TRUE)) %>%
+  ungroup() %>%
+  left_join(freeflow_to_join, by = "seg_name_id") %>%
+  mutate(freeflow_secs = tot_odom_ft / freeflow_fps,
+         misc_delay_secs = tot_secs - freeflow_secs) %>%
+  select(busrun, 
+         seg_name_id,
+         delay_source,
+         freeflow_secs,
+         misc_delay_secs)
+
+# TODO: rename to accel time, modify some of this
+stop_time <-
+  rawnav_stop_area %>%
+  group_by(busrun, seg_name_id) %>%
+  filter(!any(stop_area_phase %in% c("t_nostopnopax","t_nopax"))) %>%
+  mutate(decelaccel = stop_area_phase %in% c(#"t_decel_phase", #TODO: update this to be accel only?
+                                             "t_accel_phase")) %>%
+  filter(decelaccel) %>%
+  group_by(busrun, seg_name_id) %>%
+  summarize(tot_stopping_secs = sum(secs_marg, na.rm = TRUE),
+            tot_stopping_odom_ft = sum(odom_ft_marg, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(stopping_fps = tot_stopping_odom_ft / tot_stopping_secs) 
+
+low_stop_time_distr <-
+  stop_time %>%
+  group_by(seg_name_id) %>%
+  summarize(distr = list(quantile(stopping_fps, probs = c(.02,.05,.1,.25,.5,.75,.9,.95,.98)))) 
+
+low_stop_time_to_join <- 
+  low_stop_time_distr %>%
+  unnest_longer(col = distr,
+                values_to = "stopping_fps",
+                indices_to  = "ntile") %>%
+  filter(ntile == "95%") %>%
+  select(seg_name_id, 
+         low_stopping_fps = stopping_fps)
+
+stop_time2 <-
+  stop_time %>%
+  left_join(low_stop_time_to_join, by = "seg_name_id") %>%
+  mutate(lowstopping_secs = tot_stopping_odom_ft / low_stopping_fps,
+         queue_delay_secs = tot_stopping_secs - lowstopping_secs)
+
+# bring it all together
+stop_pass_decomp_1 <- 
+  rawnav_stop_area %>%
+  # Though we're not expecting to find other values in this category, we'll 
+  # be a little careful still
+  group_by(busrun, seg_name_id) %>%
+  # filter(!any(stop_area_phase %in% c("t_nostop"))) %>%  # TODO: drop this later?
+  group_by(busrun, seg_name_id, stop_area_phase) %>%
+  summarize(tot_secs = sum(secs_marg, na.rm = TRUE)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "stop_area_phase", values_from = "tot_secs") %>%
+  rowwise() %>%
+  mutate(tot_secs =
+           sum(
+           t_decel_phase, 
+           t_l_initial,
+           t_stop1,
+           t_stop,
+           t_l_addl,
+           t_accel_phase,
+           t_nostopnopax,
+           na.rm = TRUE
+           )) %>%
+  ungroup() %>%
+  select(busrun,
+         seg_name_id,
+         t_decel_phase,
+         t_l_initial,
+         t_stop1,
+         t_stop,
+         t_l_addl,
+         t_accel_phase,
+         t_nostopnopax,
+         tot_secs)
+
+stop_pass_decomp_2 <-
+  stop_pass_decomp_1 %>%
+  left_join(no_stop_decomp, by = c("busrun","seg_name_id")) %>%
+  left_join(stop_time2, by = c("busrun","seg_name_id")) 
+
+stop_pass_decomp_3 <-
+  stop_pass_decomp_2 %>%
+  mutate(ts_approach_min = freeflow_secs,
+         tr_approach_delay = misc_delay_secs,
+         tr_init_wait = t_l_initial,
+         #TODO: fix
+         tr_stop1 = (if_else(is.na(t_stop),0,t_stop) + if_else(is.na(t_stop1),0,t_stop1)),
+         tr_signal_wait = t_l_addl,
+         ts_accel_min = lowstopping_secs,
+         tr_accel_delay = queue_delay_secs
+         ) %>%
+  rowwise() %>%
+  mutate(tot_secs_check = 
+           sum(
+             ts_approach_min, 
+             tr_approach_delay,
+             tr_init_wait,
+             tr_stop1,
+             tr_signal_wait,
+             ts_accel_min,
+             tr_accel_delay,
+             na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    tot_secs_check = round(tot_secs_check),
+    checksout = tot_secs == tot_secs_check
+    )
+  
+# TODO: 
+# Test that the 
+testthat::test_that("check sum matches for everything",{
+  # TODO: go fix
+  doesnt_checkout <-
+    stop_pass_decomp_3 %>%
+    filter(!checksout)
+  
+  testthat::expect_true(nrow(doesnt_checkout) == 0)
+})
+
+```
+
+
+# Create Charts
+```{r}
+decomp_stack <- 
+  function(decomp){
+  # set cols
+    ltblue = "#A6CEE3"
+    dkblue = "#1F78B4"
+    ltgrn = "#B2DF8A"
+    dkgrn = "#33A02C"
+    ltred = "#FB9A99"
+    dkred = "#E31A1C"
+    ltorg = "#FDBF6F"
+    dkorg = "#FF7F00"  
+    # browser()
+  # data check
+  chartdata <-
+    decomp %>%
+    select(
+      busrun,
+      seg_name_id,
+      ts_approach_min,
+      tr_approach_delay,
+      tr_init_wait,
+      tr_stop1,
+      tr_signal_wait,
+      ts_accel_min,
+      tr_accel_delay
+    ) %>%
+    pivot_longer(
+      names_to = "decomp_state",
+      values_to = "secs",
+      cols = ts_approach_min:tr_accel_delay
+    ) %>%
+    mutate(secs = round(secs,0),
+           decomp_state = 
+             factor(decomp_state,
+                    levels = c("ts_approach_min",
+                               "tr_approach_delay",
+                               "tr_init_wait",
+                               "tr_stop1",
+                               "tr_signal_wait",
+                               "ts_accel_min",
+                               "tr_accel_delay")),
+           source = if_else(decomp_state %in% c("ts_approach_min",
+                                                "ts_accel_min"),
+                            "Segment-level",
+                            "Run-level")
+    ) 
+
+  # make cahrt
+    ggplot(chartdata,
+           aes(x = busrun,
+               y = secs, 
+               group = busrun, 
+               fill = decomp_state,
+               color = source,
+               label = secs)) + 
+      geom_col(size = 1) + 
+      geom_label(position = position_stack(vjust = .5)) +
+      scale_fill_manual(
+        values = c(
+        "ts_approach_min" = dkred,
+        "tr_approach_delay" = ltred,
+        "tr_init_wait" = ltblue, 
+        "tr_stop1" = dkblue,
+        "tr_signal_wait" = ltorg,
+        "ts_accel_min" = dkgrn,
+        "tr_accel_delay" = ltgrn
+        )
+      ) + 
+      scale_color_manual(
+        values = c("Segment-level" = "black",
+                   "Run-level" = "#6a3d9a" )
+      ) +
+      guides(color = guide_legend(reverse = TRUE)) +
+      labs(y = "Seconds")
+    
+  }
+
+doublecheck <- function(case, seg){
+
+  dc <- 
+    stop_pass_decomp_3 %>%
+    filter(busrun == case, seg_name_id == seg) %>%
+    decomp_stack()
+  
+  ts <- rawnav_stop_area %>%
+    filter(busrun == case, seg_name_id == seg) %>%
+    make_basic_timespace()
+  
+  sd <- rawnav_stop_area %>%
+    filter(busrun == case, seg_name_id == seg) %>%
+    make_basic_speeddist(alpha = .5, 
+                         size = 1.5, 
+                         lt = "solid",
+                         legend = "none")
+  
+  ((ts / sd) | dc) +
+    plot_annotation(glue::glue("{seg}: Results for run {case}"))
+}
+
+# DEBUG SPEED STUFF
+# case <- "rawnav03235191030.txt_26551"
+# case <- "rawnav03259191029.txt_28005"
+# case <- "rawnav03232191024.txt_9587"
+# 
+
+stop_pass_decomp_3 %>%
+  filter(busrun == "rawnav03232191024.txt_9587") %>%
+  filter(seg_name_id == first(seg_name_id)) %>%
+  decomp_stack
+
+
+```
+
+
+
+# Export Charts
+```{r}
+
+frame <-
+  rawnav_stop_area %>%
+  distinct(busrun, seg_name_id) %>%
+  sample_n(size = 500) %>%
+  mutate(
+    busrunshow = str_replace(busrun, '\\.txt', 'txt'),
+    filename = glue::glue("{seg_name_id}_{busrunshow}.png"),
+    plot = pmap(list(busrun, seg_name_id),
+                doublecheck)
+  )
+
+height = 7
+asp = 1.6
+
+frame %>%
+  select(filename,
+         plot) %>%
+  pwalk(.,
+        ggsave,
+        path = file.path(path_project,'data','01-interim','images'),
+        width = height * asp,
+        height = height,
+        units = "in",
+        scale = .9,
+        dpi = 300)
 ```
 
