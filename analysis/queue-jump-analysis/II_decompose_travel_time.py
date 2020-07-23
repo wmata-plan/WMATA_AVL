@@ -342,6 +342,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
             .transform(lambda x: x.diff().ne(0).cumsum())
     )
     
+    # TODO: update to switch transform to apply throughotu
     rawnav_fil_stop_area_2 = (
         rawnav_fil_stop_area_2
         .merge(
