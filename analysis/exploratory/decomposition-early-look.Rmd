@@ -79,41 +79,10 @@ Notably, runs that do not open their doors to passengers are categorized as "t_n
 We can visualize these phases for a single trip. Again, this does not reflect the final decomposition (t_stop2 calculations are still to be made), but help to indicate how these values are shaping up. 
 
 ```{r}
-make_basic_timespace <- function(df){
-  ggplot(df,
-         aes(x = secs_stop_area, 
-             y = odom_ft_stop_area, 
-             color = stop_area_phase,
-             group = busrun,
-             label = stop_area_phase)) + 
-    geom_line(alpha = 1, size = 2) + 
-    scale_y_continuous(labels = scales::comma,
-                       name = "Dist (ft) in Stop Area") +
-    scale_x_continuous(labels = scales::comma,
-                       name = "Time (secs) in Stop Area") +
-    scale_color_manual(
-      values = c(
-        "t_decel_phase" = "#D7191C",
-        "t_l_initial" = "#FDAE61",
-        "t_stop1" = "#FFFFBF",
-        "t_stop" = "#FFFFBF", 
-        "t_l_addl" = "#A6D96A",
-        "t_accel_phase" = "#1A9641",
-        "t_nostop" = "#6a3d9a"
-      )
-    ) +
-    guides(color = guide_legend( direction = "horizontal",
-                                 nrow = 2,
-                                 title = NULL,
-                                 byrow = TRUE)) +
-    theme(legend.position = "top")
-}
-
 singleline <- 
   rawnav_stop_area %>%
   filter(busrun == "rawnav02805191009.txt_1528", seg_name_id == "georgia_columbia") %>%
-  make_basic_timespace()
-
+  make_basic_timespace() #see definition in decomposition-prep.R
 
 singleline
 ```
@@ -218,40 +187,12 @@ stringline
 ```
 Let's look once more at our speed over distance chart, with the added benefit of colors
 ```{r}
-make_basic_speeddist <- function(df, alpha = .1, size = 1, lt = "solid", legend = "right"){
-  ggplot(df,
-         aes(x = odom_ft_stop_area,
-             y = mph_next3, 
-             group = busrun, 
-             color = stop_area_phase)) + 
-    geom_line(alpha = alpha, 
-              size = size,
-              linetype = lt) + 
-    scale_color_manual(
-      values = c(
-        "t_decel_phase" = "#D7191C",
-        "t_l_initial" = "#FDAE61",
-        "t_stop1" = "#FFFFBF",
-        "t_stop" = "#FFFFBF",
-        "t_l_addl" = "#A6D96A",
-        "t_accel_phase" = "#1A9641",
-        "t_nostopnopax" = "#6a3d9a"
-      )
-    ) + 
-    scale_x_continuous(labels = scales::comma) +
-    scale_y_continuous(limits = c(0, 40), n.breaks = 5) +
-    labs(x = "Dist. (ft) in Stop Area",
-         y = "Speed (mph) next 3 obs.") +
-    guides(color = guide_legend(reverse = TRUE)) +
-    theme(legend.position = legend)
-  
-}
 
 plot_color <-
   rawnav_stop_area %>%
   filter(seg_name_id == "georgia_columbia") %>%
   plotly::highlight_key(., ~busrun) %>%
-  make_basic_speeddist()
+  make_basic_speeddist() #see definition in decomposition-prep.R
 
 plot_color
 ```

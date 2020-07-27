@@ -18,9 +18,6 @@ source("./decomposition-prep.R")
 
 ```
 
-
- 
-
 ## Decomposition
 
 We continue with a decomposition based on the inputs thus far. For now, we dump this code in, will break out components and discuss later.
@@ -157,13 +154,23 @@ stop_pass_decomp_3 <-
     tot_secs_check = round(tot_secs_check),
     checksout = tot_secs == tot_secs_check
     )
-  
-# TODO: 
+ 
+rawnav_nonstop_area_wide <-
+  rawnav_nonstop_area %>%
+  pivot_wider(id_cols = busrun:seg_name_id,
+              names_from = segment_part,
+              values_from = subsegment_min_sec:subsegment_delay_sec)
+
+stop_pass_decomp_4 <- 
+  stop_pass_decomp_3 %>%
+  left_join(rawnav_nonstop_area_wide, by = c("busrun","seg_name_id"))
+
+
 # Test that the 
 testthat::test_that("check sum matches for everything",{
   # TODO: go fix
   doesnt_checkout <-
-    stop_pass_decomp_3 %>%
+    stop_pass_decomp_4 %>%
     filter(!checksout)
   
   testthat::expect_true(nrow(doesnt_checkout) == 0)
@@ -265,7 +272,7 @@ decomp_stack <-
 doublecheck <- function(case, seg){
 
   dc <- 
-    stop_pass_decomp_3 %>%
+    stop_pass_decomp_4 %>%
     filter(busrun == case, seg_name_id == seg) %>%
     decomp_stack()
   
@@ -279,9 +286,21 @@ doublecheck <- function(case, seg){
                          size = 1.5, 
                          lt = "solid",
                          legend = "none")
+
+  nonstoparea_subseg_table <- 
+    rawnav_nonstop_area %>%
+    filter(busrun == case, seg_name_id == seg) %>%
+    mutate(segment_part = str_replace_all(segment_part,
+                                          c("after_stop_area" = "After Stop Area",
+                                            "before_stop_area" = "Before Stop Area"))) %>%
+    select(-busrun, -seg_name_id) %>%
+    gridExtra::tableGrob()
   
-  ((ts / sd) | dc) +
+  bigplot <-
+    (((ts / sd) | dc)) +
     plot_annotation(glue::glue("{seg}: Results for run {case}"))
+  
+  bigplot / nonstoparea_subseg_table
 }
 
 # DEBUG SPEED STUFF
@@ -290,17 +309,17 @@ doublecheck <- function(case, seg){
 # case <- "rawnav03232191024.txt_9587"
 # 
 
-stop_pass_decomp_3 %>%
+stop_pass_decomp_4 %>%
   filter(busrun == "rawnav03232191024.txt_9587") %>%
   filter(seg_name_id == first(seg_name_id)) %>%
-  decomp_stack
+  decomp_stack()
 
 
 ```
 
 ```{r}
 checkme <- 
-  stop_pass_decomp_3 %>%
+  stop_pass_decomp_4 %>%
   filter(busrun == "rawnav03215191019.txt_11241") %>%
   filter(seg_name_id == first(seg_name_id)) 
 
@@ -311,11 +330,10 @@ doublecheck("rawnav03215191019.txt_11241", "eleventh_i_new_york")
 
 # Export Charts
 ```{r}
-
 frame <-
   rawnav_stop_area %>%
   distinct(busrun, seg_name_id) %>%
-  sample_n(size = 500) %>%
+  sample_n(size = 10) %>%
   mutate(
     busrunshow = str_replace(busrun, '\\.txt', 'txt'),
     filename = glue::glue("{seg_name_id}_{busrunshow}.png"),
@@ -323,8 +341,8 @@ frame <-
                 doublecheck)
   )
 
-height = 7
-asp = 1.6
+height = 8
+asp = 1.2
 
 frame %>%
   select(filename,
