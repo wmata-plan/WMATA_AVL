@@ -142,6 +142,7 @@ segments = (
     
 # 3 Filter Out Runs that Appear Problematic
 ###########################################\
+nonstopzone_freeflow_list = []
 freeflow_list = []
 basic_decomp_list = []
 
@@ -200,7 +201,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
                                     'geo_description'],
                       use_pandas_metadata = True)
         .to_pandas()
-        .assign(pattern = lambda x: x.pattern.astype('int32')) #  pattern is object not int? # TODO: fix
+        .assign(pattern = lambda x: x.pattern.astype('int32')) #  pattern is string not int? # TODO: fix
         .rename(columns = {'odom_ft' : 'odom_ft_qj_stop'})
     ) 
     
@@ -214,27 +215,49 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
                how = 'inner')   
     )
     
+    # Run Decomposition Support Functions
+    #############################
+    # Calculate Free Flow outside Stop Area
+    # FYI: Currently, this is largely for the 'alternative' decomposition, may do 
+    # things with this later. Results are for now loaded into R where we incorporate
+    # that into the remaining decomp stuff.
+    nonstopzone_ff = (
+        wr.decompose_nonstoparea_ff(rawnav_dat,
+                                    segment_summary,
+                                    stop_index_fil,
+                                    max_fps = 73.3)
+        .assign(seg_name_id = seg)
+    )
+    
+    nonstopzone_freeflow_list.append(nonstopzone_ff)
+
+    
     # Calculate Free Flow Travel Time
-    freeflow_seg = (
+    segment_ff = (
         wr.decompose_segment_ff(rawnav_dat,
                                 segment_summary,
                                 max_fps = 73.3)
         .assign(seg_name_id = seg)
     )
                 
-    freeflow_list.append(freeflow_seg)
+    freeflow_list.append(segment_ff)
     
     # Calculate Stop-Area Decomposition
     rawnav_fil_stop_area_decomp = (
         wr.decompose_stop_area(rawnav_dat,
                                segment_summary,
                                stop_index_fil)
+        .assign(seg_name_id = seg)
     )
     
     basic_decomp_list.append(rawnav_fil_stop_area_decomp)
     
     #ENDS HERE
     
+nonstopzone_freeflow = (
+    pd.concat(nonstopzone_freeflow_list)
+    .reset_index()
+)
     
 freeflow = (
     pd.concat(freeflow_list)
@@ -250,11 +273,11 @@ basic_decomp = (
 # Quick dump of values
 #####################
 # TODO: improve path / save behavior
-# freeflow.to_csv(os.path.join(path_stop_area_dump,"freeflow.csv"))
+freeflow.to_csv(os.path.join(path_stop_area_dump,"freeflow.csv"))
 
-# freeflow_vals = freeflow.query('ntile == 0.95')
+nonstopzone_freeflow.to_csv(os.path.join(path_stop_area_dump,"nonstopzone_ff.csv"))
 
-# basic_decomp.to_csv(os.path.join(path_stop_area_dump,"basic_decomp.csv"))
+basic_decomp.to_csv(os.path.join(path_stop_area_dump,"basic_decomp.csv"))
 
 # Calculate t_stop2
 ####################################################################################################

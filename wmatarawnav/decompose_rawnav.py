@@ -42,9 +42,11 @@ def decompose_segment_ff(rawnav,
     
     return(freeflow_seg)
 
-def decompose_nonstopzone_ff(rawnav,
+def decompose_nonstoparea_ff(rawnav,
                              segment_summary,
-                             index_stop_fil,
+                             stop_index_fil,
+                             stop_area_upstream_ft = 150,
+                             stop_area_downstream_ft = 150,
                              max_fps = 73.3):
     """
     Parameters
@@ -58,49 +60,91 @@ def decompose_nonstopzone_ff(rawnav,
     rawnav_add: pd.DataFrame, rawnav data with additional fields.
     Notes
     -----
-    Because wmatarawnav functions generally leave source rawnav data untouched except 
-    just prior to the point of analysis, these calculations may be performed several times
-    on smaller chunks of data.
+    This supports an alternative decomposion
+
     """
 
-    #we'll calculate first so we don't inadvertently connect speeds from before and after stop area
-    rawnav_fil = calc_rolling_vals(rawnav)    
-
+    # Filter to the segment
     rawnav_fil = (
-        rawnav_fil
-        .merge(summary[["filename",
+        rawnav
+        .merge(segment_summary[["filename",
                                 "index_run_start",
                                 "start_odom_ft_segment",
                                 "end_odom_ft_segment"]],
                on = ["filename","index_run_start"],
-               how = "right")        
-        .assign(segment_part = lambda x: 
-                np.where(x.odom_ft < x.start_odom_ft_segment,
+               how = "right")
+        .query('odom_ft >= start_odom_ft_segment & odom_ft < end_odom_ft_segment')
+        .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
+    )
+
+    rawnav_fil = calc_rolling_vals(rawnav_fil)    
+    # filter to portions of segment
+    rawnav_nonstoparea = (
+        rawnav_fil
+        .merge(
+            stop_index_fil
+            .filter(items = ['filename','index_run_start','odom_ft_qj_stop','stop_id']),
+            on = ['filename','index_run_start'],
+            how = "left"
+        )
+        .assign(
+            upstream_ft = stop_area_upstream_ft,
+            downstream_ft = stop_area_downstream_ft,
+            segment_part = lambda x: 
+                np.where(x.odom_ft < (x.odom_ft_qj_stop - x.upstream_ft),
                          'before_stop_area',
-                         np.where(x.odom_ft >= x.end_odom_ft_segment,
+                         np.where(x.odom_ft >= (x.odom_ft_qj_stop + x.downstream_ft),
                                   'after_stop_area',
                                   'stop_area')
                          )
         )
         .query('(segment_part == "before_stop_area") | (segment_part == "after_stop_area")')
-        .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
     )
-                
-    freeflow_seg = (
-        rawnav_fil
-        .loc[lambda x: x.fps_next3 < max_fps]
-        .group_by('filename','index_run_start','segment_part')["fps_next3"]
+        
+        
+    nonstoparea_ff_seg = (
+        rawnav_nonstoparea
+        .loc[lambda x, y = max_fps: x.fps_next3 < y]
+        .groupby(['segment_part'])["fps_next3"]
         .quantile([0.01, 0.05, 0.10, 0.15, 0.25, 0.5, 0.75, 0.85, 0.90, 0.95, 0.99])
         .to_frame()
-        .assign(mph = lambda x: x.fps_next3 / 1.467)
+        .reset_index()
+        .loc[lambda x: x.level_1 == 0.95]
+        .drop(columns = ['level_1'])
+        .rename(columns = {'fps_next3' : 'fps_ff'})
     )
     
-    return(freeflow_seg)
+    
+    decomp_nonstoparea = (
+        rawnav_nonstoparea
+        .groupby(['filename','index_run_start','segment_part'])
+        .agg({'odom_ft' : ['min','max'],
+              'sec_past_st' : ['min','max']})
+    )
+    
+    decomp_nonstoparea.columns = ["_".join(x) for x in decomp_nonstoparea.columns.ravel()]
+
+    decomp_nonstoparea = (
+        decomp_nonstoparea
+        .reset_index()
+        .assign(subsegment_ft = lambda x: x.odom_ft_max - x.odom_ft_min,
+                subsegment_secs = lambda x: x.sec_past_st_max - x.sec_past_st_min)
+        .merge(
+            nonstoparea_ff_seg,
+            on = ['segment_part'],
+            how = 'left')
+        .assign(subsegment_min_sec = lambda x: x.subsegment_ft / x.fps_ff,
+                subsegment_delay_sec = lambda x: x.subsegment_secs - x.subsegment_min_sec)
+    )
+        
+    return(decomp_nonstoparea)
 
 
 def decompose_stop_area(rawnav,
                         segment_summary,
-                        stop_index_fil):
+                        stop_index_fil,
+                        stop_area_upstream_ft = 150,
+                        stop_area_downstream_ft = 150):
     """
     Parameters
     ----------
@@ -116,6 +160,8 @@ def decompose_stop_area(rawnav,
     -----
     rawnav_stop_area
     """
+
+    # TODO: parameter checks
 
     rawnav_fil_1 = filter_to_segment(rawnav,
                                      segment_summary)
@@ -153,7 +199,7 @@ def decompose_stop_area(rawnav,
     # TODO: think harder about how to handle the two-stop case for 70 in georgia/irving
     rawnav_fil_stop_area_1 = (
         rawnav_fil
-        .query('odom_ft >= (odom_ft_qj_stop - 150) & odom_ft < (odom_ft_qj_stop + 150)')
+        .query('odom_ft >= (odom_ft_qj_stop - @stop_area_upstream_ft) & odom_ft < (odom_ft_qj_stop + @stop_area_downstream_ft)')
         .reset_index()
     )
     
@@ -409,6 +455,7 @@ def decompose_stop_area(rawnav,
         )
     )
     
+    #TODO: Consider what columns used to support calculations to retain in the output
     return(rawnav_fil_stop_area_decomp)
 
 # Helper Functions 
