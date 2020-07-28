@@ -121,6 +121,46 @@ rawnav_nonstop_area <-
 
 # Key Functions -----------------------------------------------------------
 
+og_colors_timespace = c(
+  "t_decel_phase" = "#D7191C",
+  "t_l_initial" = "#FDAE61",
+  "t_stop1" = "#FFFFBF",
+  "t_stop" = "#FFFFBF", 
+  "t_l_addl" = "#A6D96A",
+  "t_accel_phase" = "#1A9641",
+  "t_nostopnopax" = "#6a3d9a"
+)
+
+new_colors_timespace = c(
+  "t_decel_phase" = "#a6611a",
+  "t_l_initial" = "#dfc27d",
+  "t_stop1" = "#FFFFBF",
+  "t_stop" = "#FFFFBF", 
+  "t_l_addl" = "#80cdc1",
+  "t_accel_phase" = "#018571",
+  "t_nostopnopax" = "#018571"
+)
+
+og_color_speeddist = c(
+    "t_decel_phase" = "#D7191C",
+    "t_l_initial" = "#FDAE61",
+    "t_stop1" = "#FFFFBF",
+    "t_stop" = "#FFFFBF",
+    "t_l_addl" = "#A6D96A",
+    "t_accel_phase" = "#1A9641",
+    "t_nostopnopax" = "#6a3d9a"
+  )
+
+new_color_speeddist = c(
+  "t_decel_phase" = "#a6611a",
+  "t_l_initial" = "#dfc27d",
+  "t_stop1" = "#FFFFBF",
+  "t_stop" = "#FFFFBF",
+  "t_l_addl" = "#80cdc1",
+  "t_accel_phase" = "#1A9641",
+  "t_nostopnopax" = "#018571"
+)
+
 make_basic_timespace <- function(df){
   ggplot(df,
          aes(x = secs_stop_area, 
@@ -134,15 +174,7 @@ make_basic_timespace <- function(df){
     scale_x_continuous(labels = scales::comma,
                        name = "Time (secs) in Stop Area") +
     scale_color_manual(
-      values = c(
-        "t_decel_phase" = "#D7191C",
-        "t_l_initial" = "#FDAE61",
-        "t_stop1" = "#FFFFBF",
-        "t_stop" = "#FFFFBF", 
-        "t_l_addl" = "#A6D96A",
-        "t_accel_phase" = "#1A9641",
-        "t_nostopnopax" = "#6a3d9a"
-      )
+      values = new_colors_timespace
     ) +
     guides(color = guide_legend( direction = "horizontal",
                                  nrow = 2,
@@ -161,15 +193,7 @@ make_basic_speeddist <- function(df, alpha = .1, size = 1, lt = "solid", legend 
               size = size,
               linetype = lt) + 
     scale_color_manual(
-      values = c(
-        "t_decel_phase" = "#D7191C",
-        "t_l_initial" = "#FDAE61",
-        "t_stop1" = "#FFFFBF",
-        "t_stop" = "#FFFFBF",
-        "t_l_addl" = "#A6D96A",
-        "t_accel_phase" = "#1A9641",
-        "t_nostopnopax" = "#6a3d9a"
-      )
+      values = new_color_speeddist
     ) + 
     scale_x_continuous(labels = scales::comma) +
     scale_y_continuous(limits = c(0, 40), n.breaks = 5) +
