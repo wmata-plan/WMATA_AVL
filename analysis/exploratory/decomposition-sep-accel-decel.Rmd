@@ -323,7 +323,7 @@ checkme <-
   filter(busrun == "rawnav03215191019.txt_11241") %>%
   filter(seg_name_id == first(seg_name_id)) 
 
-doublecheck("rawnav03215191019.txt_11241", "eleventh_i_new_york")
+doublecheck("rawnav02833191007.txt_1494", "irving_fifteenth_sixteenth")
 
 ```
 
@@ -333,7 +333,7 @@ doublecheck("rawnav03215191019.txt_11241", "eleventh_i_new_york")
 frame <-
   rawnav_stop_area %>%
   distinct(busrun, seg_name_id) %>%
-  sample_n(size = 10) %>%
+  sample_n(size = 500) %>%
   mutate(
     busrunshow = str_replace(busrun, '\\.txt', 'txt'),
     filename = glue::glue("{seg_name_id}_{busrunshow}.png"),
@@ -356,3 +356,27 @@ frame %>%
         scale = .9,
         dpi = 300)
 ```
+
+```{r}
+stop_pass_decomp_4 %>%
+  select(
+      busrun,
+      seg_name_id,
+      ts_approach_min,
+      tr_approach_delay,
+      tr_init_wait,
+      tr_stop1,
+      tr_stop,
+      tr_signal_wait,
+      ts_accel_min,
+      tr_accel_delay,
+      ts_nostop_min,
+      tr_nostop_delay,
+      subsegment_min_sec_before_stop_area,
+      subsegment_delay_sec_before_stop_area,
+      subsegment_min_sec_after_stop_area,
+      subsegment_delay_sec_after_stop_area
+    ) %>%
+  write_csv(.,file.path(path_data,'acceldecel_decomp_byrun.csv'),na = "")
+```
+
