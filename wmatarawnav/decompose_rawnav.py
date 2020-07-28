@@ -99,11 +99,13 @@ def decompose_traveltime(
             t_ff = lambda x: x.odom_ft_marg_sum / x.ff_fps,
             t_stop2 = 14 # hardcoded for now
         )
-        .fillna(0) #seems a little carless
+        .fillna(0) #seems a little careless
         .assign(
-            t_traffic = lambda x: x.t_ff - x.t_stop2 - x.t_stop1
+            t_traffic = lambda x: x.secs_marg_sum - x.t_ff - x.t_stop2 - x.t_stop1
         )
-        # .drop(columns = ['secs_marg_sum','odom_ft_marg_sum','ff_fps'])
+        .rename(columns = {'secs_marg_sum' : 'secs_seg_total',
+                           'odom_ft_marg_sum' : 'odom_ft_seg_total'})
+        .drop(columns = ['ff_fps'])
     )
 
     return(travel_time_decomp)
