@@ -145,6 +145,7 @@ segments = (
 nonstopzone_freeflow_list = []
 freeflow_list = []
 basic_decomp_list = []
+traveltime_decomp_list = []
 
 # Set up folder to dump results to
 # TODO: improve path / save behavior
@@ -215,23 +216,8 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
                how = 'inner')   
     )
     
-    # Run Decomposition Support Functions
-    #############################
-    # Calculate Free Flow outside Stop Area
-    # FYI: Currently, this is largely for the 'alternative' decomposition, may do 
-    # things with this later. Results are for now loaded into R where we incorporate
-    # that into the remaining decomp stuff.
-    nonstopzone_ff = (
-        wr.decompose_nonstoparea_ff(rawnav_dat,
-                                    segment_summary,
-                                    stop_index_fil,
-                                    max_fps = 73.3)
-        .assign(seg_name_id = seg)
-    )
-    
-    nonstopzone_freeflow_list.append(nonstopzone_ff)
-
-    
+    # Run Decomposition Functions
+    ############################
     # Calculate Free Flow Travel Time
     segment_ff = (
         wr.decompose_segment_ff(rawnav_dat,
@@ -252,6 +238,40 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     
     basic_decomp_list.append(rawnav_fil_stop_area_decomp)
     
+    segment_ff_val = (
+        segment_ff
+        .loc[0.95]
+        .loc["fps_next3"]
+    )
+    
+    traveltime_decomp = (
+       wr.decompose_traveltime(
+           rawnav_dat,
+           segment_summary,
+           rawnav_fil_stop_area_decomp,
+           segment_ff_val
+       )
+       .assign(seg_name_id = seg)
+    )
+    
+    traveltime_decomp_list.append(traveltime_decomp)
+    
+    # Run Alternative Decomposition Support Functions
+    #############################
+    # Calculate Free Flow outside Stop Area
+    # FYI: Currently, this is largely for the 'alternative' decomposition, may do 
+    # things with this later. Results are for now loaded into R where we incorporate
+    # that into the remaining decomp code.
+    nonstopzone_ff = (
+        wr.decompose_nonstoparea_ff(rawnav_dat,
+                                    segment_summary,
+                                    stop_index_fil,
+                                    max_fps = 73.3)
+        .assign(seg_name_id = seg)
+    )
+    
+    nonstopzone_freeflow_list.append(nonstopzone_ff)
+    
     #ENDS HERE
     
 nonstopzone_freeflow = (
@@ -270,6 +290,11 @@ basic_decomp = (
     .reset_index() 
 )
 
+traveltime_decomp = (
+    pd.concat(traveltime_decomp_list)
+    .reset_index()
+)
+
 # Quick dump of values
 #####################
 # TODO: improve path / save behavior
@@ -278,6 +303,8 @@ freeflow.to_csv(os.path.join(path_stop_area_dump,"freeflow.csv"))
 nonstopzone_freeflow.to_csv(os.path.join(path_stop_area_dump,"nonstopzone_ff.csv"))
 
 basic_decomp.to_csv(os.path.join(path_stop_area_dump,"basic_decomp.csv"))
+
+traveltime_decomp.to_csv(os.path.join(path_stop_area_dump,"traveltime_decomp.csv"))
 
 # Calculate t_stop2
 ####################################################################################################

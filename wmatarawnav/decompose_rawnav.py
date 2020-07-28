@@ -42,6 +42,73 @@ def decompose_segment_ff(rawnav,
     
     return(freeflow_seg)
 
+def decompose_traveltime(
+        rawnav,
+        segment_summary,
+        rawnav_fil_stop_area_decomp,
+        segment_ff_seg
+    ):
+    
+    basic_decomp_agg = (
+        rawnav_fil_stop_area_decomp
+        # .loc[lambda x: x.stop_area_phase == "t_stop1"]
+        .groupby(['filename','index_run_start','stop_area_phase'])
+        .agg({"secs_marg" : ['sum']})
+        .reset_index()
+    )
+    
+    basic_decomp_agg.columns = ["_".join(x) for x in basic_decomp_agg.columns.ravel()]
+    
+    t_stop1_by_run = (
+        basic_decomp_agg
+        .loc[lambda x: x.stop_area_phase_.isin(["t_stop1"])]
+        .rename(columns = {"secs_marg_sum":"t_stop1", # yes, collapsing the two
+                           "filename_" : "filename",
+                           "index_run_start_" : "index_run_start"})
+        .drop(columns = ['stop_area_phase_'])
+    )
+    
+    # calc total secs
+    rawnav_fil_seg = filter_to_segment(rawnav,
+                                       segment_summary)
+    
+    rawnav_fil_seg = calc_rolling_vals(rawnav_fil_seg)
+    
+    totals = (
+        rawnav_fil_seg
+        .groupby(['filename','index_run_start'])
+        .agg({"secs_marg": ['sum'],
+              "odom_ft_marg" : ['sum']})
+        .reset_index()
+    )
+    
+    totals.columns = ["_".join(x) for x in totals.columns.ravel()]
+
+    # Join it all
+    travel_time_decomp = (
+        t_stop1_by_run
+        .merge((totals
+                .rename(columns = {"filename_" : "filename",
+                                   "index_run_start_" : "index_run_start"})
+                ),
+               on = ['filename','index_run_start'],
+               how = "left"
+        )
+        .assign(
+            ff_fps = lambda x, y = segment_ff_seg: y,
+            t_ff = lambda x: x.odom_ft_marg_sum / x.ff_fps,
+            t_stop2 = 14 # hardcoded for now
+        )
+        .fillna(0) #seems a little carless
+        .assign(
+            t_traffic = lambda x: x.t_ff - x.t_stop2 - x.t_stop1
+        )
+        # .drop(columns = ['secs_marg_sum','odom_ft_marg_sum','ff_fps'])
+    )
+
+    return(travel_time_decomp)
+    
+
 def decompose_nonstoparea_ff(rawnav,
                              segment_summary,
                              stop_index_fil,
