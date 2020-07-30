@@ -119,6 +119,7 @@ rawnav_nonstop_area <-
          subsegment_delay_sec = round(subsegment_delay_sec,0)) 
 
 
+
 # Key Functions -----------------------------------------------------------
 
 og_colors_timespace = c(
@@ -202,4 +203,21 @@ make_basic_speeddist <- function(df, alpha = .1, size = 1, lt = "solid", legend 
     guides(color = guide_legend(reverse = TRUE)) +
     theme(legend.position = legend)
   
+}
+
+combine_basic_chart <- function(case,seg){
+  ts <- rawnav_stop_area %>%
+    filter(busrun == case, seg_name_id == seg) %>%
+    make_basic_timespace()
+  
+  sd <- rawnav_stop_area %>%
+    filter(busrun == case, seg_name_id == seg) %>%
+    make_basic_speeddist(alpha = .5, 
+                         size = 1.5, 
+                         lt = "solid",
+                         legend = "none")
+  
+  combined_basic_chart <- (ts / sd)
+  
+  return(combined_basic_chart)
 }
