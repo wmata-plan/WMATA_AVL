@@ -60,7 +60,6 @@ def decompose_traveltime(
     
     basic_decomp_agg.columns = ["_".join(x) for x in basic_decomp_agg.columns.ravel()]
 
-    # 
     t_stop1_by_run = (
         basic_decomp_agg
         .loc[lambda x: x.stop_area_phase_.isin(["t_stop1","t_stop"])]
@@ -70,17 +69,21 @@ def decompose_traveltime(
         .pivot_table(
             index = ['filename','index_run_start'], 
             columns = ['stop_area_phase'], 
-            values = 'secs_marg_sum',
-            fill_value = 0)
+            values = 'secs_marg_sum'
+        )
         .reset_index()
     )
-    
+        
+    # Rather than expanding this in a more complicated fashion (there's no pivot_table_spec option)
+    # we just readd column if it's automatically dropped for lack of values
+    if ('t_stop' not in t_stop1_by_run.columns):
+        t_stop1_by_run= t_stop1_by_run.assign(t_stop = 0)
+        
     # calc total secs
-    rawnav_fil_seg = filter_to_segment(rawnav,
+    rawnav_fil_seg = calc_rolling_vals(rawnav)
+
+    rawnav_fil_seg = filter_to_segment(rawnav_fil_seg,
                                        segment_summary)
-    
-    rawnav_fil_seg = calc_rolling_vals(rawnav_fil_seg,
-                                       groupvars = ['filename','index_run_start'])
     
     totals = (
         rawnav_fil_seg
@@ -98,7 +101,7 @@ def decompose_traveltime(
         .merge(
             (totals
              .rename(columns = {"filename_" : "filename",
-                                   "index_run_start_" : "index_run_start"})
+                                "index_run_start_" : "index_run_start"})
             ),
             on = ['filename','index_run_start'],
             how = "left"
@@ -143,6 +146,12 @@ def decompose_nonstoparea_ff(rawnav,
     """
 
     # Filter to the segment
+    
+    rawnav_fil_seg = calc_rolling_vals(rawnav_fil_seg)
+
+    rawnav_fil_seg = filter_to_segment(rawnav,
+                                       segment_summary)
+    
     rawnav_fil = (
         rawnav
         .merge(segment_summary[["filename",
@@ -151,7 +160,9 @@ def decompose_nonstoparea_ff(rawnav,
                                 "end_odom_ft_segment"]],
                on = ["filename","index_run_start"],
                how = "right")
-        .query('odom_ft >= start_odom_ft_segment & odom_ft < end_odom_ft_segment')
+        .pipe(calc_rolling_vals)
+        # we do <= because the segment summary 
+        .query('odom_ft >= start_odom_ft_segment & odom_ft <= end_odom_ft_segment') 
         .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
     )
 
@@ -166,13 +177,12 @@ def decompose_nonstoparea_ff(rawnav,
             how = "left"
         ) 
     )
-    rawnav_fil_3 = calc_rolling_vals(rawnav_fil_2,
-                                      groupvars =  ['filename','index_run_start','stop_id'])    
 
-    # NOTE: now have two cases if there are two stops in a segment
+    # NOTE: now have two cases of each record if there are two stops in a segment
     # We will take care of these in a moment
+    breakpoint()
     rawnav_fil_4 = (
-        rawnav_fil_3
+        rawnav_fil_2
         .assign(
             upstream_ft = stop_area_upstream_ft,
             downstream_ft = stop_area_downstream_ft,
@@ -240,20 +250,23 @@ def decompose_nonstoparea_ff(rawnav,
         .rename(columns = {'fps_next3' : 'fps_ff'})
     )
     
-    
+    #we use the 'next' value so we don't lose the increment of time and distance between 
+    # the end of the pre-stop area and the start of the stop area (and vice versa for after stop)
     decomp_nonstoparea = (
         rawnav_fil_5
         .groupby(['filename','index_run_start','segment_part'])
-        .agg({'odom_ft' : ['min','max'],
-              'sec_past_st' : ['min','max']})
+        .agg({'odom_ft' : ['min'],
+              'odom_ft_next': ['max'], 
+              'sec_past_st' : ['min'],
+              'sec_past_st_next' : ['max']})
     )
     
     decomp_nonstoparea = ll.reset_col_names(decomp_nonstoparea)
     
     decomp_nonstoparea = (
         decomp_nonstoparea
-        .assign(subsegment_ft = lambda x: x.odom_ft_max - x.odom_ft_min,
-                subsegment_secs = lambda x: x.sec_past_st_max - x.sec_past_st_min)
+        .assign(subsegment_ft = lambda x: x.odom_ft_next_max - x.odom_ft_min,
+                subsegment_secs = lambda x: x.sec_past_st_next_max - x.sec_past_st_min)
         .merge(
             nonstoparea_ff_seg,
             on = ['segment_part'],
@@ -638,7 +651,7 @@ def filter_to_segment(rawnav,
     
     return(rawnav_seg_fil)
     
-
+# TODO: drop grouping functionality
 def calc_rolling_vals(rawnav,
                       groupvars = ['filename','index_run_start']):
     """
