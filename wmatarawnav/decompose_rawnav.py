@@ -221,6 +221,10 @@ def decompose_stop_area(rawnav,
     segment_summary: pd.DataFrame, defines segment start and end points. Should already
         be filtered to the correct patterns relevant to segments
     stop_index_fil: pd.DataFrame, defines index points of stops
+    stop_area_upstream_ft: float, number of feet upstream to define the stop area. Will not
+        extend past the start of the segment even if a high value is chosen.
+    stop_area_downstream_ft: float, number of feet upstream to define the stop area. Will not
+        extend past the start of the segment even if a high value is chosen.
     Returns
     -------
     rawnav_fil_stop_area_decomp: pd.DataFrame, rawnav data with additional fields illustrating how 
@@ -238,7 +242,6 @@ def decompose_stop_area(rawnav,
     # We'll also filter to those runs that have a match to the QJ stop while adding detail
     # about the QJ stop zone, just in case any of these runs behaved normally at segment ends
     # but oddly at the stop zone.
-    # TODO: rethink this for the multiple stop case, this won't always work
     rawnav_fil = (
         rawnav_fil_1
         .merge(
@@ -253,7 +256,8 @@ def decompose_stop_area(rawnav,
 
     # 3 Add Additional Metrics to Rawnav Data 
     # Downstream calculations will require certain values like the speed over the next interval
-    rawnav_fil = calc_rolling_vals(rawnav_fil)
+    rawnav_fil = calc_rolling_vals(rawnav_fil,
+                                   groupvars = ['filename','index_run_start','stop_id'])
    
     # 5. Filter to Stop Area and Run Stop Area Decomposition
     #############################
@@ -265,11 +269,20 @@ def decompose_stop_area(rawnav,
         # t_stop1 = Stop zone door open time defined as first instance of door opening.
         # t_l_addl = time from first door close to acceleration
         # t_accel_phase = time from acceleration to exiting stop zone (used to help estimate aacc
-    # TODO: think harder about how to handle the two-stop case for 70 in georgia/irving
+
     rawnav_fil_stop_area_1 = (
         rawnav_fil
         .query('odom_ft >= (odom_ft_qj_stop - @stop_area_upstream_ft) & odom_ft < (odom_ft_qj_stop + @stop_area_downstream_ft)')
         .reset_index()
+    )
+    
+    # In the event that a ping ends up in two stop areas, we keep the last occurrence, as usually
+    # we need more room on the upstream side. 
+    rawnav_fil_stop_area_1 = (
+        rawnav_fil_stop_area_1
+        .loc[
+            ~rawnav_fil_stop_area_1.duplicated(['filename','index_run_start','index_loc'], keep = "last")
+        ]
     )
     
     # Add binary variables
@@ -285,52 +298,56 @@ def decompose_stop_area(rawnav,
     # Add a sequential numbering that increments each time door changes in a run/segment combination   
     rawnav_fil_stop_area_2['door_state_changes'] = (
         rawnav_fil_stop_area_2
-        .groupby(['filename','index_run_start'])['door_state_closed']
+        .groupby(['filename','index_run_start','stop_id'])['door_state_closed']
         .transform(lambda x: x.diff().ne(0).cumsum())
     )
     
     # We have to be more careful for vehicle state changes. At times, we'll get undefined speeds
     # (e.g., two pings have the same distance and time values) and this could be categorized 
     # as a change in state if we use the same approach as above. Instead, we'll create a separate
-    # table without bad speed records, run the calc, join back to the original dataset, and then
-    # fill the missing values based on nearby ones
+    # table without bad speed records, run the calc on state changes,
+    # join back to the original dataset, and then fill the missing values based on nearby ones.
     veh_state = (
         rawnav_fil_stop_area_2
-        .filter(items = ['filename','index_run_start','index_loc','veh_state_moving'])
+        .filter(items = ['filename','index_run_start','stop_id','index_loc','veh_state_moving'])
         .loc[~rawnav_fil_stop_area_2.fps_next.isnull()]
     )
     
     veh_state['veh_state_changes'] = (
             veh_state
-            .groupby(['filename','index_run_start'])['veh_state_moving']
+            .groupby(['filename','index_run_start','stop_id'])['veh_state_moving']
             .transform(lambda x: x.diff().ne(0).cumsum())
     )
-    
-    # TODO: update to switch transform to apply throughotu
-    rawnav_fil_stop_area_2 = (
+
+    rawnav_fil_stop_area_3 = (
         rawnav_fil_stop_area_2
         .merge(
             veh_state
             .drop(columns = ['veh_state_moving']),
-            on = ['filename','index_run_start','index_loc'],
+            on = ['filename','index_run_start','stop_id','index_loc'],
             how = 'left'
         )
-        # note that this could miss cases of transition where the null value for speed occurs
-        # at a stop where passengers board/alight. however, if that's the case, we don't use 
-        # these values anyhow.
-        .assign(veh_state_changes = lambda x: x.veh_state_changes.ffill())
-        .assign(veh_state_changes = lambda x: x.veh_state_changes.bfill())
     )
-        
-    # To identify the case that's the first door opening at a stop (and the last),
+    
+    # note that this could miss cases of transition where the null value for speed occurs
+    # at a stop where passengers board/alight. however, if that's the case, we don't use 
+    # these values anyhow.
+    rawnav_fil_stop_area_3['veh_state_changes'] = (
+        rawnav_fil_stop_area_3
+        .groupby(['filename','index_run_start','stop_id'])['veh_state_changes']
+        .transform(lambda x: x.ffill())
+        .transform(lambda x: x.bfill())
+    )
+           
+    # To identify the cases of the first door opening and last at each stop (needed for decomp),
     # we'll summarize to a different dataframe and rejoin. (Grouped mutates don't play well in pandas) 
     # min is almost always 2, but we're extra careful here.  
     # max will be interesting - we'll add anything after the first door closing to the last reclosing
     # as signal delay, essentially.
     door_open_cases = (
-        rawnav_fil_stop_area_2
-        .loc[rawnav_fil_stop_area_2.door_state == "O"]
-        .groupby(['filename','index_run_start','door_state'])
+        rawnav_fil_stop_area_3
+        .loc[rawnav_fil_stop_area_3.door_state == "O"]
+        .groupby(['filename','index_run_start','stop_id','door_state'])
         .agg({"door_state_changes" : ['min','max']})
         .reset_index()
     )
@@ -339,50 +356,57 @@ def decompose_stop_area(rawnav,
 
     door_open_cases = (
         door_open_cases
-        .rename(columns = {"filename_" : "filename", "index_run_start_": "index_run_start"})
+        .rename(columns = {"filename_" : "filename", 
+                           "index_run_start_": "index_run_start",
+                           "stop_id_": "stop_id"})
         .drop(columns = ['door_state_'])
     )
        
-    # Before we make use of that new column, we'll do a similar check on where the
+    # Before we make use of the door_open_cases min and max files, we'll do a similar check on where the
     # bus came to be not moving. The language is a little fuzzy here -- we'll call this
     # 'veh_stop' to distinguish that we're talking about the bus literally not moving, 
-    # rather than something to do with a 'bus stop'
+    # rather than something to do with a 'bus stop'. This helps with runs where the bus does not
+    # stop at all.
     veh_stop_cases = (
-        rawnav_fil_stop_area_2
-        .loc[(~rawnav_fil_stop_area_2.veh_state_moving & rawnav_fil_stop_area_2.fps_next.notnull())]
-        .groupby(['filename','index_run_start','veh_state_moving'])
+        rawnav_fil_stop_area_3
+        .loc[(~rawnav_fil_stop_area_3.veh_state_moving & rawnav_fil_stop_area_3.fps_next.notnull())]
+        .groupby(['filename','index_run_start','stop_id','veh_state_moving'])
         .agg({"veh_state_changes" : ['min','max']})
         .reset_index()
     )
-    
+    # TODO: make this a function already, auto-clean up the trailing "_"
     veh_stop_cases.columns = ["_".join(x) for x in veh_stop_cases.columns.ravel()]
     
     veh_stop_cases = (
         veh_stop_cases 
         .rename(columns = {"filename_" : "filename",
                           "index_run_start_": "index_run_start",
+                          "stop_id_":"stop_id",
                           "veh_state_changes_min": "veh_stopped_min",
                           "veh_state_changes_max": "veh_stopped_max"})
         .drop(columns = ['veh_state_moving_'])
     )
-     
-    rawnav_fil_stop_area_3 = (
-        rawnav_fil_stop_area_2
+    
+    # There will be nans remaining here from cases where bus did not stop or did not pick up 
+    # passengers. This is okay.
+    rawnav_fil_stop_area_4 = (
+        rawnav_fil_stop_area_3
         .merge(
             door_open_cases,
-            on = ['filename','index_run_start'],
+            on = ['filename','index_run_start','stop_id'],
             how = 'left'
         )
         .merge(
             veh_stop_cases,
-            on = ['filename','index_run_start'],
+            on = ['filename','index_run_start','stop_id'],
             how = 'left'
         )
     )
     
-    # For convience in other downstream calcs, 
-    # we'll add flags to help with certain cases where vehicle didn't stop at all or doors didn't open
-    # We'll reuse a table we made earlier since we've dealt with fps_next nulls here
+    # For convience in other downstream calcs,  we'll add flags to help with certain cases 
+    # where vehicle didn't stop at all or doors didn't open.
+    # These will be decomposed a little bit differently.
+    # We'll reuse a table we made earlier since we've dealt with fps_next nulls here.
     veh_state_any_move = (
         veh_state 
         .drop(columns = ['veh_state_changes'])
@@ -390,70 +414,78 @@ def decompose_stop_area(rawnav,
     
     veh_state_any_move['any_veh_stopped'] = (
         veh_state_any_move
-        .groupby(['filename','index_run_start'])['veh_state_moving']
+        .groupby(['filename','index_run_start','stop_id'])['veh_state_moving']
         .transform(lambda x: any(~x))
     )
     
-    rawnav_fil_stop_area_3 = (
-        rawnav_fil_stop_area_3 
+    rawnav_fil_stop_area_4 = (
+        rawnav_fil_stop_area_4 
         .merge(
             veh_state_any_move
             .drop(columns = ['veh_state_moving']),
-            on = ['filename','index_run_start','index_loc'],
-            how = "left")
-        # some NA's may appear after join. We'll usually fill to address these,
-        # but in the case where we know doors are open, we'll override
-        # we still run into issues with this run
-        # rawnav03220191021.txt, 5124  so we may want to fix it
+            on = ['filename','index_run_start','stop_id','index_loc'],
+            how = "left"
+        )
+        # some NA's may appear after join. We'll usually fill to address these (see below),
+        # but first, in the case where we know doors are open, we'll override.
+        # TODO: if you get an elementwise comparison warning, it's from here.  drop
+        # this comment after we confirm i've fixed it.
         .assign(any_veh_stopped = lambda x: np.where(x.any_veh_stopped.isnull() 
-                                                      & x.door_state == "O",
+                                                      & x.door_state.astype('str') == "O",
                                                      True,
                                                      x.any_veh_stopped)
         )
-        .assign(any_veh_stopped = lambda x: x.any_veh_stopped.ffill())
-        .assign(any_veh_stopped = lambda x: x.any_veh_stopped.bfill())
+    )
+    
+    rawnav_fil_stop_area_4['any_veh_stopped'] = (
+        rawnav_fil_stop_area_4
+        .groupby(['filename','index_run_start','stop_id'])['any_veh_stopped']
+        .transform(lambda x: x.ffill())
+        .transform(lambda x: x.bfill())
     )
         
     # Similar approach for door open but directly applied
-    rawnav_fil_stop_area_3['any_door_open'] = (
-        rawnav_fil_stop_area_3
-        .groupby(['filename','index_run_start'])['door_state_closed']
+    rawnav_fil_stop_area_4['any_door_open'] = (
+        rawnav_fil_stop_area_4
+        .groupby(['filename','index_run_start','stop_id'])['door_state_closed']
         .transform(lambda x: any(~x))       
     )
-   
-    # We start to sort row records based on vars we've created. This is just a first cut.
-    # this is casewhen, if you're wondering. "rough_phase" is our first cut at the basic 
-    # bus state decomposition,
-    rawnav_fil_stop_area_3['rough_phase_by_door'] = np.select(
+    
+    rawnav_fil_stop_area_5 = rawnav_fil_stop_area_4
+    # We start to sort row records into phase based on vars we've created. This is just a first cut.
+    # np.select is casewhen, if you're wondering. 
+    rawnav_fil_stop_area_5['rough_phase_by_door'] = np.select(
         [
-            (rawnav_fil_stop_area_3.door_state_changes < rawnav_fil_stop_area_3.door_state_changes_min), #
-            ((rawnav_fil_stop_area_3.door_state == "O") 
-              & (rawnav_fil_stop_area_3.door_state_changes == rawnav_fil_stop_area_3.door_state_changes_min)),
-            (rawnav_fil_stop_area_3.door_state_changes > rawnav_fil_stop_area_3.door_state_changes_min),
-            (rawnav_fil_stop_area_3.door_state_changes_min.isnull()),
+            (rawnav_fil_stop_area_5.door_state_changes < rawnav_fil_stop_area_5.door_state_changes_min), 
+            ((rawnav_fil_stop_area_5.door_state == "O") 
+              & (rawnav_fil_stop_area_5.door_state_changes == rawnav_fil_stop_area_5.door_state_changes_min)),
+            (rawnav_fil_stop_area_5.door_state_changes > rawnav_fil_stop_area_5.door_state_changes_min),
+            (rawnav_fil_stop_area_5.door_state_changes_min.isnull()),
         ], 
         [
             "t_decel_phase", #we'll cut this up a bit further later
             "t_stop1",
             "t_accel_phase", #we'll cut this up a bit further later
-            "t_nopax", #we'll apply different criteria to this later #          
+            "t_nopax", #we'll apply different criteria to this later        
         ], 
         default="doh" 
     )
     
     # Some buses will stop but not take passengers, so we can't use door openings to cue what 
     # phase the bus is in. in these cases, we'll take the first time the bus hits a full stop 
-    # to end the decel phase. WE could do that for all trips (and maybe we should), but for now
-    # leaving this as different. In practice, we won't 'use' the values in this column except
-    # in some special cases
-    rawnav_fil_stop_area_3['rough_phase_by_veh_state'] = np.select(
+    # to end the decel phase. We could do this method for all runs (and maybe we should), but for now
+    # leaving this as different (i.e. a bus that opens its doors at t_10 may have come to a full
+    # stop earlier at t_5 and again at t_10; thus, the phase by veh state and by door state
+    # can be inconsistent). In practice, we won't use the values in this column except
+    # in some special cases where bus is not serving pax.
+    rawnav_fil_stop_area_5['rough_phase_by_veh_state'] = np.select(
        [
-        (rawnav_fil_stop_area_3.veh_state_changes < rawnav_fil_stop_area_3.veh_stopped_min),
-        (rawnav_fil_stop_area_3.veh_state_changes == rawnav_fil_stop_area_3.veh_stopped_min),
-        ((rawnav_fil_stop_area_3.veh_state_changes > rawnav_fil_stop_area_3.veh_stopped_min)
-         & (rawnav_fil_stop_area_3.veh_state_changes <= rawnav_fil_stop_area_3.veh_stopped_max)),
-        (rawnav_fil_stop_area_3.veh_state_changes > rawnav_fil_stop_area_3.veh_stopped_max),
-        (rawnav_fil_stop_area_3.veh_stopped_min.isnull())
+        (rawnav_fil_stop_area_5.veh_state_changes < rawnav_fil_stop_area_5.veh_stopped_min),
+        (rawnav_fil_stop_area_5.veh_state_changes == rawnav_fil_stop_area_5.veh_stopped_min),
+        ((rawnav_fil_stop_area_5.veh_state_changes > rawnav_fil_stop_area_5.veh_stopped_min)
+         & (rawnav_fil_stop_area_5.veh_state_changes <= rawnav_fil_stop_area_5.veh_stopped_max)),
+        (rawnav_fil_stop_area_5.veh_state_changes > rawnav_fil_stop_area_5.veh_stopped_max),
+        (rawnav_fil_stop_area_5.veh_stopped_min.isnull())
        ],     
        [
         "t_decel_phase",
@@ -468,23 +500,23 @@ def decompose_stop_area(rawnav,
     # in cases where bus is stopped around door open, we do special things
     # first, we flag rows where bus is literally stopped to pick up passengers
     # note that based on t_stop1 definition, this only happens first time bus opens doors
-    rawnav_fil_stop_area_3['at_stop']= (
-        rawnav_fil_stop_area_3
-        .groupby(['filename','index_run_start','veh_state_changes'])['rough_phase_by_door']
+    rawnav_fil_stop_area_5['at_stop']= (
+        rawnav_fil_stop_area_5
+        .groupby(['filename','index_run_start','stop_id','veh_state_changes'])['rough_phase_by_door']
         .transform(lambda var: var.isin(['t_stop1']).any())
     )
 
-    rawnav_fil_stop_area_3['at_stop_phase'] = np.select(
+    rawnav_fil_stop_area_5['at_stop_phase'] = np.select(
         [
-            ((rawnav_fil_stop_area_3.at_stop) 
+            ((rawnav_fil_stop_area_5.at_stop) 
              # TODO: consider condition that is less sensitive. Maybe speed under 2 mph?
              # Note that we don't use a test on fps_next because 0 dist and 0 second ping could
              # lead to NA value
-                 & (rawnav_fil_stop_area_3.odom_ft_marg == 0)
-                 & (rawnav_fil_stop_area_3.rough_phase_by_door == "t_decel_phase")),
-            ((rawnav_fil_stop_area_3.at_stop) 
-                & (rawnav_fil_stop_area_3.odom_ft_marg == 0)
-                & (rawnav_fil_stop_area_3.rough_phase_by_door == "t_accel_phase"))
+                 & (rawnav_fil_stop_area_5.odom_ft_marg == 0)
+                 & (rawnav_fil_stop_area_5.rough_phase_by_door == "t_decel_phase")),
+            ((rawnav_fil_stop_area_5.at_stop) 
+                & (rawnav_fil_stop_area_5.odom_ft_marg == 0)
+                & (rawnav_fil_stop_area_5.rough_phase_by_door == "t_accel_phase"))
         ],
         [
             "t_l_initial",
@@ -494,8 +526,8 @@ def decompose_stop_area(rawnav,
     )
 
     # Finally, we combine the door state columns for the decomposition
-    rawnav_fil_stop_area_4 = (
-        rawnav_fil_stop_area_3
+    rawnav_fil_stop_area_6 = (
+        rawnav_fil_stop_area_5
         # assign the at_stop_phase corrections
         .assign(stop_area_phase = lambda x: np.where(x.at_stop_phase != "NA",
                                                      x.at_stop_phase,
@@ -512,7 +544,7 @@ def decompose_stop_area(rawnav,
     )
     # And we do a final pass cleaning up the runs that don't serve passengers or don't stop at all
     rawnav_fil_stop_area_decomp = (  
-        rawnav_fil_stop_area_4
+        rawnav_fil_stop_area_6
         # runs that don't stop
         .assign(stop_area_phase = lambda x: np.where(x.any_veh_stopped == False,
                                                      "t_nostopnopax",
@@ -551,11 +583,13 @@ def filter_to_segment(rawnav,
     return(rawnav_seg_fil)
     
 
-def calc_rolling_vals(rawnav):
+def calc_rolling_vals(rawnav,
+                      groupvars = ['filename','index_run_start']):
     """
     Parameters
     ----------
     rawnav: pd.DataFrame, rawnav data. Expect cols sec_past_st and odom_ft
+    groupvars: list of column names. 
     Returns
     -------
     rawnav_add: pd.DataFrame, rawnav data with additional fields.
@@ -563,19 +597,20 @@ def calc_rolling_vals(rawnav):
     -----
     Because wmatarawnav functions generally leave source rawnav data untouched except 
     just prior to the point of analysis, these calculations may be performed several times
-    on smaller chunks of data.
+    on smaller chunks of data. We group by stop_id in addition to run in case a segment has 
+    multiple stops in it (e.g., Georgia & Irving)
     """
     
     rawnav[['odom_ft_next','sec_past_st_next']] = (
         rawnav
-        .groupby(['filename','index_run_start'], sort = False)[['odom_ft','sec_past_st']]
+        .groupby(groupvars, sort = False)[['odom_ft','sec_past_st']]
         .shift(-1)
     )
 
     # We'll use a bigger lag for more stable values for free flow speed
     rawnav[['odom_ft_next3','sec_past_st_next3']] = (
         rawnav
-        .groupby(['filename','index_run_start'], sort = False)[['odom_ft','sec_past_st']]
+        .groupby(groupvars, sort = False)[['odom_ft','sec_past_st']]
         .shift(-3)
     )
     
