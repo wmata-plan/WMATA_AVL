@@ -10,6 +10,7 @@ from shapely.geometry import Point
 from scipy.spatial import cKDTree
 import numpy as np
 
+
 def tribble(columns, *data):
     # I miss R
     return pd.DataFrame(
@@ -103,3 +104,27 @@ def ckdnearest(gdA, gdB):
              drop=True),
          pd.Series(dist, name='dist_to_nearest_point')], axis=1)
     return gdf
+
+
+def reset_col_names(df):
+    """
+    # https://gis.stackexchange.com/questions/222315/geopandas-find-nearest-point-in-other-dataframe
+    Parameters
+    ----------
+    df : pd.DataFrame,
+        dataframe after a groupby and aggregation with hierarchical column names
+    Returns
+    -------
+    df : pd.DataFrame,
+        same dataframe without hierarchy and collapsed column names
+    Notes
+    -----
+    Pandas has a fun way of returning hierarchical column names that don't lend themselves well
+    to continuing to do work on a dataframe. This addresses that.
+    """
+    
+    
+    df.columns = ["_".join(x) for x in df.columns.ravel()]
+    df = df.reset_index()
+    df.columns = df.columns.str.replace(pat = "_$",repl = "", regex = True)
+    return(df)

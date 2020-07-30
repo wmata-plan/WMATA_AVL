@@ -6,6 +6,7 @@ Created on Mon Jul 27 07:13:54 2020
 """
 import pandas as pd
 import numpy as np
+from . import low_level_fns as ll
 
 def decompose_segment_ff(rawnav,
                          segment_summary,
@@ -48,31 +49,38 @@ def decompose_traveltime(
         rawnav_fil_stop_area_decomp,
         segment_ff_seg
     ):
-    
+
     basic_decomp_agg = (
         rawnav_fil_stop_area_decomp
-        # .loc[lambda x: x.stop_area_phase == "t_stop1"]
+        # Note that we drop stop_id grouping here, since this method just needs us to sum t_stop1s
         .groupby(['filename','index_run_start','stop_area_phase'])
         .agg({"secs_marg" : ['sum']})
         .reset_index()
     )
     
     basic_decomp_agg.columns = ["_".join(x) for x in basic_decomp_agg.columns.ravel()]
-    
+
+    # 
     t_stop1_by_run = (
         basic_decomp_agg
-        .loc[lambda x: x.stop_area_phase_.isin(["t_stop1"])]
-        .rename(columns = {"secs_marg_sum":"t_stop1", # yes, collapsing the two
-                           "filename_" : "filename",
-                           "index_run_start_" : "index_run_start"})
-        .drop(columns = ['stop_area_phase_'])
+        .loc[lambda x: x.stop_area_phase_.isin(["t_stop1","t_stop"])]
+        .rename(columns = {"filename_" : "filename",
+                           "index_run_start_" : "index_run_start",
+                           "stop_area_phase_" : "stop_area_phase"})
+        .pivot_table(
+            index = ['filename','index_run_start'], 
+            columns = ['stop_area_phase'], 
+            values = 'secs_marg_sum',
+            fill_value = 0)
+        .reset_index()
     )
     
     # calc total secs
     rawnav_fil_seg = filter_to_segment(rawnav,
                                        segment_summary)
     
-    rawnav_fil_seg = calc_rolling_vals(rawnav_fil_seg)
+    rawnav_fil_seg = calc_rolling_vals(rawnav_fil_seg,
+                                       groupvars = ['filename','index_run_start'])
     
     totals = (
         rawnav_fil_seg
@@ -87,12 +95,13 @@ def decompose_traveltime(
     # Join it all
     travel_time_decomp = (
         t_stop1_by_run
-        .merge((totals
-                .rename(columns = {"filename_" : "filename",
+        .merge(
+            (totals
+             .rename(columns = {"filename_" : "filename",
                                    "index_run_start_" : "index_run_start"})
-                ),
-               on = ['filename','index_run_start'],
-               how = "left"
+            ),
+            on = ['filename','index_run_start'],
+            how = "left"
         )
         .assign(
             ff_fps = lambda x, y = segment_ff_seg: y,
@@ -101,7 +110,7 @@ def decompose_traveltime(
         )
         .fillna(0) #seems a little careless
         .assign(
-            t_traffic = lambda x: x.secs_marg_sum - x.t_ff - x.t_stop2 - x.t_stop1
+            t_traffic = lambda x: x.secs_marg_sum - x.t_ff - x.t_stop2 - x.t_stop1 - x.t_stop
         )
         .rename(columns = {'secs_marg_sum' : 'secs_seg_total',
                            'odom_ft_marg_sum' : 'odom_ft_seg_total'})
@@ -146,16 +155,24 @@ def decompose_nonstoparea_ff(rawnav,
         .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
     )
 
-    rawnav_fil = calc_rolling_vals(rawnav_fil)    
+
     # filter to portions of segment
-    rawnav_nonstoparea = (
+    rawnav_fil_2 = (
         rawnav_fil
         .merge(
             stop_index_fil
             .filter(items = ['filename','index_run_start','odom_ft_qj_stop','stop_id']),
             on = ['filename','index_run_start'],
             how = "left"
-        )
+        ) 
+    )
+    rawnav_fil_3 = calc_rolling_vals(rawnav_fil_2,
+                                      groupvars =  ['filename','index_run_start','stop_id'])    
+
+    # NOTE: now have two cases if there are two stops in a segment
+    # We will take care of these in a moment
+    rawnav_fil_4 = (
+        rawnav_fil_3
         .assign(
             upstream_ft = stop_area_upstream_ft,
             downstream_ft = stop_area_downstream_ft,
@@ -169,10 +186,50 @@ def decompose_nonstoparea_ff(rawnav,
         )
         .query('(segment_part == "before_stop_area") | (segment_part == "after_stop_area")')
     )
-        
+    # In the case of multiple stops, we'll still have multiple pings in cases where an interval is 
+    # both 'before_stop_area' and 'after_stop_area' (some may have even been in multiple stop
+    # areas, but those have been removed by this point). We'll remove duplicates. For now
+    # we'll just call these "between_stop" -- there may be a fancier approach to this (creating
+    # groups or something) but for now it's superfluous.
+
+    rawnav_between = (
+        rawnav_fil_4
+        .loc[
+            rawnav_fil_4
+            .duplicated(['filename','index_run_start','index_loc'],
+                        keep = False)
+        ]
+        .groupby(['filename','index_run_start','index_loc'])
+        .agg({'segment_part': ['nunique']})
+    )
+    
+    rawnav_between = ll.reset_col_names(rawnav_between)
+    
+    rawnav_between = (
+        rawnav_between
+        .loc[rawnav_between.segment_part_nunique > 1]
+        .assign(segment_part_upd = "between_stop_area")
+        .filter(items = ['filename','index_run_start','index_loc','segment_part_upd'])
+    )
+    
+    rawnav_fil_5 = (
+        rawnav_fil_4
+        .merge(
+            rawnav_between,
+            on = ['filename','index_run_start','index_loc'],
+            how = 'left'
+        )
+        .assign(segment_part = lambda x: np.where(~x.segment_part_upd.isnull(),
+                                                  x.segment_part_upd,
+                                                  x.segment_part)
+        )
+        .loc[lambda x: ~x.duplicated(['filename','index_run_start','index_loc'],
+                                     keep = 'first')]
+        .drop(columns = ['segment_part_upd'])
+    )
         
     nonstoparea_ff_seg = (
-        rawnav_nonstoparea
+        rawnav_fil_5
         .loc[lambda x, y = max_fps: x.fps_next3 < y]
         .groupby(['segment_part'])["fps_next3"]
         .quantile([0.01, 0.05, 0.10, 0.15, 0.25, 0.5, 0.75, 0.85, 0.90, 0.95, 0.99])
@@ -185,17 +242,16 @@ def decompose_nonstoparea_ff(rawnav,
     
     
     decomp_nonstoparea = (
-        rawnav_nonstoparea
+        rawnav_fil_5
         .groupby(['filename','index_run_start','segment_part'])
         .agg({'odom_ft' : ['min','max'],
               'sec_past_st' : ['min','max']})
     )
     
-    decomp_nonstoparea.columns = ["_".join(x) for x in decomp_nonstoparea.columns.ravel()]
-
+    decomp_nonstoparea = ll.reset_col_names(decomp_nonstoparea)
+    
     decomp_nonstoparea = (
         decomp_nonstoparea
-        .reset_index()
         .assign(subsegment_ft = lambda x: x.odom_ft_max - x.odom_ft_min,
                 subsegment_secs = lambda x: x.sec_past_st_max - x.sec_past_st_min)
         .merge(
@@ -417,7 +473,7 @@ def decompose_stop_area(rawnav,
         .groupby(['filename','index_run_start','stop_id'])['veh_state_moving']
         .transform(lambda x: any(~x))
     )
-    
+
     rawnav_fil_stop_area_4 = (
         rawnav_fil_stop_area_4 
         .merge(
@@ -428,10 +484,10 @@ def decompose_stop_area(rawnav,
         )
         # some NA's may appear after join. We'll usually fill to address these (see below),
         # but first, in the case where we know doors are open, we'll override.
-        # TODO: if you get an elementwise comparison warning, it's from here.  drop
-        # this comment after we confirm i've fixed it.
-        .assign(any_veh_stopped = lambda x: np.where(x.any_veh_stopped.isnull() 
-                                                      & x.door_state.astype('str') == "O",
+        # Some additional work to prevent warnings generated from numpy/pandas conflicts on
+        # elementwise comparison
+        .assign(any_veh_stopped = lambda x: np.where(x.any_veh_stopped.isnull().to_numpy() 
+                                                      & (x.door_state.to_numpy() == "O"),  
                                                      True,
                                                      x.any_veh_stopped)
         )
