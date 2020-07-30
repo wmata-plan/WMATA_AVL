@@ -1,0 +1,205 @@
+---
+title: "WMATA Queue Jump Effectiveness: First Look at Early Decomposition Values"
+output: 
+  html_notebook:
+    toc: true
+    toc_depth: 2
+    toc_float: yes
+    df_print: paged
+    number_sections: false
+    theme: simplex
+---
+
+This notebook examines two questions about preliminary travel time decomposition results.
+
+We first load the data exported from our Python scripts
+```{r message=FALSE, warning=FALSE}
+source("./decomposition-prep.R")
+library(arrow)
+library(leaflet)
+library(leafem)
+
+# Load travel time decomp
+tt_decomp <-
+  read_csv(file = file.path(path_data,
+                            "traveltime_decomp.csv")) %>%
+  select(-X1, -index)
+
+# load rawnav pings for sixteenth and U (we only exported those in the stop area)
+route_search_string <- "route=S1|route=S2|route=S4"
+seg_search_string <- "seg_name_id=sixteenth_u_shrt"
+
+filelist <- 
+  list.files(path = file.path(path_project,"data","02-processed","rawnav_data.parquet"),
+             recursive = TRUE,
+             full.names = TRUE)
+
+filelist_fil <-
+  filelist[str_detect(filelist,route_search_string)]
+
+rawnav_sixteenth_u_shrt <-
+  map_dfr(filelist_fil,
+        ~ arrow::read_parquet(.x))
+
+filelist_summary <-
+    list.files(path = file.path(path_project,"data","02-processed","segment_summary.parquet"),
+             recursive = TRUE,
+             full.names = TRUE)
+
+filelist_summary_fil <-
+  filelist_summary[str_detect(filelist_summary,seg_search_string)]
+
+rawnav_seg_summary_sixteenth_u_shrt <-
+  map_dfr(filelist_summary_fil,
+        ~ arrow::read_parquet(.x))
+
+# Segments
+
+segments <- st_read(dsn = file.path("../../data/02-processed/segments.geojson"), quiet = TRUE)
+
+```
+
+
+# Why do t_traffic values appear negative for two segments?
+
+This is partially a result of the hard-coded 't_stop2' time, but also a consequence of this decomposition method. If t_stop2 is high (either by hardcoding or because an average accel/decel time from TCQSM or otherwise is used), the traffic time has to shift negative so that the segment's total runtime before and after decomposition is the same. This is that issue I mentioned in that spreadsheet and PowerPoint I sent to you a few weeks ago. This is one of the motivators behind using the Accel/Decel Decomposition method I laid out. 
+
+First, what's the distribution of t_traffic values on 16th and U NW Short?
+
+```{r message=FALSE, warning=FALSE}
+make_distr <- function(tt, var){
+  tt %>%
+  group_by(seg_name_id) %>%
+  summarize(distr = list(summary({{var}}))) %>%
+  unnest_wider(distr) %>%
+  mutate_if(is.numeric,~round(.x,2))
+}
+
+tt_decomp %>%
+  make_distr(t_traffic)
+```
+
+```{r}
+chart_data <- 
+  tt_decomp %>%
+  filter(seg_name_id == "eleventh_i_new_york") 
+
+ggplot(chart_data, aes(x = t_traffic)) +
+  geom_histogram()
+```
+
+```{r}
+  tt_decomp %>%
+  filter(seg_name_id == "eleventh_i_new_york") %>%
+  pull(t_traffic) %>%
+  quantile(., probs = c(.05, .1, .15,  .5 , .85,.90, .95))
+```
+
+
+Let's look at a particular run at around the median value of -12: filename rawnav05436191022.txt and index_run_start 29308
+
+```{r}
+case_file <- "rawnav05436191022.txt"
+case_index <- 29308
+case_seg <- "sixteenth_u_shrt"
+
+case_decomp <- 
+  tt_decomp %>%
+  filter(filename == case_file & index_run_start == case_index)
+
+case_decomp
+```
+In total, the length in time of this segment is in seconds:
+```{r}
+case_decomp %>%
+  mutate(total = t_stop1 + t_ff + t_stop2 + t_traffic) %>%
+  pull(total)
+```
+In plain terms, what does this bus do as it moves through the stop area around the intersection? Note: charts do not include the entire segment, but because these are short segments, this is largely the story. 
+
+So far it looks pretty typical. So our stop area time is 51 seconds, and our stop area time looks to be around ~37 seconds.
+
+```{r}
+combine_basic_chart(glue("{case_file}_{case_index}"),case_seg)
+```
+What about the rest of the segment? Are the segment definitions coming out as expected in the code? We can look at a few select columns here:
+```{r}
+rawnav_summary_case <-
+  rawnav_seg_summary_sixteenth_u_shrt %>%
+  filter(filename == case_file & index_run_start == case_index) %>%
+  select(filename, index_run_start, start_odom_ft_segment, end_odom_ft_segment, trip_dist_mi_odom_and_segment, trip_dur_sec_segment)
+  
+rawnav_case <-
+  rawnav_sixteenth_u_shrt %>%
+  filter(filename == case_file & index_run_start == case_index) %>%
+  left_join(rawnav_summary_case, by = c("filename", "index_run_start")) %>%
+  mutate(in_segment = (odom_ft >= start_odom_ft_segment) & (odom_ft < end_odom_ft_segment)) %>%
+  st_as_sf(., 
+           coords = c("long", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant")
+
+segment_case <-
+  segments %>% 
+  filter(seg_name_id == case_seg)
+```
+
+```{r}
+mapview(rawnav_case, zcol = "in_segment")@map %>%
+    leaflet::setView(lat = 38.91699, lng = -77.03642, zoom = 17)
+```
+
+# Why do freeflow times appear differently?
+
+What's the distribution of freeflow times for these runs? 
+
+```{r}
+tt_decomp %>%
+  make_distr(t_ff)
+```
+
+So, it seems like there's a bit of a big tail here, especially on the 'max' end. I think a handful of these are just weird cases in the data where odometers are reset inadveretently. Let's look at some of these.
+
+```{r}
+tt_decomp %>%
+  filter(seg_name_id == case_seg) %>%
+  arrange(desc(t_ff)) %>%
+  head(n= 10) 
+```
+
+Let's focus on one of these in particulr.
+
+```{r}
+case_file <- "rawnav03259191008.txt"
+case_index <- 17211
+
+rawnav_summary_case <-
+  rawnav_seg_summary_sixteenth_u_shrt %>%
+  filter(filename == case_file & index_run_start == case_index) %>%
+  select(filename, index_run_start, start_odom_ft_segment, end_odom_ft_segment, trip_dist_mi_odom_and_segment, trip_dur_sec_segment)
+  
+rawnav_case <-
+  rawnav_sixteenth_u_shrt %>%
+  filter(filename == case_file & index_run_start == case_index) %>%
+  left_join(rawnav_summary_case, by = c("filename", "index_run_start")) %>%
+  mutate(in_segment = (odom_ft >= start_odom_ft_segment) & (odom_ft < end_odom_ft_segment)) %>%
+  st_as_sf(., 
+           coords = c("long", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant")
+
+mapview(filter(rawnav_case,in_segment), zcol = "in_segment")
+```
+So far this looks 'normal' -- lines up with expectation of where segment starts and ends. Segment for this run starts at odometer value 37995 and ends before odometer value 40071, or 2076 feet. But that's a long segment at nearly half a mile, and in practice, this segment is not that long (actually is 652 feet!). Using a measurement tool, we can see that a point about 166 feet into the segment registers as having an odometer meeting as 508 feet. Both of the odometer readings are about 3x of what the actual value was. So, it appears this is simply a case of units being off or some other matter.
+
+```{r}
+{rawnav_case %>%
+  filter(in_segment) %>%
+  mutate(odom_ft_in_seg = odom_ft - min(odom_ft)) %>%
+  mapview(., zcol = "odom_ft_in_seg")}@map %>%
+  addMeasure()
+```
+
+
+
+

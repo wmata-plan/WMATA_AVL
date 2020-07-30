@@ -276,17 +276,8 @@ doublecheck <- function(case, seg){
     filter(busrun == case, seg_name_id == seg) %>%
     decomp_stack()
   
-  ts <- rawnav_stop_area %>%
-    filter(busrun == case, seg_name_id == seg) %>%
-    make_basic_timespace()
+  combined_basic <- combine_basic_chart(case, seg)
   
-  sd <- rawnav_stop_area %>%
-    filter(busrun == case, seg_name_id == seg) %>%
-    make_basic_speeddist(alpha = .5, 
-                         size = 1.5, 
-                         lt = "solid",
-                         legend = "none")
-
   nonstoparea_subseg_table <- 
     rawnav_nonstop_area %>%
     filter(busrun == case, seg_name_id == seg) %>%
@@ -297,10 +288,8 @@ doublecheck <- function(case, seg){
     gridExtra::tableGrob()
   
   bigplot <-
-    (((ts / sd) | dc)) +
+    ((combined_basic | dc) / nonstoparea_subseg_table) +
     plot_annotation(glue::glue("{seg}: Results for run {case}"))
-  
-  bigplot / nonstoparea_subseg_table
 }
 
 # DEBUG SPEED STUFF

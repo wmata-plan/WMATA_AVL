@@ -1,0 +1,32 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+make_distr <- function(tt, var){
+  tt %>%
+  group_by(seg_name_id) %>%
+  summarize(distr = list(summary({{var}}))) %>%
+  unnest_wider(distr) %>%
+  mutate_if(is.numeric,~round(.x,2))
+}
+
+stop_pass_decomp_4 %>%
+  make_distr(tr_accel_delay)
+
+```
+
+```{r}
+stop_pass_decomp_4$tr_accel_delay %>%
+  quantile(probs = c(.01, .05,.1, .15, .5 , .85, .9, .95), na.rm = TRUE)
+```
+
+
+```{r}
+stop_pass_decomp_4 %>%
+  make_distr(subsegment_delay_sec_after_stop_area)
+```
+
