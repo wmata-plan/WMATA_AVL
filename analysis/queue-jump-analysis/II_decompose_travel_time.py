@@ -272,6 +272,14 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     
     nonstopzone_freeflow_list.append(nonstopzone_ff)
     
+    # Summarize Accel/Decel Decomp
+    ad_method_total = wr.calc_ad_decomp(nonstopzone_ff,
+                                        rawnav_fil_stop_area_decomp,
+                                        segment_summary)
+    
+    breakpoint()
+    
+    print('hi')
     #ENDS HERE
     
 nonstopzone_freeflow = (

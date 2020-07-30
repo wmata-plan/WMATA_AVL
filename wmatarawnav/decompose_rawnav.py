@@ -684,4 +684,77 @@ def calc_rolling_vals(rawnav,
     
     return(rawnav_add)
     
+def calc_ad_decomp(nonstop,stop, summary):
+    """
+    Parameters
+    ----------
+    nonstop: pd.DataFrame, decomposition of non-stop area
+    stop: pd.DataFrame, decomposition of stop area
+    summary: pd.DataFrame, segment summary
+    Returns
+    -------
+    ad_method_total: pd.DataFrame, decomposition function
+    Notes
+    -----
+    Input to other decomposition steps still performed in R.
+    """
+    ad_method_stop_by_run = (
+        stop
+        .groupby(['filename','index_run_start','seg_name_id','stop_area_phase'])
+        .agg({'secs_marg' : ['sum']})
+        .pipe(ll.reset_col_names)
+        .rename({'secs_marg_sum':'secs'})
+        .pivot_table(
+            index = ['filename','index_run_start','seg_name_id'],
+            columns = ['stop_area_phase'],
+            values = ['secs_marg_sum']
+        )
+       .pipe(ll.reset_col_names)
+    )
+        
+    # TODO: make sure between is captured
+    ad_method_nonstop_by_run = (
+        nonstop
+        .filter(items = ['filename',
+                         'index_run_start',
+                         'seg_name_id',
+                         'segment_part',
+                         'subsegment_min_sec',
+                         'subsegment_delay_sec']
+        )
+        .pivot_table(
+            index = ['filename','index_run_start','seg_name_id'],
+            values = ['subsegment_min_sec','subsegment_delay_sec'],
+            columns = ['segment_part']
+        )
+        .pipe(ll.reset_col_names)
+    )
+        
+    ad_method_total = (
+        ad_method_stop_by_run
+        .merge(
+            ad_method_nonstop_by_run,
+            on = ['filename','index_run_start','seg_name_id'],
+            how = 'left'
+        )
+        .fillna(0)
+        .set_index(['filename','index_run_start','seg_name_id'])
+        .assign(secs_total = lambda x: x.sum(axis=1))
+        .reset_index()
+        .merge(
+            summary,
+            on = ['filename','index_run_start','seg_name_id'],
+            how = "left"
+            )
+        .assign(total_diff = lambda x: x.trip_dur_sec_segment - x.secs_total)
+    )
     
+    # These can be different because segment_summary is calculated slightly differently from this
+    # Seg summary end point vlaues are the max of odom_ft for the point nearest to the end of the segment 
+    # but here the segment ends at the last and the odom_ft_next for the previous spot
+    wrong_secs_cases = (
+        ad_method_total
+        .loc[ad_method_total.total_diff != 0]
+    )
+
+    return(ad_method_total)
