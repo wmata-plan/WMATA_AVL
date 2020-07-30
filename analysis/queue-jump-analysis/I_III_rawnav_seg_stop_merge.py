@@ -127,7 +127,7 @@ xwalk_seg_pattern = (xwalk_seg_pattern_stop.drop('stop_id', 1)
 
 # 3. load shapes
 # Segments
-# Note unique identifier seg_name_id
+# Note unique identifier seg_name_id. Other fields are optional
 # Note that these are not yet updated to reflect the extension of the 11th street segment 
 # further south to give the stop more breathing room.
 segments = (
@@ -172,6 +172,7 @@ for analysis_route in analysis_routes:
             continue
         else:
    
+            # Reload Data
             rawnav_summary_dat = wr.read_cleaned_rawnav(
                 analysis_routes_ = analysis_route,
                 analysis_days_ = analysis_day,
@@ -226,47 +227,13 @@ for analysis_route in analysis_routes:
                 pq.write_to_dataset(
                     table = pa.Table.from_pandas(summary_run_segment),
                     root_path = path_seg_summary,
-                    partition_cols = ['route','wday','seg_name_id'])
+                    partition_cols = ['route','wday','seg_name_id']
+                )
                 
                 pq.write_to_dataset(
                     table = pa.Table.from_pandas(index_run_segment_start_end),
                     root_path = path_seg_index,
-                    partition_cols = ['route','wday','seg_name_id'])
+                    partition_cols = ['route','wday','seg_name_id']
+                )
                 
 
-                         
-# 3.2 Rawnav-Stop Zone Merge ########################
-
-# Essentially, repeat the above steps or those for the schedule merge, but for stop zones. Stop
-#   zones here defined as a number of feet upstream and a number of feet downstream from a QJ stop.
-#   May want to change language, as I think Burak wasn't keen on it. 
-
-# Likely would build on 
-#   nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat to avoid rework. Because a stop
-#   may be in multiple segments and we may eventually want to define multiple segments for a given
-#   route during testing, we can't add a new column in the rawnav data that says 'stop zone' or 
-#   anything. 
-
-# A function wr.parent_merge_rawnav_stop_zone() would include an
-#   argument for the number of feet upstream and downstream from a stop.
-
-# An input would be a segment-pattern-stop crosswalk. Some segments will have 
-#   several stops (Columbia/Irving), some stops will have multiple routes, etc. Note that we 
-#   wouldn't want to bother with calculating these zones for every stop, but only QJ stops in our segments.
-#   Eventually we might want to write the function such that it incorporates first or last stops,
-#   but I doubt it. Another input would be the rawnav ping nearest to each stop you made earlier.
-#   The 150 feet up and 150 down would be measured from this point.
-    
-# Similar to above, we'd then return two dataframes
-    # 1. index of stop zone start-end and nearest rawnav point for each run (index_stop_zone_start_end)
-        #   results in two rows per run per applicable stop zone, one observation for start, one for end
-    # 2. segment-run summary table (summary_stop_zone)
-        #    one row per run per applicable segment, information on start and end observation and time, dist., etc.
-
-# Segments are drawn to end 300 feet up from next stop, but we may at some point want to chekc that
-#   the next downstream stop's zone doesn't extend back into our evaluation segment.
-
-
-# 3.3 Rawnav-Intersection Merge ######################## 
-
-# To follow, time permitting.
