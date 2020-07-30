@@ -105,10 +105,10 @@ xwalk_seg_pattern_stop_in = wr.tribble(
                  "H3",             "EAST",     "irving_fifteenth_sixteenth",    2368,
                  "H4",             "EAST",     "irving_fifteenth_sixteenth",    2368,
                  "H8",             "EAST",     "irving_fifteenth_sixteenth",    2368,
-                "W47",             "EAST",     "irving_fifteenth_sixteenth",    2368
-                 # "64",            "NORTH",                    "nh_3rd_test",   17329, #4th street
-                 # "64",            "NORTH",                    "nh_3rd_test",   25370, #3rd street
-                 # "G8",             "EAST",                 "ri_lincoln_test",  26282
+                "W47",             "EAST",     "irving_fifteenth_sixteenth",    2368,
+                   "64",            "NORTH",                    "nh_3rd_test",   17329, #4th street
+                   "64",            "NORTH",                    "nh_3rd_test",   25370, #3rd street
+                   "G8",             "EAST",                 "ri_lincoln_test",  26282
   )
 
 xwalk_wmata_route_dir_pattern = (
@@ -141,7 +141,7 @@ segments = (
 )
     
 # 3 Filter Out Runs that Appear Problematic
-###########################################\
+###########################################
 nonstopzone_freeflow_list = []
 freeflow_list = []
 basic_decomp_list = []
@@ -251,9 +251,13 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
            rawnav_fil_stop_area_decomp,
            segment_ff_val
        )
-       .assign(seg_name_id = seg)
+       .merge(
+           segment_summary,
+           on = ['filename','index_run_start'],
+           how = "left"
+       )
     )
-    
+    # For the sake of having a nicer output, we'll join in segment summary data
     traveltime_decomp_list.append(traveltime_decomp)
     
     # Run Alternative Decomposition Support Functions
@@ -306,6 +310,7 @@ traveltime_decomp = (
 # Quick dump of values
 #####################
 # TODO: improve path / save behavior
+
 freeflow.to_csv(os.path.join(path_stop_area_dump,"freeflow.csv"))
 
 nonstopzone_freeflow.to_csv(os.path.join(path_stop_area_dump,"nonstopzone_ff.csv"))
@@ -313,19 +318,3 @@ nonstopzone_freeflow.to_csv(os.path.join(path_stop_area_dump,"nonstopzone_ff.csv
 basic_decomp.to_csv(os.path.join(path_stop_area_dump,"basic_decomp.csv"))
 
 traveltime_decomp.to_csv(os.path.join(path_stop_area_dump,"traveltime_decomp.csv"))
-
-# Calculate t_stop2
-####################################################################################################
-
-# TODO: write the wr.calc_tstop2s() function
-
-
-# 3 Travel Time decomposition
-####################################################################################################
-
-# Here, we would call a wr.decompose_traveltime() function. I imagine this would take as input
-
-# TODO: write the wr.decompose_traveltime() function
- 
-
-
