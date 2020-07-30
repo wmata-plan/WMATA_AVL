@@ -121,7 +121,6 @@ xwalk_seg_pattern_stop = (xwalk_seg_pattern_stop_in
 
 del xwalk_seg_pattern_stop_in
 
-# 2. load segment-pattern crosswalk (could be loaded separately or summarized from above)
 xwalk_seg_pattern = (xwalk_seg_pattern_stop.drop('stop_id', 1)
                      .drop_duplicates())
 
@@ -192,27 +191,20 @@ for analysis_route in analysis_routes:
                 crs='EPSG:4326').\
                 to_crs(epsg=wmata_crs)
     
-            # Iterate on over Pattern-Segments Combinations
+            # Iterate on over Pattern-Segments Combinations Applicable to Route
             xwalk_seg_pattern_subset = xwalk_seg_pattern.query('route == @analysis_route')
                         
             for seg in xwalk_seg_pattern_subset.seg_name_id.unique():
                 print('Processing segment {} ...'.format(seg))
-                
-                # Subset segment shapes to current segment and add route identifier
-                seg_pattern_shape = (
-                    segments
-                    .loc[segments.seg_name_id == seg]
-                    .merge(xwalk_seg_pattern_subset,
-                           on = ['seg_name_id'],
-                           how = "left")
-                )
-                
-                # TODO: should we actually partition by seg_name_id and then wday? 
+
+                # We pass the rawnav data and summary tables, check against a segment,
+                # and use the patterns_by_seg to indicate which patterns should be examined
                 index_run_segment_start_end, summary_run_segment = (
                     wr.merge_rawnav_segment(
                         rawnav_gdf_=rawnav_qjump_gdf,
                         rawnav_sum_dat_=rawnav_summary_dat,
-                        target_=seg_pattern_shape
+                        target_=segments.loc[segments.seg_name_id == seg],
+                        patterns_by_seg_=xwalk_seg_pattern_subset.loc[xwalk_seg_pattern_subset.seg_name_id == seg]
                     )
                 )
                 # Note that because seg_pattern_first_last is defined for route and pattern,

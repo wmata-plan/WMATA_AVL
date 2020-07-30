@@ -12,24 +12,23 @@ import pyarrow.parquet as pq
 
 def merge_rawnav_segment(rawnav_gdf_, 
                          rawnav_sum_dat_,
-                         target_):
+                         target_,
+                         patterns_by_seg_):
     """
     Parameters
     ----------
     rawnav_gdf_: gpd.GeoDataFrame, rawnav data
     rawnav_sum_dat_: pd.DataFrame, rawnav summary data
-    target_:geopandas.geodataframe.GeoDataFrame, segments with geom for first last vertex\
+    target_:geopandas.geodataframe.GeoDataFrame, segments with geom for first last vertex
+    patterns_by_seg_: pd.DataFrame, crosswalk of route and pattern to seg_name_id
     Returns
     -------
     summary_run_segment: pd.DataFrame
         trip summary data with additional information from wmata schedule data
     index_run_segment_start_end: gpd.GeoDataFrame
     """
-    # TODO: check that target_ has route and pattern identifier 
+
     assert(len(target_) == 1), print("Function expects a segments file with one record")
-    
-    # Prepare segment shape for merge
-    seg_pattern_first_last = ll.explode_first_last(target_)
 
     # Measure original shape for later testing.
     # Note that we default to the 2248 EPSG code (unit: feet) for measurement testing, 
@@ -39,9 +38,21 @@ def merge_rawnav_segment(rawnav_gdf_,
         .to_crs(2248)
         .geometry
         .length
-        .loc[0,]
+        .iloc[0] #return a float
     )
     
+    # Subset segment shapes to current segment and add route identifier
+    seg_pattern_shape = (
+        target_
+        # Add route and pattern identifier
+        .merge(patterns_by_seg_,
+               on = ['seg_name_id'],
+               how = "left")
+    )
+    
+    # Prepare segment shape for merge    
+    seg_pattern_first_last = ll.explode_first_last(seg_pattern_shape)
+           
     # Find rawnav point nearest each segment
     index_run_segment_start_end_1 = (
         ws.merge_rawnav_target(
