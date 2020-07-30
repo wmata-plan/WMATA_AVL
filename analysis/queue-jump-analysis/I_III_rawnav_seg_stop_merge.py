@@ -135,15 +135,6 @@ segments = (
     .to_crs(wmata_crs)
 )
 
-# 2.2 Segment Reformat ########################
-# A bit of a hack for now, but we'll reformat the segments file and segments crosswalk to make a 
-# file similar in key to the wmata patterns file. Then we'll be able to reuse that function in 
-# a number of ways.
-
-seg_pattern_shape = segments.merge(xwalk_seg_pattern, on = ['seg_name_id'])
-
-seg_pattern_first_last = wr.explode_first_last(seg_pattern_shape)
-
 # 3 Merge Additional Geometry
 ####################################################################################################
 
@@ -202,18 +193,27 @@ for analysis_route in analysis_routes:
     
             # Iterate on over Pattern-Segments Combinations
             xwalk_seg_pattern_subset = xwalk_seg_pattern.query('route == @analysis_route')
-            #FIXME: This loop is running multiple times for a routes where we have 2 or more pattern. For instance
-            # it will run twice for S9 at sixteenth_u_long; once for pattern 2 and 2nd time for pattern 3. We might want
-            # to use .unique() in xwalk_seg_pattern_subset.seg_name_id in the following for loop
+                        
             for seg in xwalk_seg_pattern_subset.seg_name_id.unique():
                 print('Processing segment {} ...'.format(seg))
-
+                
+                # Subset segment shapes to current segment and add route identifier
+                seg_pattern_shape = (
+                    segments
+                    .loc[segments.seg_name_id == seg]
+                    .merge(xwalk_seg_pattern_subset,
+                           on = ['seg_name_id'],
+                           how = "left")
+                )
+                
                 # TODO: should we actually partition by seg_name_id and then wday? 
-                index_run_segment_start_end, summary_run_segment = \
+                index_run_segment_start_end, summary_run_segment = (
                     wr.merge_rawnav_segment(
                         rawnav_gdf_=rawnav_qjump_gdf,
                         rawnav_sum_dat_=rawnav_summary_dat,
-                        target_=seg_pattern_first_last.query('seg_name_id == @seg and route == @analysis_route'))
+                        target_=seg_pattern_shape
+                    )
+                )
                 # Note that because seg_pattern_first_last is defined for route and pattern,
                 # our summary will implicitly drop any runs that are on 'wrong' pattern(s) for 
                 # a route. 
