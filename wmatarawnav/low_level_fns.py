@@ -48,7 +48,13 @@ def explode_first_last(gdf):
      
     # Not especially pythonic, but preserves dtypes nicely relative to itertuples and esp. iterrows
     for i in range(0,len(gdf)):
-        justone = gdf.loc[[i],:]
+
+        justone = gdf.iloc[i,:]
+        
+        # There are issues if only one segment is passed
+        if (isinstance(justone,pd.Series)):
+            justone = justone.to_frame().transpose()
+            justone = gpd.GeoDataFrame(justone, crs = gdf.crs, geometry = "geometry")
     
         first_point = Point(list(justone['geometry'].iloc[0].coords)[0])
         last_point = Point(list(justone['geometry'].iloc[0].coords)[-1])
@@ -66,8 +72,8 @@ def explode_first_last(gdf):
         line_first_last_list.append(first_row)
         line_first_last_list.append(last_row)
     
-    line_first_last = gpd.GeoDataFrame( pd.concat( line_first_last_list, ignore_index=True, axis = 0),
-                                       crs = line_first_last_list[0].crs)
+    line_first_last = gpd.GeoDataFrame(pd.concat( line_first_last_list, ignore_index=True, axis = 0),
+                                       crs = gdf.crs)
     
     return(line_first_last)
 
