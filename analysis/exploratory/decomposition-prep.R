@@ -221,3 +221,114 @@ combine_basic_chart <- function(case,seg){
   
   return(combined_basic_chart)
 }
+
+decomp_stack <- 
+  function(decomp){
+    # set cols
+    ltblue = "#A6CEE3"
+    dkblue = "#1F78B4"
+    ltgrn = "#B2DF8A"
+    dkgrn = "#33A02C"
+    ltred = "#FB9A99"
+    dkred = "#E31A1C"
+    ltorg = "#FDBF6F"
+    dkorg = "#FF7F00"  
+    # browser()
+    # data check
+    chartdata <-
+      decomp %>%
+      select(
+        busrun,
+        seg_name_id,
+        ts_approach_min,
+        tr_approach_delay,
+        tr_init_wait,
+        tr_stop1,
+        tr_stop,
+        tr_signal_wait,
+        ts_accel_min,
+        tr_accel_delay,
+        ts_nostop_min,
+        tr_nostop_delay
+      ) %>%
+      pivot_longer(
+        names_to = "decomp_state",
+        values_to = "secs",
+        cols = ts_approach_min:tr_nostop_delay
+      ) %>%
+      mutate(secs = round(secs,0),
+             decomp_state = 
+               factor(decomp_state,
+                      levels = c("ts_approach_min",
+                                 "tr_approach_delay",
+                                 "tr_init_wait",
+                                 "tr_stop1",
+                                 "tr_stop",
+                                 "tr_signal_wait",
+                                 "ts_accel_min",
+                                 "tr_accel_delay",
+                                 "ts_nostop_min",
+                                 "tr_nostop_delay")
+               ),
+             source = if_else(decomp_state %in% c("ts_approach_min",
+                                                  "ts_accel_min",
+                                                  "ts_nostop_min"),
+                              "Segment-level",
+                              "Run-level")
+      ) 
+    
+    # make cahrt
+    ggplot(chartdata,
+           aes(x = busrun,
+               y = secs, 
+               group = busrun, 
+               fill = decomp_state,
+               color = source,
+               label = secs)) + 
+      geom_col(size = 1) + 
+      geom_label(position = position_stack(vjust = .5)) +
+      scale_fill_manual(
+        values = c(
+          "ts_approach_min" = dkred,
+          "tr_approach_delay" = ltred,
+          "tr_init_wait" = ltblue, 
+          "tr_stop1" = dkblue,
+          "tr_stop" = dkblue,
+          "tr_signal_wait" = ltorg,
+          "ts_accel_min" = dkgrn,
+          "tr_accel_delay" = ltgrn,
+          "ts_nostop_min" = dkred,
+          "tr_nostop_delay" = ltred
+        )
+      ) + 
+      scale_color_manual(
+        values = c("Segment-level" = "black",
+                   "Run-level" = "#6a3d9a" )
+      ) +
+      guides(color = guide_legend(reverse = TRUE)) +
+      labs(y = "Seconds")
+    
+  }
+
+doublecheck <- function(case, seg){
+  
+  dc <- 
+    stop_pass_decomp_4 %>%
+    filter(busrun == case, seg_name_id == seg) %>%
+    decomp_stack()
+  
+  combined_basic <- combine_basic_chart(case, seg)
+  
+  nonstoparea_subseg_table <- 
+    rawnav_nonstop_area %>%
+    filter(busrun == case, seg_name_id == seg) %>%
+    mutate(segment_part = str_replace_all(segment_part,
+                                          c("after_stop_area" = "After Stop Area",
+                                            "before_stop_area" = "Before Stop Area"))) %>%
+    select(-busrun, -seg_name_id) %>%
+    gridExtra::tableGrob()
+  
+  bigplot <-
+    ((combined_basic | dc) / nonstoparea_subseg_table) +
+    plot_annotation(glue::glue("{seg}: Results for run {case}"))
+}

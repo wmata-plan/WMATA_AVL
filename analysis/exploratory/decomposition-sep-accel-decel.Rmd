@@ -15,357 +15,181 @@ This notebook illustrates a possible decomposition of travel time focused on sep
 We load the same data as the decomposition early-look notebook.
 ```{r message=FALSE, warning=FALSE}
 source("./decomposition-prep.R")
+source("./decomposition-sep-accel-decel-calcs.R")
+
+tt_decomp <-
+  read_csv(file = file.path(path_data,
+                            "traveltime_decomp.csv")) %>%
+  select(-X1, -index)
+```
+
+In both cases, let's filter out cases where t_traffic seems too long, then ensure both have same values. Not clear why the number of cases differs -- will have to look at our funnel a bit more closely.
+```{r}
+tt_decomp_fil <-
+  tt_decomp %>%
+  filter(t_traffic < 500) %>%
+  unite(busrun, filename, index_run_start) %>%
+  semi_join(stop_pass_decomp_4, by = c("busrun", "seg_name_id"))
+  
+ad_decomp_fil <-
+  stop_pass_decomp_4 %>%
+  semi_join(tt_decomp_fil, by = c("busrun", "seg_name_id")) %>%
+  mutate_if(is.numeric, ~ replace_na(., 0)) %>%
+  group_by(seg_name_id) %>%
+  mutate(
+    avg_approach_delay = mean(ts_approach_min + tr_approach_delay, na.rm = TRUE),
+    avg_accel_delay = mean(ts_accel_min + tr_accel_delay, na.rm = TRUE),
+  ) %>%
+  mutate(
+    t_qj_related =
+      subsegment_delay_sec_after_stop_area +
+      tr_accel_delay,
+    t_ad_decomp_secs_total =
+      tot_secs_check +
+      subsegment_min_sec_after_stop_area +
+      subsegment_min_sec_before_stop_area +
+      subsegment_delay_sec_after_stop_area +
+      subsegment_delay_sec_before_stop_area
+  )
 
 ```
 
-## Decomposition
-
-We continue with a decomposition based on the inputs thus far. For now, we dump this code in, will break out components and discuss later.
-
-
+Create a comparison df
 ```{r}
-calc_phase_delay <- function(rawnav_stop_area,
-                             phase = "t_accel_phase",
-                             name = "accel"){
-  
-  #TODO: if in the 'no stop' case, maybe run 95th percentile for all trips
-  # and then difference this.
-  
-  speed_1 <-
-    rawnav_stop_area %>%
-    filter(stop_area_phase %in% phase) %>%
-    group_by(busrun, seg_name_id) %>%
-    summarize("tot_{name}_secs" := sum(secs_marg, na.rm = TRUE),
-              "tot_{name}_odom_ft" := sum(odom_ft_marg, na.rm = TRUE)) %>%
-    ungroup() %>%
-    # to be safe, we set any fps values of NaN or Inf to NA -- probably a case where 
-    # the stop zone is defined too tightly and we get weird cases with inf speed
-    mutate("{name}_fps" := 
-             .data[[glue::glue("tot_{name}_odom_ft")]] 
-           / na_if(.data[[glue("tot_{name}_secs")]],0)) 
-  
-  speed_1_distr <-
-    speed_1 %>%
-    group_by(seg_name_id) %>%
-    summarize(distr = list(quantile(.data[[glue::glue("{name}_fps")]], 
-                                    probs = c(.02,.05,.1,.25,.5,.75,.9,.95,.98),
-                                    na.rm = TRUE))) 
-  
-  low_speed_to_join <- 
-    speed_1_distr %>%
-    unnest_longer(col = distr,
-                  values_to = glue::glue("{name}_fps"),
-                  indices_to  = "ntile") %>%
-    filter(ntile == "95%") %>%
-    select(seg_name_id, 
-           "low_{name}_fps" := .data[[glue::glue("{name}_fps")]])
-  
-  speed_2 <-
-    speed_1 %>%
-    left_join(low_speed_to_join, by = "seg_name_id") %>%
-    mutate("min_{name}_secs" := .data[[glue::glue("tot_{name}_odom_ft")]] / .data[[glue::glue("low_{name}_fps")]],
-           "addl_{name}_secs" := .data[[glue::glue("tot_{name}_secs")]] - .data[[glue::glue("min_{name}_secs")]]) %>%
-    select(busrun, seg_name_id,glue::glue("min_{name}_secs"), glue::glue("addl_{name}_secs"))
-  
-}
-
-# No stop phase -------
-no_stop_time <- calc_phase_delay(rawnav_stop_area,
-                               "t_nostopnopax",
-                               "nostopnopax")
-
-# Decel Phase -----
-decel_time <- calc_phase_delay(rawnav_stop_area,
-                               "t_decel_phase",
-                               "decel")
-
-# Accel Phase -----
-accel_time <- calc_phase_delay(rawnav_stop_area,
-                                 "t_accel_phase",
-                                 "accel")
-
-# bring it all together ----
-stop_pass_decomp_1 <- 
-  rawnav_stop_area %>%
-  group_by(busrun, seg_name_id, stop_area_phase) %>%
-  summarize(tot_secs = sum(secs_marg, na.rm = TRUE)) %>%
-  ungroup() %>%
-  pivot_wider(names_from = "stop_area_phase", values_from = "tot_secs") %>%
-  rowwise() %>%
-  mutate(tot_secs =
-           sum(
-           t_decel_phase, 
-           t_l_initial,
-           t_stop1,
-           t_stop,
-           t_l_addl,
-           t_accel_phase,
-           t_nostopnopax,
-           na.rm = TRUE
-           )) %>%
-  ungroup() %>%
-  select(busrun,
-         seg_name_id,
-         t_decel_phase,
-         t_l_initial,
-         t_stop1,
-         t_stop,
-         t_l_addl,
-         t_accel_phase,
-         t_nostopnopax,
-         tot_secs)
-
-stop_pass_decomp_2 <-
-  stop_pass_decomp_1 %>%
-  left_join(no_stop_time, by = c("busrun","seg_name_id")) %>%
-  left_join(decel_time,   by = c("busrun","seg_name_id")) %>%
-  left_join(accel_time,   by = c("busrun","seg_name_id")) 
-
-stop_pass_decomp_3 <-
-  stop_pass_decomp_2 %>%
-  mutate(ts_approach_min = min_decel_secs,
-         tr_approach_delay = addl_decel_secs,
-         tr_init_wait = t_l_initial,
-         tr_stop = t_stop,
-         tr_stop1 = t_stop1,
-         tr_signal_wait = t_l_addl,
-         ts_accel_min = min_accel_secs,
-         tr_accel_delay = addl_accel_secs,
-         ts_nostop_min = min_nostopnopax_secs,
-         tr_nostop_delay = addl_nostopnopax_secs
-         ) %>%
-  rowwise() %>%
-  mutate(tot_secs_check = 
-           sum(
-             ts_approach_min, 
-             tr_approach_delay,
-             tr_init_wait,
-             tr_stop1,
-             tr_stop,
-             tr_signal_wait,
-             ts_accel_min,
-             tr_accel_delay,
-             ts_nostop_min,
-             tr_nostop_delay,
-             na.rm = TRUE)
+compare_df <-
+  tt_decomp_fil %>%
+  select(
+    busrun,
+    seg_name_id,
+    route,
+    wday,
+    start_date_time,
+    t_stop1,
+    t_ff,
+    t_stop2,
+    t_stop1,
+    t_traffic,
+    secs_seg_total
   ) %>%
-  ungroup() %>%
-  mutate(
-    tot_secs_check = round(tot_secs_check),
-    checksout = tot_secs == tot_secs_check
-    )
- 
-rawnav_nonstop_area_wide <-
-  rawnav_nonstop_area %>%
-  pivot_wider(id_cols = busrun:seg_name_id,
-              names_from = segment_part,
-              values_from = subsegment_min_sec:subsegment_delay_sec)
+  left_join(
+    {select(ad_decomp_fil,
+           busrun,
+           seg_name_id,
+           ts_approach_min:subsegment_delay_sec_before_stop_area,
+           t_qj_related) %>%
+     select(-ts_nostop_min,
+            -tr_nostop_delay,
+            -checksout)
+    },
+    by = c("busrun","seg_name_id"),
+    suffix = c("_tt","_ad")
+  )
 
-stop_pass_decomp_4 <- 
-  stop_pass_decomp_3 %>%
-  left_join(rawnav_nonstop_area_wide, by = c("busrun","seg_name_id"))
+```
 
-
-# Test that the 
-testthat::test_that("check sum matches for everything",{
-  # TODO: go fix
-  doesnt_checkout <-
-    stop_pass_decomp_4 %>%
-    filter(!checksout)
+First, let's check that t_stop1 is same in both cases
+```{r}
+testthat::test_that("tstop1 matches",{
+  test_bad_t_stop1 <-
+    compare_df %>%
+    mutate(t_stop1_check = t_stop1 == tr_stop1) %>%
+    filter(!t_stop1_check)
   
-  testthat::expect_true(nrow(doesnt_checkout) == 0)
+  testthat::expect_equal(nrow(test_bad_t_stop1),0)
+})
+
+testthat::test_that("sum matches",{
+  test_total <-
+    compare_df %>%
+    mutate(total_diff = secs_seg_total - 
+             (tot_secs_check + 
+              subsegment_min_sec_after_stop_area +
+              subsegment_min_sec_before_stop_area +
+              subsegment_delay_sec_after_stop_area +
+              subsegment_delay_sec_before_stop_area)) %>%
+    filter(total_diff != 0)
 })
 
 ```
 
-
-# Create Charts
+It looks like for a range of t_qj_rlated valeus, there's a wide range of traffic related values. For instance, at 100 seconds of t_qj_delay, we can get as much as 300 seconds of t_traffic. Before we dive in, we'll look at a few other instances. Notably, both have some below-zero values. It also appears that differences may be smaller over longer segments as the effect of areas outside the segment dwarf the differences near the stop area.
 ```{r}
-decomp_stack <- 
-  function(decomp){
-  # set cols
-    ltblue = "#A6CEE3"
-    dkblue = "#1F78B4"
-    ltgrn = "#B2DF8A"
-    dkgrn = "#33A02C"
-    ltred = "#FB9A99"
-    dkred = "#E31A1C"
-    ltorg = "#FDBF6F"
-    dkorg = "#FF7F00"  
-    # browser()
-  # data check
-  chartdata <-
-    decomp %>%
-    select(
-      busrun,
-      seg_name_id,
-      ts_approach_min,
-      tr_approach_delay,
-      tr_init_wait,
-      tr_stop1,
-      tr_stop,
-      tr_signal_wait,
-      ts_accel_min,
-      tr_accel_delay,
-      ts_nostop_min,
-      tr_nostop_delay
-    ) %>%
-    pivot_longer(
-      names_to = "decomp_state",
-      values_to = "secs",
-      cols = ts_approach_min:tr_nostop_delay
-    ) %>%
-    mutate(secs = round(secs,0),
-           decomp_state = 
-             factor(decomp_state,
-                    levels = c("ts_approach_min",
-                               "tr_approach_delay",
-                               "tr_init_wait",
-                               "tr_stop1",
-                               "tr_stop",
-                               "tr_signal_wait",
-                               "ts_accel_min",
-                               "tr_accel_delay",
-                               "ts_nostop_min",
-                               "tr_nostop_delay")
-                    ),
-           source = if_else(decomp_state %in% c("ts_approach_min",
-                                                "ts_accel_min",
-                                                "ts_nostop_min"),
-                            "Segment-level",
-                            "Run-level")
-    ) 
+gg <- compare_df %>%
+  plotly::highlight_key(., ~busrun) %>%
+  ggplot(., aes(x = t_qj_related,
+                y = t_traffic)) +
+  geom_point() 
 
-  # make cahrt
-    ggplot(chartdata,
-           aes(x = busrun,
-               y = secs, 
-               group = busrun, 
-               fill = decomp_state,
-               color = source,
-               label = secs)) + 
-      geom_col(size = 1) + 
-      geom_label(position = position_stack(vjust = .5)) +
-      scale_fill_manual(
-        values = c(
-        "ts_approach_min" = dkred,
-        "tr_approach_delay" = ltred,
-        "tr_init_wait" = ltblue, 
-        "tr_stop1" = dkblue,
-        "tr_stop" = dkblue,
-        "tr_signal_wait" = ltorg,
-        "ts_accel_min" = dkgrn,
-        "tr_accel_delay" = ltgrn,
-        "ts_nostop_min" = dkred,
-        "tr_nostop_delay" = ltred
-        )
-      ) + 
-      scale_color_manual(
-        values = c("Segment-level" = "black",
-                   "Run-level" = "#6a3d9a" )
-      ) +
-      guides(color = guide_legend(reverse = TRUE)) +
-      labs(y = "Seconds")
-    
-  }
+# gg %>% ggplotly()
 
-doublecheck <- function(case, seg){
+gg
+```
+In general though, they're pretty similar. R2 is nearly 90%
+```{r}
+cor(compare_df$t_qj_related, compare_df$t_traffic)
+```
 
-  dc <- 
-    stop_pass_decomp_4 %>%
-    filter(busrun == case, seg_name_id == seg) %>%
-    decomp_stack()
-  
-  combined_basic <- combine_basic_chart(case, seg)
-  
-  nonstoparea_subseg_table <- 
-    rawnav_nonstop_area %>%
-    filter(busrun == case, seg_name_id == seg) %>%
-    mutate(segment_part = str_replace_all(segment_part,
-                                          c("after_stop_area" = "After Stop Area",
-                                            "before_stop_area" = "Before Stop Area"))) %>%
-    select(-busrun, -seg_name_id) %>%
-    gridExtra::tableGrob()
-  
-  bigplot <-
-    ((combined_basic | dc) / nonstoparea_subseg_table) +
-    plot_annotation(glue::glue("{seg}: Results for run {case}"))
-}
 
-# DEBUG SPEED STUFF
-# case <- "rawnav03235191030.txt_26551"
-# case <- "rawnav03259191029.txt_28005"
-# case <- "rawnav03232191024.txt_9587"
-# 
+Looking by segment, nothing immediately jumps out, but the markers for irving_fifteenth_sixteenth obscure the others somewhat.
+```{r}
+gg2 <- compare_df %>%
+  plotly::highlight_key(., ~busrun) %>%
+  ggplot(., aes(x = t_qj_related,
+                y = t_traffic, 
+                color = seg_name_id)) +
+  geom_point(
+         alpha = .2,
+         shape = 21,
+         fill = NA
+  ) 
 
-stop_pass_decomp_4 %>%
-  filter(busrun == "rawnav03232191024.txt_9587") %>%
-  filter(seg_name_id == first(seg_name_id)) %>%
-  decomp_stack()
+gg2
+```
 
+What if we filter to weekday PM peak?
+
+```{r}
+compare_df_pmpeak <-
+  compare_df %>%
+  filter(!(wday %in% c("Saturday","Sunday")), 
+         lubridate::hour(start_date_time) >= 16, 
+         lubridate::hour(start_date_time) < 17)
+
+gg3 <- compare_df_pmpeak %>%
+  plotly::highlight_key(., ~busrun) %>%
+  ggplot(., aes(x = t_qj_related,
+                y = t_traffic, 
+                color = seg_name_id)) +
+  geom_point(
+         alpha = .2,
+         shape = 21,
+         fill = NA
+  ) 
+
+gg3
+```
+
+Let's look at a few particular cases before we dive into an explanation. Here's one that has about 154 secs related to queue jump under a/d version, but 303 seconds of t_traffic. A big diff seems to be the 71 seconds delay before arriving at a stop (subsegment_delay_sec_before_stop_area). That still leaves about 80 seconds of delay in t_traffic not captured in the a/d version.
+
+Notably, the minimum time in the stop area in the a/d approach is 8.74 + 11 seconds, or about 20 seconds. t_stop2 is assumed as 14 seconds, so an addition 6 seconds there goes to t_traffic. 
+
+One could also say the t_init_wait isn't covered in a/d appraoch, but that's zero here. 
+
+```{r}
+compare_df %>%
+  filter(busrun == "rawnav06466191024.txt_14003") %>% 
+  base::t()
 
 ```
 
 ```{r}
-checkme <- 
-  stop_pass_decomp_4 %>%
-  filter(busrun == "rawnav03215191019.txt_11241") %>%
-  filter(seg_name_id == first(seg_name_id)) 
-
-doublecheck("rawnav02833191007.txt_1494", "irving_fifteenth_sixteenth")
-
+x <- doublecheck("rawnav06466191024.txt_14003", "sixteenth_u_long")
 ```
 
 
-# Export Charts
-```{r}
-frame <-
-  rawnav_stop_area %>%
-  distinct(busrun, seg_name_id) %>%
-  sample_n(size = 500) %>%
-  mutate(
-    busrunshow = str_replace(busrun, '\\.txt', 'txt'),
-    filename = glue::glue("{seg_name_id}_{busrunshow}.png"),
-    plot = pmap(list(busrun, seg_name_id),
-                doublecheck)
-  )
 
-height = 8
-asp = 1.2
+This additional time could be a few things:
+- upstream delay from a stop
+- delay opening doors before serving passengers
 
-frame %>%
-  select(filename,
-         plot) %>%
-  pwalk(.,
-        ggsave,
-        path = file.path(path_project,'data','01-interim','images'),
-        width = height * asp,
-        height = height,
-        units = "in",
-        scale = .9,
-        dpi = 300)
-```
-
-```{r}
-stop_pass_decomp_4 %>%
-  select(
-      busrun,
-      seg_name_id,
-      ts_approach_min,
-      tr_approach_delay,
-      tr_init_wait,
-      tr_stop1,
-      tr_stop,
-      tr_signal_wait,
-      ts_accel_min,
-      tr_accel_delay,
-      ts_nostop_min,
-      tr_nostop_delay,
-      subsegment_min_sec_before_stop_area,
-      subsegment_delay_sec_before_stop_area,
-      subsegment_min_sec_after_stop_area,
-      subsegment_delay_sec_after_stop_area
-    ) %>%
-  write_csv(.,file.path(path_data,'acceldecel_decomp_byrun.csv'),na = "")
-```
-
+Note that the fact that t_traffic values are higher are 'offset' in one way -- t_accel_delay is likely lower than the difference in 
