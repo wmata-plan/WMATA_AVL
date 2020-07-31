@@ -28,11 +28,13 @@ def decompose_segment_ff(rawnav,
     on smaller chunks of data.
     """
 
+    # Even though we lose last three points inside segment, this way we don't pick up points outside
+    # This filter-calculate order appears opposite elsewhere, but is appropriate there.
     rawnav_fil = filter_to_segment(rawnav,
                                    segment_summary)
     
     rawnav_fil = calc_rolling_vals(rawnav)
-    
+           
     freeflow_seg = (
         rawnav_fil
         .loc[lambda x: x.fps_next3 < max_fps, 'fps_next3']
@@ -84,17 +86,18 @@ def decompose_traveltime(
 
     rawnav_fil_seg = filter_to_segment(rawnav_fil_seg,
                                        segment_summary)
-    
+
     totals = (
         rawnav_fil_seg
         .groupby(['filename','index_run_start'])
-        .agg({"secs_marg": ['sum'],
-              "odom_ft_marg" : ['sum']})
+        .agg({"odom_ft": [lambda x: max(x) - min(x)],
+              "sec_past_st" : [lambda x: max(x) - min(x)]})
         .reset_index()
+        .pipe(ll.reset_col_names)
+        .rename(columns = {'odom_ft_<lambda>': 'odom_ft_seg_total',
+                           'sec_past_st_<lambda>':'secs_seg_total'})
     )
     
-    totals.columns = ["_".join(x) for x in totals.columns.ravel()]
-
     # Join it all
     travel_time_decomp = (
         t_stop1_by_run
@@ -108,15 +111,13 @@ def decompose_traveltime(
         )
         .assign(
             ff_fps = lambda x, y = segment_ff_seg: y,
-            t_ff = lambda x: x.odom_ft_marg_sum / x.ff_fps,
+            t_ff = lambda x: x.odom_ft_seg_total / x.ff_fps,
             t_stop2 = 14 # hardcoded for now
         )
         .fillna(0) #seems a little careless
         .assign(
-            t_traffic = lambda x: x.secs_marg_sum - x.t_ff - x.t_stop2 - x.t_stop1 - x.t_stop
+            t_traffic = lambda x: x.secs_seg_total - x.t_ff - x.t_stop2 - x.t_stop1 - x.t_stop
         )
-        .rename(columns = {'secs_marg_sum' : 'secs_seg_total',
-                           'odom_ft_marg_sum' : 'odom_ft_seg_total'})
         .drop(columns = ['ff_fps'])
     )
 
@@ -147,26 +148,11 @@ def decompose_nonstoparea_ff(rawnav,
 
     # Filter to the segment
     
-    rawnav_fil_seg = calc_rolling_vals(rawnav_fil_seg)
+    rawnav = calc_rolling_vals(rawnav)
 
-    rawnav_fil_seg = filter_to_segment(rawnav,
+    rawnav_fil = filter_to_segment(rawnav,
                                        segment_summary)
     
-    rawnav_fil = (
-        rawnav
-        .merge(segment_summary[["filename",
-                                "index_run_start",
-                                "start_odom_ft_segment",
-                                "end_odom_ft_segment"]],
-               on = ["filename","index_run_start"],
-               how = "right")
-        .pipe(calc_rolling_vals)
-        # we do <= because the segment summary 
-        .query('odom_ft >= start_odom_ft_segment & odom_ft <= end_odom_ft_segment') 
-        .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
-    )
-
-
     # filter to portions of segment
     rawnav_fil_2 = (
         rawnav_fil
@@ -179,15 +165,19 @@ def decompose_nonstoparea_ff(rawnav,
     )
 
     # NOTE: now have two cases of each record if there are two stops in a segment
-    # We will take care of these in a moment
-    breakpoint()
-    rawnav_fil_4 = (
+    # We will take care of these in a moment. 
+    rawnav_fil_3 = (
         rawnav_fil_2
         .assign(
             upstream_ft = stop_area_upstream_ft,
             downstream_ft = stop_area_downstream_ft,
+            # although we have two equals signs below, this helps us deal with cases where
+            # the bus comes to a stop (has no marginal odometer distance) but several pings
+            # with increasing timestamps. We'll drop the last timestamp at the location
+            # before calculating speed and travel time, such that the interval is again
+            # left-closed, right-open.
             segment_part = lambda x: 
-                np.where(x.odom_ft < (x.odom_ft_qj_stop - x.upstream_ft),
+                np.where(x.odom_ft <= (x.odom_ft_qj_stop - x.upstream_ft),
                          'before_stop_area',
                          np.where(x.odom_ft >= (x.odom_ft_qj_stop + x.downstream_ft),
                                   'after_stop_area',
@@ -203,17 +193,16 @@ def decompose_nonstoparea_ff(rawnav,
     # groups or something) but for now it's superfluous.
 
     rawnav_between = (
-        rawnav_fil_4
+        rawnav_fil_3
         .loc[
-            rawnav_fil_4
+            rawnav_fil_3
             .duplicated(['filename','index_run_start','index_loc'],
                         keep = False)
         ]
         .groupby(['filename','index_run_start','index_loc'])
         .agg({'segment_part': ['nunique']})
+        .pipe(ll.reset_col_names)
     )
-    
-    rawnav_between = ll.reset_col_names(rawnav_between)
     
     rawnav_between = (
         rawnav_between
@@ -222,8 +211,8 @@ def decompose_nonstoparea_ff(rawnav,
         .filter(items = ['filename','index_run_start','index_loc','segment_part_upd'])
     )
     
-    rawnav_fil_5 = (
-        rawnav_fil_4
+    rawnav_fil_4 = (
+        rawnav_fil_3
         .merge(
             rawnav_between,
             on = ['filename','index_run_start','index_loc'],
@@ -239,7 +228,7 @@ def decompose_nonstoparea_ff(rawnav,
     )
         
     nonstoparea_ff_seg = (
-        rawnav_fil_5
+        rawnav_fil_4
         .loc[lambda x, y = max_fps: x.fps_next3 < y]
         .groupby(['segment_part'])["fps_next3"]
         .quantile([0.01, 0.05, 0.10, 0.15, 0.25, 0.5, 0.75, 0.85, 0.90, 0.95, 0.99])
@@ -253,26 +242,31 @@ def decompose_nonstoparea_ff(rawnav,
     #we use the 'next' value so we don't lose the increment of time and distance between 
     # the end of the pre-stop area and the start of the stop area (and vice versa for after stop)
     decomp_nonstoparea = (
-        rawnav_fil_5
+        rawnav_fil_4
+        .groupby(['filename','index_run_start'], as_index = False)
+        # drop the last record, since we're about to sum the marginal values. 
+        .apply(lambda x: x.iloc[:-1])
         .groupby(['filename','index_run_start','segment_part'])
-        .agg({'odom_ft' : ['min'],
-              'odom_ft_next': ['max'], 
-              'sec_past_st' : ['min'],
-              'sec_past_st_next' : ['max']})
+        .agg({'odom_ft_marg' : ['sum'], 
+              'secs_marg' : ['sum'],
+              'odom_ft': ['min','max'], #note that max not quite accurate, as we dropped last record
+              'sec_past_st' :['min','max']})
+        .pipe(ll.reset_col_names)
+        .rename(columns = {'odom_ft_marg_sum':'subsegment_ft',
+                           'secs_marg_sum':'subsegment_secs'})
     )
-    
-    decomp_nonstoparea = ll.reset_col_names(decomp_nonstoparea)
-    
+       
     decomp_nonstoparea = (
         decomp_nonstoparea
-        .assign(subsegment_ft = lambda x: x.odom_ft_next_max - x.odom_ft_min,
-                subsegment_secs = lambda x: x.sec_past_st_next_max - x.sec_past_st_min)
         .merge(
             nonstoparea_ff_seg,
             on = ['segment_part'],
-            how = 'left')
-        .assign(subsegment_min_sec = lambda x: x.subsegment_ft / x.fps_ff,
-                subsegment_delay_sec = lambda x: x.subsegment_secs - x.subsegment_min_sec)
+            how = 'left'
+        )
+        .assign(
+            subsegment_min_sec = lambda x: x.subsegment_ft / x.fps_ff,
+            subsegment_delay_sec = lambda x: x.subsegment_secs - x.subsegment_min_sec
+        )
     )
         
     return(decomp_nonstoparea)
@@ -341,7 +335,7 @@ def decompose_stop_area(rawnav,
 
     rawnav_fil_stop_area_1 = (
         rawnav_fil
-        .query('odom_ft >= (odom_ft_qj_stop - @stop_area_upstream_ft) & odom_ft < (odom_ft_qj_stop + @stop_area_downstream_ft)')
+        .query('odom_ft >= (odom_ft_qj_stop - @stop_area_upstream_ft) & odom_ft <= (odom_ft_qj_stop + @stop_area_downstream_ft)')
         .reset_index()
     )
     
@@ -645,13 +639,13 @@ def filter_to_segment(rawnav,
                                 "end_odom_ft_segment"]],
                on = ["filename","index_run_start"],
                how = "right")        
-        .query('odom_ft >= start_odom_ft_segment & odom_ft < end_odom_ft_segment')
+        .query('odom_ft >= start_odom_ft_segment & odom_ft <= end_odom_ft_segment')
         .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
     )
     
     return(rawnav_seg_fil)
     
-# TODO: drop grouping functionality
+
 def calc_rolling_vals(rawnav,
                       groupvars = ['filename','index_run_start']):
     """
@@ -711,16 +705,20 @@ def calc_ad_decomp(nonstop,stop, summary):
     -----
     Input to other decomposition steps still performed in R.
     """
+
     ad_method_stop_by_run = (
         stop
+        .groupby(['filename','index_run_start','seg_name_id'], as_index = False)
+        # drop the last record, since we're about to sum the marginal values. 
+        .apply(lambda x: x.iloc[:-1])
         .groupby(['filename','index_run_start','seg_name_id','stop_area_phase'])
         .agg({'secs_marg' : ['sum']})
         .pipe(ll.reset_col_names)
-        .rename({'secs_marg_sum':'secs'})
+        .rename(columns = {'secs_marg_sum':'secs'})
         .pivot_table(
             index = ['filename','index_run_start','seg_name_id'],
             columns = ['stop_area_phase'],
-            values = ['secs_marg_sum']
+            values = ['secs']
         )
        .pipe(ll.reset_col_names)
     )
@@ -742,6 +740,12 @@ def calc_ad_decomp(nonstop,stop, summary):
         )
         .pipe(ll.reset_col_names)
     )
+    
+    # Again, a quick solution for segments where this is not an issue
+    # Assume that in the minimum value is not present, delay will not be either
+    if ('subsegment_min_sec_between_stop_area' not in ad_method_nonstop_by_run.columns):
+        ad_method_nonstop_by_run= ad_method_nonstop_by_run.assign(subsegment_min_sec_between_stop_area = 0,
+                                                                  subsegment_delay_sec_between_stop_area = 0)
         
     ad_method_total = (
         ad_method_stop_by_run
