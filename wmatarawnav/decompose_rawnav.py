@@ -151,7 +151,7 @@ def decompose_nonstoparea_ff(rawnav,
     rawnav = calc_rolling_vals(rawnav)
 
     rawnav_fil = filter_to_segment(rawnav,
-                                       segment_summary)
+                                   segment_summary)
     
     # filter to portions of segment
     rawnav_fil_2 = (
@@ -166,6 +166,7 @@ def decompose_nonstoparea_ff(rawnav,
 
     # NOTE: now have two cases of each record if there are two stops in a segment
     # We will take care of these in a moment. 
+
     rawnav_fil_3 = (
         rawnav_fil_2
         .assign(
@@ -263,7 +264,7 @@ def decompose_nonstoparea_ff(rawnav,
         .agg({'odom_ft_marg' : ['sum'], 
               'secs_marg' : ['sum'],
               'odom_ft': ['min','max'], #note that max not quite accurate, as we dropped last record
-              'sec_past_st' :['min','max']})
+              'sec_past_st' :['min','max']}) # we create these records just to support some debuggin later5
         .pipe(ll.reset_col_names)
         .rename(columns = {'odom_ft_marg_sum':'subsegment_ft',
                            'secs_marg_sum':'subsegment_secs'})
@@ -449,18 +450,13 @@ def decompose_stop_area(rawnav,
         .groupby(['filename','index_run_start','stop_id','veh_state_moving'])
         .agg({"veh_state_changes" : ['min','max']})
         .reset_index()
-    )
-    # TODO: make this a function already, auto-clean up the trailing "_"
-    veh_stop_cases.columns = ["_".join(x) for x in veh_stop_cases.columns.ravel()]
-    
-    veh_stop_cases = (
-        veh_stop_cases 
+        .pipe(ll.reset_col_names)
         .rename(columns = {"filename_" : "filename",
                           "index_run_start_": "index_run_start",
                           "stop_id_":"stop_id",
                           "veh_state_changes_min": "veh_stopped_min",
                           "veh_state_changes_max": "veh_stopped_max"})
-        .drop(columns = ['veh_state_moving_'])
+        .drop(columns = ['veh_state_moving'])
     )
     
     # There will be nans remaining here from cases where bus did not stop or did not pick up 
