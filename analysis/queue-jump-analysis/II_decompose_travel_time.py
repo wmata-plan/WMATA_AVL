@@ -146,6 +146,7 @@ nonstopzone_freeflow_list = []
 freeflow_list = []
 basic_decomp_list = []
 traveltime_decomp_list = []
+ad_method_list = []
 
 # Set up folder to dump results to
 # TODO: improve path / save behavior
@@ -231,8 +232,8 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     # Calculate Stop-Area Decomposition
     rawnav_fil_stop_area_decomp = (
         wr.decompose_stop_area(rawnav_dat,
-                               segment_summary,
-                               stop_index_fil)
+                                segment_summary,
+                                stop_index_fil)
         .assign(seg_name_id = seg)
     )
     
@@ -243,21 +244,21 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
         .loc[0.95]
         .loc["fps_next3"]
     )
-    
-    traveltime_decomp = (
-       wr.decompose_traveltime(
-           rawnav_dat,
-           segment_summary,
-           rawnav_fil_stop_area_decomp,
-           segment_ff_val
-       )
-       .merge(
-           segment_summary,
-           on = ['filename','index_run_start'],
-           how = "left"
-       )
-    )
+
     # For the sake of having a nicer output, we'll join in segment summary data
+    traveltime_decomp = (
+        wr.decompose_traveltime(
+            rawnav_dat,
+            segment_summary,
+            rawnav_fil_stop_area_decomp,
+            segment_ff_val
+        )
+        .merge(
+            segment_summary,
+            on = ['filename','index_run_start'],
+            how = "left"
+        )
+    )
     traveltime_decomp_list.append(traveltime_decomp)
     
     # Run Alternative Decomposition Support Functions
@@ -281,8 +282,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
                                         rawnav_fil_stop_area_decomp,
                                         segment_summary)
     
-    breakpoint()
-    
+    ad_method_list.append(ad_method_total)    
     print('hi')
     #ENDS HERE
     
@@ -307,6 +307,11 @@ traveltime_decomp = (
     .reset_index()
 )
 
+ad_method_decomp = (
+    pd.concat(ad_method_list)
+    .reset_index()
+)
+
 # Quick dump of values
 #####################
 # TODO: improve path / save behavior
@@ -318,3 +323,5 @@ nonstopzone_freeflow.to_csv(os.path.join(path_stop_area_dump,"nonstopzone_ff.csv
 basic_decomp.to_csv(os.path.join(path_stop_area_dump,"basic_decomp.csv"))
 
 traveltime_decomp.to_csv(os.path.join(path_stop_area_dump,"traveltime_decomp.csv"))
+
+ad_method_decomp.to_csv(os.path.join(path_stop_area_dump,"ad_method_decomp.csv"))
