@@ -231,7 +231,7 @@ def remove_runs_with_too_long_odom(summary_table,
     summary_table = (
         summary_table
         .loc[
-                (summary_table.trip_dist_mi_odom_and_segment < ((seg_length_ + threshold_ft)/5280)) |
+                (summary_table.trip_dist_mi_odom_and_segment < ((seg_length_ + threshold_ft)/5280)) &
                 (summary_table.trip_dist_mi_odom_and_segment > ((seg_length_ - threshold_ft)/5280))
             ]
     )
@@ -240,7 +240,7 @@ def remove_runs_with_too_long_odom(summary_table,
     row_diff = row_before - row_after
     if (row_diff > 0):
         print(
-            'deleted {} rows from {} runs from summary table where run length not within {} ft of segment length {} ft'
+            'deleted {} runs from {} runs in summary table where run length not within {} ft of segment length {} ft'
             .format(row_diff, row_before, threshold_ft, round(seg_length_))
         )
     
