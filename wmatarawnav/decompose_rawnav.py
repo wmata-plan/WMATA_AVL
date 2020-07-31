@@ -183,6 +183,19 @@ def decompose_nonstoparea_ff(rawnav,
                                   'after_stop_area',
                                   'stop_area')
                          )
+        # to ensure that when we filter out the stop area we don't lose the time between the last stop
+          # area ping and the first after_stop_area ping, we cheat and put
+          # the last stop_area ping into after_stop_area. This could've been avoided if we used
+          # a separate stop area merge and not the +/- 150 ft trick around the stop ping, for 
+          # various reasons.
+        ) 
+        .assign(segment_part = lambda x: np.where((x.segment_part == "stop_area")
+                                          & (x
+                                          .groupby(['filename','index_run_start','stop_id'])['segment_part']
+                                          .shift(-1) == "after_stop_area"),
+                                          "after_stop_area",
+                                          x.segment_part
+                                          ) 
         )
         .query('(segment_part == "before_stop_area") | (segment_part == "after_stop_area")')
     )
@@ -630,7 +643,10 @@ def filter_to_segment(rawnav,
     
     # Note that our segment_summary is already filtered to patterns that are in the correct 
     # direction for our segments. This join then filters our rawnav data to those relevant 
-    # runs.
+    # runs. 
+    # Note also that this includes the last value at end_odom_ft_segment (<=), rather than
+    # being right closed. This improves the ease of certain min/max calculations, but note that
+    # the last marginal value of speeds or odometer values should be discarded before summing.
     rawnav_seg_fil = (
         rawnav
         .merge(summary[["filename",
