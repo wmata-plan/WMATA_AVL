@@ -65,7 +65,26 @@ rawnav_stop_area_raw <-
                     stop_area_phase = col_character()
                   ))
 
-
+ad_decomp <-
+  read_csv(file = file.path(path_data,
+                            "ad_method_decomp.csv"),
+           col_types = 
+             cols(
+               .default = col_double(),
+               filename = col_character(),
+               seg_name_id = col_character(),
+               fullpath = col_character(),
+               route = col_character(),
+               route_pattern = col_character(),
+               file_id = col_character(),
+               taglist = col_character(),
+               start_date_time = col_datetime(format = ""),
+               end_date_time = col_datetime(format = ""),
+               run_duration_from_tags = col_character(),
+               wday = col_character(),
+               secs_t_stop = col_number()
+             )) %>%
+  filter(!(seg_name_id %in% c("georgia_irving","nh_3rd_test")))
   
 
 # some light calculation of fields and filtering

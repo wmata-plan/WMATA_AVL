@@ -1,5 +1,5 @@
 ---
-title: "WMATA Queue Jump Effectiveness: Decomposition Using Separate Accel/Decel, Min+Delay Method"
+title: "WMATA Queue Jump Effectiveness: Decomposition Method Comparison"
 output: 
   html_notebook:
     toc: true
@@ -10,26 +10,28 @@ output:
     theme: simplex
 ---
 
-This notebook illustrates a possible decomposition of travel time focused on separate accel/decel speeds to illustrate the minimum and maximum of each.
 
-We load the same data as the decomposition early-look notebook.
-```{r message=FALSE, warning=FALSE}
+
+```{r message=FALSE, warning=FALSE, echo = FALSE}
 source("./decomposition-prep.R")
 source("./decomposition-sep-accel-decel-calcs.R")
+source("./decomposition-compare-df.R")
 
-tt_decomp <-
-  read_csv(file = file.path(path_data,
-                            "traveltime_decomp.csv")) %>%
-  select(-X1, -index)
 ```
 
-In both cases, let's filter out cases where t_traffic seems too long, then ensure both have same values. Not clear why the number of cases differs -- will have to look at our funnel a bit more closely.
-```{r}
+We'll look at two methods:
+* Traveltime Decomposition (what was presented at methodology workshop with 14 second placeholder for t_stop2)
+* Alternative Decomposition (method that breaks down accel/decel phases and in-stop-area/out-of-stop-area separately, referred to as the A/D method)
+
+In both cases, let's filter out cases where segment runtimes are over 500 seconds, then pick cases where the two have segment second totals that are the same (within 2 seconds, given rounding that occurs in some places that can be removed later). A few issues would still need to be addressed if the alternative decomposition is used that haven't been implemented for now -- namely, segments with multiple stops are more complicated and a chunk of R code would need to be updated/replaced in Python to produce accurate values for some runs (especially on Irving at 15th/16th). The runs that are shown have accurate values that can be compared across methods.
+
+Behind the scenes we'll load data and combine the results of the tables together.
+```{r, echo = FALSE}
 tt_decomp_fil <-
   tt_decomp %>%
-  filter(t_traffic < 500) %>%
+  filter(secs_seg_total < 500) %>%
   unite(busrun, filename, index_run_start) %>%
-  semi_join(stop_pass_decomp_4, by = c("busrun", "seg_name_id"))
+  semi_join(compare_df, by = c("busrun", "seg_name_id"))
   
 ad_decomp_fil <-
   stop_pass_decomp_4 %>%
@@ -49,14 +51,20 @@ ad_decomp_fil <-
       subsegment_min_sec_after_stop_area +
       subsegment_min_sec_before_stop_area +
       subsegment_delay_sec_after_stop_area +
-      subsegment_delay_sec_before_stop_area
+      subsegment_delay_sec_before_stop_area,
+    t_seg_ad_reclac = tot_secs_check + 
+              subsegment_min_sec_after_stop_area +
+              subsegment_min_sec_before_stop_area +
+              subsegment_min_sec_between_stop_area +
+              subsegment_delay_sec_between_stop_area +
+              subsegment_delay_sec_after_stop_area +
+              subsegment_delay_sec_before_stop_area
   )
 
 ```
 
-Create a comparison df
-```{r}
-compare_df <-
+```{r, echo = FALSE}
+compare_fil <-
   tt_decomp_fil %>%
   select(
     busrun,
@@ -64,10 +72,10 @@ compare_df <-
     route,
     wday,
     start_date_time,
+    t_stop,
     t_stop1,
-    t_ff,
     t_stop2,
-    t_stop1,
+    t_ff,
     t_traffic,
     secs_seg_total
   ) %>%
@@ -76,63 +84,59 @@ compare_df <-
            busrun,
            seg_name_id,
            ts_approach_min:subsegment_delay_sec_before_stop_area,
-           t_qj_related) %>%
+           t_qj_related,
+           t_seg_ad_reclac) %>%
      select(-ts_nostop_min,
             -tr_nostop_delay,
             -checksout)
     },
     by = c("busrun","seg_name_id"),
     suffix = c("_tt","_ad")
-  )
+  ) %>%
+  mutate(total_check = secs_seg_total - t_seg_ad_reclac) %>%
+  filter(abs(total_check) < 2)
 
 ```
 
 First, let's check that t_stop1 is same in both cases
-```{r}
+```{r, echo = FALSE}
 testthat::test_that("tstop1 matches",{
   test_bad_t_stop1 <-
-    compare_df %>%
+    compare_fil %>%
     mutate(t_stop1_check = t_stop1 == tr_stop1) %>%
     filter(!t_stop1_check)
   
   testthat::expect_equal(nrow(test_bad_t_stop1),0)
 })
 
-testthat::test_that("sum matches",{
-  test_total <-
-    compare_df %>%
-    mutate(total_diff = secs_seg_total - 
-             (tot_secs_check + 
-              subsegment_min_sec_after_stop_area +
-              subsegment_min_sec_before_stop_area +
-              subsegment_delay_sec_after_stop_area +
-              subsegment_delay_sec_before_stop_area)) %>%
-    filter(total_diff != 0)
-})
-
 ```
 
-It looks like for a range of t_qj_rlated valeus, there's a wide range of traffic related values. For instance, at 100 seconds of t_qj_delay, we can get as much as 300 seconds of t_traffic. Before we dive in, we'll look at a few other instances. Notably, both have some below-zero values. It also appears that differences may be smaller over longer segments as the effect of areas outside the segment dwarf the differences near the stop area.
+WE'll compare the two results on two values
+
+* t_traffic: From the proposed decomposition.
+* t_qj_related: From the alternative decomposition, a shorthand for acceleration delay in the stop area and delay in the remainder of the segment after the stop. The presence of a QJ might plausibly be related to this time.
+
+It looks like for a range of t_qj_related values, there's a wide range of traffic related values. For instance, at 100 seconds of t_qj_delay, we can get as much as 300 seconds of t_traffic. Before we dive in, we'll look at a few other instances. Notably, both have some below-zero values. It also appears that differences may be smaller over longer segments as the effect of areas outside the segment dwarf the differences near the stop area.
 ```{r}
-gg <- compare_df %>%
+gg <- compare_fil %>%
   plotly::highlight_key(., ~busrun) %>%
   ggplot(., aes(x = t_qj_related,
                 y = t_traffic)) +
   geom_point() 
 
-# gg %>% ggplotly()
-
-gg
+gg %>% ggplotly()
+# 
+# gg
 ```
-In general though, they're pretty similar. R2 is nearly 90%
+In general though, they're pretty similar. R2 is about 85%
 ```{r}
-cor(compare_df$t_qj_related, compare_df$t_traffic)
+cor(compare_fil$t_qj_related, compare_fil$t_traffic)
 ```
 
+Looking by segment, nothing immediately jumps out. Note that a few segments have been dropped because there are some remaining issues with the decomposition in these segments where total segment runtime doesn't exactly match because of updates that must be made to the alternative decomposition.
 
-Looking by segment, nothing immediately jumps out, but the markers for irving_fifteenth_sixteenth obscure the others somewhat.
 ```{r}
-gg2 <- compare_df %>%
+gg2 <- compare_fil %>%
   plotly::highlight_key(., ~busrun) %>%
   ggplot(., aes(x = t_qj_related,
                 y = t_traffic, 
@@ -146,22 +150,22 @@ gg2 <- compare_df %>%
 gg2
 ```
 
-What if we filter to weekday PM peak?
+What if we filter to weekday PM peak? We still see a bit of a distribution
 
 ```{r}
-compare_df_pmpeak <-
-  compare_df %>%
+compare_fil_pmpeak <-
+  compare_fil %>%
   filter(!(wday %in% c("Saturday","Sunday")), 
          lubridate::hour(start_date_time) >= 16, 
          lubridate::hour(start_date_time) < 17)
 
-gg3 <- compare_df_pmpeak %>%
+gg3 <- compare_fil_pmpeak %>%
   plotly::highlight_key(., ~busrun) %>%
   ggplot(., aes(x = t_qj_related,
                 y = t_traffic, 
                 color = seg_name_id)) +
   geom_point(
-         alpha = .2,
+         alpha = .4,
          shape = 21,
          fill = NA
   ) 
@@ -169,27 +173,64 @@ gg3 <- compare_df_pmpeak %>%
 gg3
 ```
 
-Let's look at a few particular cases before we dive into an explanation. Here's one that has about 154 secs related to queue jump under a/d version, but 303 seconds of t_traffic. A big diff seems to be the 71 seconds delay before arriving at a stop (subsegment_delay_sec_before_stop_area). That still leaves about 80 seconds of delay in t_traffic not captured in the a/d version.
-
-Notably, the minimum time in the stop area in the a/d approach is 8.74 + 11 seconds, or about 20 seconds. t_stop2 is assumed as 14 seconds, so an addition 6 seconds there goes to t_traffic. 
-
-One could also say the t_init_wait isn't covered in a/d appraoch, but that's zero here. 
+Let's look at a few particular cases before we dive into an explanation. Here's one that has about 97 secs related to queue jump under the A/D version, but 180 seconds of t_traffic. A big difference seems to be the 58 seconds of delay in the stop zone before reaching the stop ('tr_approach_delay'). THat gets us most of the way there. 
 
 ```{r}
-compare_df %>%
-  filter(busrun == "rawnav06466191024.txt_14003") %>% 
+case_run = "rawnav06455191013.txt_8278"
+case_seg = "sixteenth_u_long"
+
+compare_fil %>%
+  filter(busrun == "rawnav06455191013.txt_8278") %>% 
   base::t()
 
 ```
 
 ```{r}
-x <- doublecheck("rawnav06466191024.txt_14003", "sixteenth_u_long")
+x <- doublecheck(case_run, case_seg)
+x
+```
+
+What about one with a small difference? 
+
+There's 126 seconds of QJ related delay here via the A/D method, versus about 135 seconds of t_traffic delay. Notably, there's far less delay before the stop. In this way, the two line up well.
+
+```{r}
+case_run = "rawnav06467191019.txt_10039"
+case_seg = "sixteenth_u_long"
+
+compare_fil %>%
+  filter(busrun == case_run) %>% 
+  base::t()
+
+```
+
+```{r}
+x <- doublecheck(case_run, case_seg)
+x
+```
+
+What about a case with very little delay addressed by the queue jump and lots of traffic delay? 
+
+Here, there's 13 seconds of delay associated with acceleration or downstream delay, vs about 187 seconds of t_traffic delay.
+
+```{r}
+case_run = "rawnav06027191014.txt_2752"
+case_seg = "sixteenth_u_shrt"
+
+compare_fil %>%
+  filter(busrun == case_run) %>% 
+  base::t()
+
+```
+
+Here, the big difference is associated with signal delay, or some bus behavior that looks like that. That value is reflected in t_traffic but not in the combination of acceleration delay and downstream delay referred to as t_qj_related.
+```{r}
+x <- doublecheck(case_run, case_seg)
+x
 ```
 
 
-
-This additional time could be a few things:
-- upstream delay from a stop
-- delay opening doors before serving passengers
-
-Note that the fact that t_traffic values are higher are 'offset' in one way -- t_accel_delay is likely lower than the difference in 
+```{r}
+compare_fil %>%
+  write_csv("compare_methods_by_run.csv")
+```
