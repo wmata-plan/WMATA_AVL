@@ -53,11 +53,17 @@ def decompose_traveltime(
         rawnav_fil_stop_area_decomp
         # .loc[lambda x: x.stop_area_phase == "t_stop1"]
         .groupby(['filename','index_run_start','stop_area_phase'])
-        .agg({"secs_marg" : ['sum']})
+        .agg({"secs_marg" : ['sum'],
+              "odom_ft_qj_stop":["first"],
+              "start_date_time" : ["first"]})
         .reset_index()
     )
     
     basic_decomp_agg.columns = ["_".join(x) for x in basic_decomp_agg.columns.ravel()]
+    basic_decomp_agg.rename(
+        columns = {"odom_ft_qj_stop_first":"odom_ft_qj_stop",
+                   "start_date_time_first":"start_date_time"},
+        inplace = True)
     
     t_stop1_by_run = (
         basic_decomp_agg
@@ -89,7 +95,8 @@ def decompose_traveltime(
         t_stop1_by_run
         .merge((totals
                 .rename(columns = {"filename_" : "filename",
-                                   "index_run_start_" : "index_run_start"})
+                                   "index_run_start_" : "index_run_start",
+                                   "secs_marg_sum" : "t_segment"})
                 ),
                on = ['filename','index_run_start'],
                how = "left"
@@ -101,11 +108,21 @@ def decompose_traveltime(
         )
         .fillna(0) #seems a little carless
         .assign(
-            t_traffic = lambda x: x.t_ff - x.t_stop2 - x.t_stop1
+            t_traffic = lambda x: x.t_segment - x.t_ff - x.t_stop2 - x.t_stop1
         )
         # .drop(columns = ['secs_marg_sum','odom_ft_marg_sum','ff_fps'])
     )
-
+    
+    travel_time_decomp = (
+        travel_time_decomp
+        .merge(rawnav
+               .filter(items = ['filename','index_run_start','odom_ft','sec_past_st'])
+               .rename(columns = {"sec_past_st":"sec_past_st_qj_stop"}),
+               left_on = ['filename','index_run_start','odom_ft_qj_stop'],
+               right_on = ['filename','index_run_start','odom_ft'],
+               how = 'left')
+        .drop(columns=['odom_ft'])
+    )
     return(travel_time_decomp)
     
 
