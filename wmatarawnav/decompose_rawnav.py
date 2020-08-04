@@ -80,6 +80,7 @@ def decompose_traveltime(
     # we just readd column if it's automatically dropped for lack of values
     if ('t_stop' not in t_stop1_by_run.columns):
         t_stop1_by_run= t_stop1_by_run.assign(t_stop = 0)
+    
         
     # calc total secs
     rawnav_fil_seg = calc_rolling_vals(rawnav)
@@ -311,7 +312,10 @@ def decompose_stop_area(rawnav,
     rawnav_stop_area
     """
 
-    # TODO: parameter checks
+    # TODO: add to parameter checks
+    assert(len(rawnav) > 0), print("Halting, no stops provided in rawnav data")
+    assert(len(segment_summary) > 0), print("Halting, no stops provided in segment_summary")
+    assert(len(stop_index_fil) > 0), print("Halting, no stops provided in stop_index_fil")
 
     rawnav_fil_1 = filter_to_segment(rawnav,
                                      segment_summary)
@@ -449,7 +453,6 @@ def decompose_stop_area(rawnav,
         .loc[(~rawnav_fil_stop_area_3.veh_state_moving & rawnav_fil_stop_area_3.fps_next.notnull())]
         .groupby(['filename','index_run_start','stop_id','veh_state_moving'])
         .agg({"veh_state_changes" : ['min','max']})
-        .reset_index()
         .pipe(ll.reset_col_names)
         .rename(columns = {"filename_" : "filename",
                           "index_run_start_": "index_run_start",
