@@ -234,3 +234,22 @@ x
 compare_fil %>%
   write_csv("compare_methods_by_run.csv")
 ```
+
+This case appears to illustrate that some acceleration delay is in fact signal delay, given the long time before acceleration 'really' begins.
+
+```{r}
+case_run = "rawnav02801191018.txt_7426"
+case_seg = "sixteenth_u_shrt"
+
+compare_fil %>%
+  filter(busrun == case_run) %>% 
+  base::t()
+
+
+```
+
+```{r}
+x <- doublecheck(case_run, case_seg)
+x
+```
+
