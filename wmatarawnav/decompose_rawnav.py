@@ -51,23 +51,22 @@ def decompose_traveltime(
         rawnav_fil_stop_area_decomp,
         segment_ff_seg
     ):
-
+    # TODO: incorporate free flow directly into this parent function
     basic_decomp_agg = (
         rawnav_fil_stop_area_decomp
         # Note that we drop stop_id grouping here, since this method just needs us to sum t_stop1s
         .groupby(['filename','index_run_start','stop_area_phase'])
-        .agg({"secs_marg" : ['sum']})
-        .reset_index()
+        .agg({"secs_marg" : ['sum'],
+              "sec_past_st": ['min','max'], # need to incorporate
+              "odom_ft": ['min','max'],
+              "fps_next3" : ['first','last']})
+        .pipe(ll.reset_col_names)
     )
     
-    basic_decomp_agg.columns = ["_".join(x) for x in basic_decomp_agg.columns.ravel()]
-
     t_stop1_by_run = (
         basic_decomp_agg
-        .loc[lambda x: x.stop_area_phase_.isin(["t_stop1","t_stop"])]
-        .rename(columns = {"filename_" : "filename",
-                           "index_run_start_" : "index_run_start",
-                           "stop_area_phase_" : "stop_area_phase"})
+        .loc[lambda x: x.stop_area_phase.isin(["t_stop1","t_stop",'t_l_initial'])]
+        .filter(items = ['filename','index_run_start','stop_area_phase','secs_marg_sum'])
         .pivot_table(
             index = ['filename','index_run_start'], 
             columns = ['stop_area_phase'], 
@@ -75,12 +74,69 @@ def decompose_traveltime(
         )
         .reset_index()
     )
-        
+    
     # Rather than expanding this in a more complicated fashion (there's no pivot_table_spec option)
     # we just readd column if it's automatically dropped for lack of values
     if ('t_stop' not in t_stop1_by_run.columns):
         t_stop1_by_run= t_stop1_by_run.assign(t_stop = 0)
+        
+    # TODO: Convert all of this to a t_stop2 function
+    # filter to cases that stopped in any fashion
+    basic_decomp_agg_fil = (
+        basic_decomp_agg[
+            basic_decomp_agg
+            .groupby(['filename','index_run_start'])['stop_area_phase']
+            .transform(lambda x: x.isin(['t_stop','t_stop1']).any())
+        ]
+    )
     
+    # Filter to higher speeds
+    # runs_to_use_for_tstop2 = (
+    #     basic_decomp_agg_fil
+    #     .loc[lambda x: x.stop_area_phase.isin(['t_decel_phase','t_accel_phase'])]
+    #     .filter(items = ['filename','index_run_start','stop_area_phase','fps_next3_first','fps_next3_last'])
+    #     .pivot_table(
+    #         index = ['filename','index_run_start'],
+    #         columns = ['stop_area_phase'],
+    #         values = ['fps_next3_first','fps_next3_last']
+    #     )
+    #     .pipe(ll.reset_col_names)
+    #     .drop(columns = ['fps_next3_first_t_accel_phase','fps_next3_last_t_decel_phase'])
+    #     .assign(
+    #         accel_p = lambda x: x.fps_next3_last_t_accel_phase.rank(pct = True),
+    #         decel_p = lambda x: x.fps_next3_first_t_decel_phase.rank(pct = True)
+    #     )
+    # )
+    
+    decacc_by_run = (
+        basic_decomp_agg_fil
+        # TODO: re-add the stopid grouping for the multistop cases 
+        .assign(fpsps_phase = lambda x: (
+            (x.fps_next3_last - x.fps_next3_first) 
+            / (x.sec_past_st_max - x.sec_past_st_min)
+            )
+        )
+        .assign(fpsps_phase = lambda x: abs(x.fpsps_phase))
+        
+    )
+    
+    t_decacc_by_seg = (
+        decacc_by_run 
+        .groupby(['stop_area_phase'])
+        .agg({'fpsps_phase' : ['mean',
+                               lambda x: x.quantile(.5),
+                               lambda x: x.quantile(.90),
+                               lambda x: x.quantile(.95)]})
+        .pipe(ll.reset_col_names)
+        .rename(columns = {"fpsps_phase_<lambda_0>" : "fpsps_phase_median",
+                           "fpsps_phase_<lambda_1>" : "fpsps_phase_p90",
+                           "fpsps_phase_<lambda_2>" : "fpsps_phase_p95"})
+        .loc[lambda x: x.stop_area_phase.isin(['t_accel_phase','t_decel_phase'])]
+        .assign(t_decacc = lambda x, ff = segment_ff_seg: abs(ff / (2 * x.fpsps_phase_median)))
+        .t_decacc
+        .to_numpy()
+        .sum()
+    ) 
         
     # calc total secs
     rawnav_fil_seg = calc_rolling_vals(rawnav)
@@ -93,7 +149,6 @@ def decompose_traveltime(
         .groupby(['filename','index_run_start'])
         .agg({"odom_ft": [lambda x: max(x) - min(x)],
               "sec_past_st" : [lambda x: max(x) - min(x)]})
-        .reset_index()
         .pipe(ll.reset_col_names)
         .rename(columns = {'odom_ft_<lambda>': 'odom_ft_seg_total',
                            'sec_past_st_<lambda>':'secs_seg_total'})
@@ -103,19 +158,24 @@ def decompose_traveltime(
     travel_time_decomp = (
         t_stop1_by_run
         .merge(
-            (totals
-             .rename(columns = {"filename_" : "filename",
-                                "index_run_start_" : "index_run_start"})
-            ),
+            totals,
             on = ['filename','index_run_start'],
             how = "left"
         )
+        .fillna(0) #seems a little careless
         .assign(
             ff_fps = lambda x, y = segment_ff_seg: y,
-            t_ff = lambda x: x.odom_ft_seg_total / x.ff_fps,
-            t_stop2 = 14 # hardcoded for now
+            t_ff = lambda x: x.odom_ft_seg_total / x.ff_fps
         )
-        .fillna(0) #seems a little careless
+        .assign(
+            t_decacc = lambda x, y = t_decacc_by_seg: y,
+            t_stop2 = lambda x: x.t_decacc + x.t_l_initial 
+        )
+        .assign(
+            t_stop2 = lambda x: np.where(((x.t_stop1 == 0) & (x.t_stop == 0)),
+                                         0,
+                                         x.t_stop2)
+        )
         .assign(
             t_traffic = lambda x: x.secs_seg_total - x.t_ff - x.t_stop2 - x.t_stop1 - x.t_stop
         )
@@ -464,6 +524,7 @@ def decompose_stop_area(rawnav,
     
     # There will be nans remaining here from cases where bus did not stop or did not pick up 
     # passengers. This is okay.
+
     rawnav_fil_stop_area_4 = (
         rawnav_fil_stop_area_3
         .merge(
@@ -780,13 +841,6 @@ def calc_ad_decomp(nonstop,stop, summary):
             )
         .assign(total_diff = lambda x: x.trip_dur_sec_segment - x.secs_total)
     )
-    
-    # These can be different because segment_summary is calculated slightly differently from this
-    # Seg summary end point vlaues are the max of odom_ft for the point nearest to the end of the segment 
-    # but here the segment ends at the last and the odom_ft_next for the previous spot
-    wrong_secs_cases = (
-        ad_method_total
-        .loc[ad_method_total.total_diff != 0]
-    )
+
 
     return(ad_method_total)
