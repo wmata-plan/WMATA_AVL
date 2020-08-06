@@ -8,7 +8,7 @@ Note: the sections here are guideposts - this may be better as several scripts
 """
 
 # 0 Housekeeping. Clear variable space
-####################################################################################################
+######################################
 from IPython import get_ipython  
 
 ipython = get_ipython()
@@ -18,28 +18,20 @@ ipython.magic("load_ext autoreload")
 ipython.magic("autoreload 2")
 
 # 1 Import Libraries and Set Global Parameters
-####################################################################################################
+##############################################
 # 1.1 Import Python Libraries
-############################################
+#############################
 from datetime import datetime
 print("Run Section 1 Import Libraries and Set Global Parameters...")
 begin_time = datetime.now()
 
-import os, sys, shutil
-
-if not sys.warnoptions:
-    import warnings
-    # warnings.simplefilter("ignore")  # Stop Pandas warnings
-
 import os, sys
-import numpy as np
 import pandas as pd
 import geopandas as gpd
-import pyarrow as pa
 import pyarrow.parquet as pq
 
 # 1.2 Set Global Parameters
-############################################
+###########################
 
 if os.getlogin() == "WylieTimmerman":
     path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL"
@@ -48,7 +40,6 @@ if os.getlogin() == "WylieTimmerman":
     path_sp = r"C:\Users\WylieTimmerman\Documents\projects_local\wmata_avl_local"
     path_source_data = os.path.join(path_sp,"data","00-raw")
     path_processed_data = os.path.join(path_sp, "data","02-processed")
-    path_segments = os.path.join(path_working,"data","02-processed")
 
 elif os.getlogin() == "abibeka":
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
@@ -56,7 +47,6 @@ elif os.getlogin() == "abibeka":
     sys.path.append(path_working)
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\WMATA-AVL\Data"
     path_processed_data = os.path.join(path_source_data, "ProcessedData")
-    path_segments = path_processed_data
 
 else:
     raise FileNotFoundError("Define the path_working, path_source_data, gtfs_dir, \
@@ -73,18 +63,18 @@ analysis_routes = q_jump_route_list
 wmata_crs = 2248
      
 # 1.3 Import User-Defined Package
-############################################
+#################################
 import wmatarawnav as wr
 
 # 1.4 Reload Relevant Files 
-############################################
-# TODO: Should we move this to a project specific folder or something? Right now I'm just recopying it
+###########################
 # 2.1. Load segment-pattern-stop crosswalk 
-# This crosswalk is used to connect segment shapes to rawnav data. The 'route' field must 
-# match the same string used in the rawnav data. 'direction' will be looked up in a moment
-# against the wmata schedule database
-# and replaced with a pattern code as an int32 value. 'seg_name_id' is also found in the segment
-# geometry file. 'stop_id' matches the stop identifier in the WMATA schedule database.
+# This crosswalk is used to connect segment shapes to rawnav data. 
+# - The 'route' field must match the same string used in the rawnav data. 
+# - 'direction' will be looked up in a moment against the WMATA schedule database and 
+#       replaced with a pattern code as an int32 value. 
+# - 'seg_name_id' is also found in the segment geometry file. 
+# - 'stop_id' matches the stop identifier in the WMATA schedule database.
 xwalk_seg_pattern_stop_in = wr.tribble(
              ['route',        'direction',                    'seg_name_id','stop_id'], 
                  "79",            "SOUTH",               "georgia_columbia",   10981, 
@@ -130,41 +120,24 @@ xwalk_seg_pattern_stop = (
 
 del xwalk_seg_pattern_stop_in
 
-# 3. load shapes
-# Segments
-# Note unique identifier seg_name_id
-# Note that these are not yet updated to reflect the extension of the 11th street segment 
-# further south to give the stop more breathing room.
-segments = (
-    gpd.read_file(os.path.join(path_segments,"segments.geojson"))
-    .to_crs(wmata_crs)
-)
-    
-# 3 Filter Out Runs that Appear Problematic
-###########################################
-nonstopzone_freeflow_list = []
+# 2. Decompose Travel Time
+##########################
+
 freeflow_list = []
-basic_decomp_list = []
+stop_area_decomp_list = []
 traveltime_decomp_list = []
-ad_method_list = []
 
 # Set up folder to dump results to
-# TODO: improve path / save behavior
-path_stop_area_dump = os.path.join(path_processed_data,"rawnav_stop_areas")
-if not os.path.isdir(path_stop_area_dump ):
-    os.mkdir(path_stop_area_dump )
+path_exports = os.path.join(path_processed_data,"exports_{}"
+                                   .format(datetime.now().strftime("%Y%m%d")))
+if not os.path.isdir(path_exports):
+    os.mkdir(path_exports)
 
 for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleventh_i_new_york"]: #list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     print('now on {}'.format(seg))
-    # 1. Read-in Data 
-    #############################
+    # 2.1. Read-in Data 
+    ###################
     # Reduce rawnav data to runs present in the summary file after filtering.
-    # Note that this file may have also been the product of a filtered rawnav_summary table
-    # One doesn't want to do a straight merge -- that has issues in that some runs will appear twice in the 
-    # segment summary file because they have multiple segments defined. This will keep them if they
-    # meet criteria for any of their segments and will not duplicate. #TODO : test this.
-    # Ideally we could shortcut this using the index, but the index for this table is a little different
-    # TODO: could use itertuples but i find that syntax really weird, frankly. SHould we change?
     
     xwalk_seg_pattern_stop_fil = xwalk_seg_pattern_stop.query('seg_name_id == @seg')
 
@@ -183,11 +156,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
                       use_pandas_metadata = True)
         .to_pandas()
     )
-    
-    # TODO: fix the segment code so this is unneccessary -- not sure why this is doing this now
-    # Update: Should be fixed, can remove later after testing to confirm
-    segment_summary = segment_summary[~segment_summary.duplicated(['filename', 'index_run_start'], keep='last')] 
-    
+       
     stop_index = (
         pq.read_table(source=os.path.join(path_processed_data,"stop_index.parquet"),
                       filters=[[('route','=',route)] for route in seg_routes],
@@ -203,12 +172,11 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
                                     'geo_description'],
                       use_pandas_metadata = True)
         .to_pandas()
-        .assign(pattern = lambda x: x.pattern.astype('int32')) #  pattern is string not int? # TODO: fix
+        # As a bit of proofing, we confirm this is int32 and not string, may remove later
+        .assign(pattern = lambda x: x.pattern.astype('int32')) 
         .rename(columns = {'odom_ft' : 'odom_ft_qj_stop'})
     ) 
     
-    # NOTE: this would be the place to filter out runs where a high number of stops don't match
-    # but we're okay with runs that we don't have complete data on
     # Filter Stop index to the relevant QJ stops
     stop_index_fil = (
         stop_index
@@ -217,9 +185,13 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
                how = 'inner')   
     )
      
-    # Run Decomposition Functions
-    ############################
-    # Calculate Free Flow Travel Time
+    # 2.2 Run Decomposition Functions
+    #################################
+    # These functions could be further nested within one another, but are kept separate to support
+    # easier review of intermediate outputs. As a result, data is in some cases filtered several times,
+    # but the overall time loss is small enough to be immaterial.
+    
+    # Calculate Free Flow Travel Time through Entire Segment
     segment_ff = (
         wr.decompose_segment_ff(rawnav_dat,
                                 segment_summary,
@@ -230,14 +202,14 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     freeflow_list.append(segment_ff)
     
     # Calculate Stop-Area Decomposition
-    rawnav_fil_stop_area_decomp = (
+    stop_area_decomp = (
         wr.decompose_stop_area(rawnav_dat,
                                 segment_summary,
                                 stop_index_fil)
         .assign(seg_name_id = seg)
     )
     
-    basic_decomp_list.append(rawnav_fil_stop_area_decomp)
+    stop_area_decomp_list.append(stop_area_decomp)
     
     segment_ff_val = (
         segment_ff
@@ -250,7 +222,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
         wr.decompose_traveltime(
             rawnav_dat,
             segment_summary,
-            rawnav_fil_stop_area_decomp,
+            stop_area_decomp,
             segment_ff_val
         )
         .merge(
@@ -260,36 +232,13 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
         )
     )
     traveltime_decomp_list.append(traveltime_decomp)
-    
-    # Run Alternative Decomposition Support Functions
-    #############################
-    # Calculate Free Flow outside Stop Area
-    # FYI: Currently, this is largely for the 'alternative' decomposition, may do 
-    # things with this later. Results are for now loaded into R where we incorporate
-    # that into the remaining decomp code.
-    nonstopzone_ff = (
-        wr.decompose_nonstoparea_ff(rawnav_dat,
-                                    segment_summary,
-                                    stop_index_fil,
-                                    max_fps = 73.3)
-        .assign(seg_name_id = seg)
-    )
-    
-    nonstopzone_freeflow_list.append(nonstopzone_ff)
-    
-    # Summarize Accel/Decel Decomp
-    ad_method_total = wr.calc_ad_decomp(nonstopzone_ff,
-                                        rawnav_fil_stop_area_decomp,
-                                        segment_summary)
-    
-    ad_method_list.append(ad_method_total)    
+  
 
-    
-nonstopzone_freeflow = (
-    pd.concat(nonstopzone_freeflow_list)
-    .reset_index()
-)
-    
+# 3. Export
+###########
+
+# 3.1 Combine results by segment into tables   
+########################################
 freeflow = (
     pd.concat(freeflow_list)
     .rename_axis('ntile')
@@ -297,7 +246,7 @@ freeflow = (
 )
 
 basic_decomp = (
-    pd.concat(basic_decomp_list)
+    pd.concat(stop_area_decomp_list)
     .reset_index() 
 )
 
@@ -306,21 +255,11 @@ traveltime_decomp = (
     .reset_index()
 )
 
-ad_method_decomp = (
-    pd.concat(ad_method_list)
-    .reset_index()
-)
+# 3.2 Export Values
+###################
 
-# Quick dump of values
-#####################
-# TODO: improve path / save behavior
+freeflow.to_csv(os.path.join(path_exports,"freeflow.csv"))
 
-freeflow.to_csv(os.path.join(path_stop_area_dump,"freeflow.csv"))
+basic_decomp.to_csv(os.path.join(path_exports,"basic_decomp.csv"))
 
-nonstopzone_freeflow.to_csv(os.path.join(path_stop_area_dump,"nonstopzone_ff.csv"))
-
-basic_decomp.to_csv(os.path.join(path_stop_area_dump,"basic_decomp.csv"))
-
-traveltime_decomp.to_csv(os.path.join(path_stop_area_dump,"traveltime_decomp.csv"))
-
-ad_method_decomp.to_csv(os.path.join(path_stop_area_dump,"ad_method_decomp.csv"))
+traveltime_decomp.to_csv(os.path.join(path_exports,"traveltime_decomp.csv"))
