@@ -128,8 +128,12 @@ stop_area_decomp_list = []
 traveltime_decomp_list = []
 
 # Set up folder to dump results to
-path_exports = os.path.join(path_processed_data,"exports_{}"
-                                   .format(datetime.now().strftime("%Y%m%d")))
+path_exports = (
+    os.path.join(
+        path_processed_data,
+        "exports_{}".format(datetime.now().strftime("%Y%m%d"))
+    )
+)
 if not os.path.isdir(path_exports):
     os.mkdir(path_exports)
 
@@ -188,8 +192,9 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     # 2.2 Run Decomposition Functions
     #################################
     # These functions could be further nested within one another, but are kept separate to support
-    # easier review of intermediate outputs. As a result, data is in some cases filtered several times,
-    # but the overall time loss is small enough to be immaterial.
+    # easier review of intermediate outputs and to allow them to be used independently if needed.
+    # As a result, data is in some cases filtered several times, but the overall time loss is 
+    # small enough to be immaterial.
     
     # Calculate Free Flow Travel Time through Entire Segment
     segment_ff = (

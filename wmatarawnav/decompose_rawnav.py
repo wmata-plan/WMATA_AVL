@@ -16,16 +16,11 @@ def decompose_segment_ff(rawnav,
     ----------
     rawnav: pd.DataFrame, rawnav data. Expect cols sec_past_st and odom_ft
     segment_summary: pd.DataFrame, defines segment start and end points
-    max_fps: np.int or np.float, defines maximum speed above which values will be discarded.
+    max_fps: np.int or np.float, defines maximum speed above which values will be converted to NA.
         By default, approx 50 mph (73.3 fps)
     Returns
     -------
-    rawnav_add: pd.DataFrame, rawnav data with additional fields.
-    Notes
-    -----
-    Because wmatarawnav functions generally leave source rawnav data untouched except 
-    just prior to the point of analysis, these calculations may be performed several times
-    on smaller chunks of data.
+    freeflow_seg: pd.DataFrame, set of freeflow speed values at various percentiles. 
     """
 
     # Even though we lose last three points inside segment, this way we don't pick up points outside
@@ -48,16 +43,30 @@ def decompose_segment_ff(rawnav,
 def decompose_traveltime(
         rawnav,
         segment_summary,
-        rawnav_fil_stop_area_decomp,
+        stop_area_decomp,
         segment_ff_seg
     ):
-    # TODO: incorporate free flow directly into this parent function
+    """
+    Parameters
+    ----------
+    rawnav: pd.DataFrame, rawnav data. Expect cols sec_past_st and odom_ft.
+    segment_summary: pd.DataFrame, defines segment start and end points
+    stop_area_decomp: pd.DataFrame, subset of ranwav data within a stop area with column
+        stop_area_phase indicating the phase of the vehicle at each stage.
+    segment_ff_seg: np.int or np.float, the freeflow speed in feet per segment
+    Returns
+    -------
+    travel_time_decomp: pd.DataFrame, decomposition of travel time in a segment. 
+    """
+    
     basic_decomp_agg = (
-        rawnav_fil_stop_area_decomp
-        # Note that we drop stop_id grouping here, since this method just needs us to sum t_stop1s
+        stop_area_decomp
+        # Note that we drop any stop_id grouping here, since this method just needs us to sum t_stop1s
         .groupby(['filename','index_run_start','stop_area_phase'])
+        # While we can sum marginal values for t_stop1, if we do so for the accel phase, we'll
+        # include a value outside of the segment. Instead, we use the min/
         .agg({"secs_marg" : ['sum'],
-              "sec_past_st": ['min','max'], # need to incorporate
+              "sec_past_st": ['min','max'], 
               "odom_ft": ['min','max'],
               "fps_next3" : ['first','last']})
         .pipe(ll.reset_col_names)
@@ -80,7 +89,7 @@ def decompose_traveltime(
     if ('t_stop' not in t_stop1_by_run.columns):
         t_stop1_by_run= t_stop1_by_run.assign(t_stop = 0)
         
-    # TODO: Convert all of this to a t_stop2 function
+    # Calculate T_stop2
     # filter to cases that stopped in any fashion
     basic_decomp_agg_fil = (
         basic_decomp_agg[
@@ -90,27 +99,13 @@ def decompose_traveltime(
         ]
     )
     
-    # Filter to higher speeds
-    # runs_to_use_for_tstop2 = (
-    #     basic_decomp_agg_fil
-    #     .loc[lambda x: x.stop_area_phase.isin(['t_decel_phase','t_accel_phase'])]
-    #     .filter(items = ['filename','index_run_start','stop_area_phase','fps_next3_first','fps_next3_last'])
-    #     .pivot_table(
-    #         index = ['filename','index_run_start'],
-    #         columns = ['stop_area_phase'],
-    #         values = ['fps_next3_first','fps_next3_last']
-    #     )
-    #     .pipe(ll.reset_col_names)
-    #     .drop(columns = ['fps_next3_first_t_accel_phase','fps_next3_last_t_decel_phase'])
-    #     .assign(
-    #         accel_p = lambda x: x.fps_next3_last_t_accel_phase.rank(pct = True),
-    #         decel_p = lambda x: x.fps_next3_first_t_decel_phase.rank(pct = True)
-    #     )
-    # )
+    # Note: One could filter to higher speed runs at this point, but the effect of using 
+    # 95th percentile values below essentially serves the same function.
     
     decacc_by_run = (
         basic_decomp_agg_fil
-        # TODO: re-add the stopid grouping for the multistop cases 
+        # TODO: If multi-stop segments are added, additional logic should be added here
+        # to ensure phases are handled properly
         .assign(fpsps_phase = lambda x: (
             (x.fps_next3_last - x.fps_next3_first) 
             / (x.sec_past_st_max - x.sec_past_st_min)
@@ -128,11 +123,13 @@ def decompose_traveltime(
                                lambda x: x.quantile(.90),
                                lambda x: x.quantile(.95)]})
         .pipe(ll.reset_col_names)
+        # Several values are calculated for proofing purposes, but only one is used
+        # for downstream calculations.
         .rename(columns = {"fpsps_phase_<lambda_0>" : "fpsps_phase_median",
                            "fpsps_phase_<lambda_1>" : "fpsps_phase_p90",
                            "fpsps_phase_<lambda_2>" : "fpsps_phase_p95"})
         .loc[lambda x: x.stop_area_phase.isin(['t_accel_phase','t_decel_phase'])]
-        .assign(t_decacc = lambda x, ff = segment_ff_seg: abs(ff / (2 * x.fpsps_phase_median)))
+        .assign(t_decacc = lambda x, ff = segment_ff_seg: abs(ff / (2 * x.fpsps_phase_p95)))
         .t_decacc
         .to_numpy()
         .sum()
@@ -154,7 +151,7 @@ def decompose_traveltime(
                            'sec_past_st_<lambda>':'secs_seg_total'})
     )
     
-    # Join it all
+    # Join inputs together and calculate
     travel_time_decomp = (
         t_stop1_by_run
         .merge(
@@ -162,7 +159,7 @@ def decompose_traveltime(
             on = ['filename','index_run_start'],
             how = "left"
         )
-        .fillna(0) #seems a little careless
+        .fillna(0) 
         .assign(
             ff_fps = lambda x, y = segment_ff_seg: y,
             t_ff = lambda x: x.odom_ft_seg_total / x.ff_fps
@@ -184,169 +181,6 @@ def decompose_traveltime(
 
     return(travel_time_decomp)
     
-
-def decompose_nonstoparea_ff(rawnav,
-                             segment_summary,
-                             stop_index_fil,
-                             stop_area_upstream_ft = 150,
-                             stop_area_downstream_ft = 150,
-                             max_fps = 73.3):
-    """
-    Parameters
-    ----------
-    rawnav: pd.DataFrame, rawnav data. Expect cols sec_past_st and odom_ft
-    segment_summary: pd.DataFrame, defines segment start and end points
-    max_fps: np.int or np.float, defines maximum speed above which values will be discarded.
-        By default, approx 50 mph (73.3 fps)
-    Returns
-    -------
-    rawnav_add: pd.DataFrame, rawnav data with additional fields.
-    Notes
-    -----
-    This supports an alternative decomposion
-
-    """
-
-    # Filter to the segment
-    
-    rawnav = calc_rolling_vals(rawnav)
-
-    rawnav_fil = filter_to_segment(rawnav,
-                                   segment_summary)
-    
-    # filter to portions of segment
-    rawnav_fil_2 = (
-        rawnav_fil
-        .merge(
-            stop_index_fil
-            .filter(items = ['filename','index_run_start','odom_ft_qj_stop','stop_id']),
-            on = ['filename','index_run_start'],
-            how = "left"
-        ) 
-    )
-
-    # NOTE: now have two cases of each record if there are two stops in a segment
-    # We will take care of these in a moment. 
-
-    rawnav_fil_3 = (
-        rawnav_fil_2
-        .assign(
-            upstream_ft = stop_area_upstream_ft,
-            downstream_ft = stop_area_downstream_ft,
-            # although we have two equals signs below, this helps us deal with cases where
-            # the bus comes to a stop (has no marginal odometer distance) but several pings
-            # with increasing timestamps. We'll drop the last timestamp at the location
-            # before calculating speed and travel time, such that the interval is again
-            # left-closed, right-open.
-            segment_part = lambda x: 
-                np.where(x.odom_ft <= (x.odom_ft_qj_stop - x.upstream_ft),
-                         'before_stop_area',
-                         np.where(x.odom_ft >= (x.odom_ft_qj_stop + x.downstream_ft),
-                                  'after_stop_area',
-                                  'stop_area')
-                         )
-        # to ensure that when we filter out the stop area we don't lose the time between the last stop
-          # area ping and the first after_stop_area ping, we cheat and put
-          # the last stop_area ping into after_stop_area. This could've been avoided if we used
-          # a separate stop area merge and not the +/- 150 ft trick around the stop ping, for 
-          # various reasons.
-        ) 
-        .assign(segment_part = lambda x: np.where((x.segment_part == "stop_area")
-                                          & (x
-                                          .groupby(['filename','index_run_start','stop_id'])['segment_part']
-                                          .shift(-1) == "after_stop_area"),
-                                          "after_stop_area",
-                                          x.segment_part
-                                          ) 
-        )
-        .query('(segment_part == "before_stop_area") | (segment_part == "after_stop_area")')
-    )
-    # In the case of multiple stops, we'll still have multiple pings in cases where an interval is 
-    # both 'before_stop_area' and 'after_stop_area' (some may have even been in multiple stop
-    # areas, but those have been removed by this point). We'll remove duplicates. For now
-    # we'll just call these "between_stop" -- there may be a fancier approach to this (creating
-    # groups or something) but for now it's superfluous.
-
-    rawnav_between = (
-        rawnav_fil_3
-        .loc[
-            rawnav_fil_3
-            .duplicated(['filename','index_run_start','index_loc'],
-                        keep = False)
-        ]
-        .groupby(['filename','index_run_start','index_loc'])
-        .agg({'segment_part': ['nunique']})
-        .pipe(ll.reset_col_names)
-    )
-    
-    rawnav_between = (
-        rawnav_between
-        .loc[rawnav_between.segment_part_nunique > 1]
-        .assign(segment_part_upd = "between_stop_area")
-        .filter(items = ['filename','index_run_start','index_loc','segment_part_upd'])
-    )
-    
-    rawnav_fil_4 = (
-        rawnav_fil_3
-        .merge(
-            rawnav_between,
-            on = ['filename','index_run_start','index_loc'],
-            how = 'left'
-        )
-        .assign(segment_part = lambda x: np.where(~x.segment_part_upd.isnull(),
-                                                  x.segment_part_upd,
-                                                  x.segment_part)
-        )
-        .loc[lambda x: ~x.duplicated(['filename','index_run_start','index_loc'],
-                                     keep = 'first')]
-        .drop(columns = ['segment_part_upd'])
-    )
-        
-    nonstoparea_ff_seg = (
-        rawnav_fil_4
-        .loc[lambda x, y = max_fps: x.fps_next3 < y]
-        .groupby(['segment_part'])["fps_next3"]
-        .quantile([0.01, 0.05, 0.10, 0.15, 0.25, 0.5, 0.75, 0.85, 0.90, 0.95, 0.99])
-        .to_frame()
-        .reset_index()
-        .loc[lambda x: x.level_1 == 0.95]
-        .drop(columns = ['level_1'])
-        .rename(columns = {'fps_next3' : 'fps_ff'})
-    )
-    
-    #we use the 'next' value so we don't lose the increment of time and distance between 
-    # the end of the pre-stop area and the start of the stop area (and vice versa for after stop)
-    decomp_nonstoparea = (
-        rawnav_fil_4
-        .groupby(['filename','index_run_start'], as_index = False)
-        # drop the last record, since we're about to sum the marginal values. 
-        .apply(lambda x: x.iloc[:-1])
-        .groupby(['filename','index_run_start','segment_part'])
-        .agg({'odom_ft_marg' : ['sum'], 
-              'secs_marg' : ['sum'],
-              'odom_ft': ['min','max'], #note that max not quite accurate, as we dropped last record
-              'sec_past_st' :['min','max']}) # we create these records just to support some debuggin later5
-        .pipe(ll.reset_col_names)
-        .rename(columns = {'odom_ft_marg_sum':'subsegment_ft',
-                           'secs_marg_sum':'subsegment_secs'})
-    )
-       
-    decomp_nonstoparea = (
-        decomp_nonstoparea
-        .merge(
-            nonstoparea_ff_seg,
-            on = ['segment_part'],
-            how = 'left'
-        )
-        .assign(
-            subsegment_min_sec = lambda x: x.subsegment_ft / x.fps_ff,
-            subsegment_delay_sec = lambda x: x.subsegment_secs - x.subsegment_min_sec
-        )
-    )
-        
-    return(decomp_nonstoparea)
-
-
 def decompose_stop_area(rawnav,
                         segment_summary,
                         stop_index_fil,
@@ -362,14 +196,11 @@ def decompose_stop_area(rawnav,
     stop_area_upstream_ft: float, number of feet upstream to define the stop area. Will not
         extend past the start of the segment even if a high value is chosen.
     stop_area_downstream_ft: float, number of feet upstream to define the stop area. Will not
-        extend past the start of the segment even if a high value is chosen.
+        extend past the end of the segment even if a high value is chosen.
     Returns
     -------
-    rawnav_fil_stop_area_decomp: pd.DataFrame, rawnav data with additional fields illustrating how 
+    stop_area_decomp: pd.DataFrame, rawnav data with additional fields illustrating how 
     each run has been decomposed within the stop area, an input to other analyses.
-    Notes
-    -----
-    rawnav_stop_area
     """
 
     # TODO: add to parameter checks
@@ -679,7 +510,7 @@ def decompose_stop_area(rawnav,
         )
     )
     # And we do a final pass cleaning up the runs that don't serve passengers or don't stop at all
-    rawnav_fil_stop_area_decomp = (  
+    stop_area_decomp = (  
         rawnav_fil_stop_area_6
         # runs that don't stop
         .assign(stop_area_phase = lambda x: np.where(x.any_veh_stopped == False,
@@ -692,8 +523,9 @@ def decompose_stop_area(rawnav,
         )
     )
     
-    #TODO: Consider what columns used to support calculations to retain in the output
-    return(rawnav_fil_stop_area_decomp)
+    # Note: Columns maintained in output are likely excessive for most needs, but are left in 
+    # for any debugging necessary.
+    return(stop_area_decomp)
 
 # Helper Functions 
 # ======================================
