@@ -92,7 +92,7 @@ begin_time = datetime.now()  ##
 
 # Extract parent zipped folder and get the zipped files path
 zipped_files_dir_parent = os.path.join(path_source_data, zip_parent_folder_name)
-zipped_files_dirs = glob.glob(os.path.join(zipped_files_dir_parent, 'Rawnav 2020 07 08'))
+zipped_files_dirs = glob.glob(os.path.join(zipped_files_dir_parent, 'July 2020 rawnav*.zip'))
 
 file_universe = wr.get_zipped_files_from_zip_dir(
     zip_dir_list=zipped_files_dirs,
@@ -178,7 +178,7 @@ summary_data_dict = {}
 
 for key, datadict in route_rawnav_tag_dict.items():
     temp_dat = wr.clean_rawnav_data(
-        data_dict=datadict,
+        data_dict=datadict.copy(),
         filename=key)
 
     rawnav_data_dict[key] = temp_dat['rawnavdata']
