@@ -35,7 +35,7 @@ def merge_rawnav_segment(rawnav_gdf_,
      
     # Cleaning
     index_run_segment_start_end_1 =\
-        remove_run_with_seg_dist_over_50ft(index_run_segment_start_end_1)
+        remove_run_with_seg_dist_over_100ft(index_run_segment_start_end_1)
     
     #  - TODO: Are the nearest points in order, such that the segment start point has a lower index value than the
     #    segment end point (checks that the segment was drawn in the right direction and that any
@@ -138,7 +138,7 @@ def include_segment_summary(rawnav_q_dat,
                 
     return rawnav_q_segment_summary
 
-def remove_run_with_seg_dist_over_50ft(index_table):
+def remove_run_with_seg_dist_over_100ft(index_table):
     """
     Parameters
     ----------
@@ -154,7 +154,7 @@ def remove_run_with_seg_dist_over_50ft(index_table):
     
     index_table_fil = (
         index_table.groupby(['filename','index_run_start'],sort = False)
-                   .filter(lambda x: (x.dist_to_nearest_point < 50).all()))
+                   .filter(lambda x: (x.dist_to_nearest_point < 100).all()))
 
     row_after = index_table_fil.shape[0]
     row_diff = row_before - row_after

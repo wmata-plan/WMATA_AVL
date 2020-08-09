@@ -101,9 +101,8 @@ xwalk_seg_pattern_stop_in = wr.tribble(
     ['route', 'direction', 'seg_name_id', 'stop_id'],
     "79", "SOUTH", "georgia_columbia", 10981,
     "79", "SOUTH", "georgia_piney_branch_long", 4217,
-    # not sure yet how to deal with second stop, but i think this works
     "70", "SOUTH", "georgia_irving", 19186,  # irving stop
-    "70", "SOUTH", "georgia_irving", 10981,  # columbia stop
+    "70", "SOUTH", "georgia_columbia", 10981,  # columbia stop
     "70", "SOUTH", "georgia_piney_branch_shrt", 4217,
     "S1", "NORTH", "sixteenth_u_shrt", 18042,
     "S2", "NORTH", "sixteenth_u_shrt", 18042,
@@ -118,9 +117,6 @@ xwalk_seg_pattern_stop_in = wr.tribble(
     "H4", "EAST", "irving_fifteenth_sixteenth", 2368,
     "H8", "EAST", "irving_fifteenth_sixteenth", 2368,
     "W47", "EAST", "irving_fifteenth_sixteenth", 2368
-    # "64",            "NORTH",                    "nh_3rd_test",   17329, #4th street
-    # "64",            "NORTH",                    "nh_3rd_test",   25370, #3rd street
-    # "G8",             "EAST",                 "ri_lincoln_test",  26282
 )
 
 
@@ -137,7 +133,7 @@ xwalk_seg_pattern_stop = (
         .merge(xwalk_wmata_route_dir_pattern, on=['route', 'direction'])
         .drop('direction', 1)
         .reindex(columns=['route', 'pattern', 'seg_name_id', 'stop_id'])
-        .query("""seg_name_id in ['georgia_columbia','georgia_irving','sixteenth_u_shrt','irving_fifteenth_sixteenth']""")
+        .query("""seg_name_id in ['georgia_columbia','georgia_irving','sixteenth_u_shrt','irving_fifteenth_sixteenth','eleventh_i_new_york','georgia_piney_branch_shrt']""")
 )
 
 del xwalk_seg_pattern_stop_in

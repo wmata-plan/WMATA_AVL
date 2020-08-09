@@ -41,6 +41,11 @@ def time_to_sec(time_mess):
         tot_sec = hr_min_sec[0]
         if tot_sec.isnumeric():
             return np.int(tot_sec)
+        elif len(tot_sec.split(".")) == 2:
+            try:
+                return float(tot_sec)
+            except ValueError:
+                print("Not a float")
         else:
             return np.nan
     else:
@@ -122,7 +127,7 @@ def correct_data_types(dat):
                                   .astype('str')
                                   ),
         notes_field=lambda x: x.notes_field.astype('str'),
-        max_front_rear_door_close_time_field=(
+        min_front_rear_door_close_time_field=(
             lambda x: x[
                 ['front_door_close_time_field', 'rear_door_close_time_field']
             ]
@@ -131,34 +136,37 @@ def correct_data_types(dat):
         t_control_delay_field=(
             lambda x:
             x.time_left_stop_zone_field
-            - x.max_front_rear_door_close_time_field
+            - x.min_front_rear_door_close_time_field
         )
         )
+    dat.loc[
+        lambda x: x.t_control_delay_field.dt.total_seconds() < 0,
+        "t_control_delay_field"
+    ] = pd.NaT
     return dat
 
 
 def quick_and_dirty_schedule_qjump_mapping():
     xwalk_seg_pattern_stop_in = wr.tribble(
-        ['route', 'direction', 'seg_name_id', 'stop_id'],
-        "79", "SOUTH", "georgia_columbia", 10981,
-        "79", "SOUTH", "georgia_piney_branch_long", 4217,
-        # not sure yet how to deal with second stop, but i think this works
-        "70", "SOUTH", "georgia_irving", 19186,  # irving stop
-        "70", "SOUTH", "georgia_irving", 10981,  # columbia stop
-        "70", "SOUTH", "georgia_piney_branch_shrt", 4217,
-        "S1", "NORTH", "sixteenth_u_shrt", 18042,
-        "S2", "NORTH", "sixteenth_u_shrt", 18042,
-        "S4", "NORTH", "sixteenth_u_shrt", 18042,
-        "S9", "NORTH", "sixteenth_u_long", 18042,
-        "64", "NORTH", "eleventh_i_new_york", 16490,
-        "G8", "EAST", "eleventh_i_new_york", 16490,
-        "D32", "EAST", "irving_fifteenth_sixteenth", 2368,
-        "H1", "NORTH", "irving_fifteenth_sixteenth", 2368,
-        "H2", "EAST", "irving_fifteenth_sixteenth", 2368,
-        "H3", "EAST", "irving_fifteenth_sixteenth", 2368,
-        "H4", "EAST", "irving_fifteenth_sixteenth", 2368,
-        "H8", "EAST", "irving_fifteenth_sixteenth", 2368,
-        "W47", "EAST", "irving_fifteenth_sixteenth", 2368
+        ['route', 'direction', 'seg_name_id', 'stop_id', "approx_time_qjump"],
+        "79", "SOUTH", "georgia_columbia", 10981, 1500,
+        "79", "SOUTH", "georgia_piney_branch_long", 4217, 900,
+        "70", "SOUTH", "georgia_irving", 19186, 1500, # irving stop
+        "70", "SOUTH", "georgia_columbia", 10981, 1500,  # columbia stop
+        "70", "SOUTH", "georgia_piney_branch_shrt", 4217, 900,
+        "S1", "NORTH", "sixteenth_u_shrt", 18042, 1500,
+        "S2", "NORTH", "sixteenth_u_shrt", 18042, 1500,
+        "S4", "NORTH", "sixteenth_u_shrt", 18042, 1500,
+        "S9", "NORTH", "sixteenth_u_long", 18042, 1500,
+        "64", "NORTH", "eleventh_i_new_york", 16490, 480,
+        "G8", "EAST", "eleventh_i_new_york", 16490, 360,
+        "D32", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
+        "H1", "NORTH", "irving_fifteenth_sixteenth", 2368, 2500,
+        "H2", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
+        "H3", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
+        "H4", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
+        "H8", "EAST", "irving_fifteenth_sixteenth", 2368, 180,
+        "W47", "EAST", "irving_fifteenth_sixteenth", 2368, 1200
     )
     xwalk_wmata_route_dir_pattern = (
         wr.read_sched_db_patterns(
@@ -176,8 +184,15 @@ def quick_and_dirty_schedule_qjump_mapping():
                 'pattern',
                 'direction',
                 'seg_name_id',
-                'stop_id'
-            ])
+                'stop_id',
+                'approx_time_qjump'
+            ]
+        )
+        .assign(approx_time_qjump = lambda df:
+            pd.to_timedelta(
+                df.approx_time_qjump, unit="s"
+            )
+        )
     )
     del xwalk_seg_pattern_stop_in
     # 2. load segment-pattern crosswalk
