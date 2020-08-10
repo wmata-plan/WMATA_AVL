@@ -257,36 +257,82 @@ for q_jump_field_loc in field_dict.keys():
             )
         )
 
+
 field_q_jump_rawnav_dwell_t_cntr = \
     pd.concat(field_q_jump_rawnav_dwell_t_cntr_list)
 
+field_col = list(field_df_all_loc.columns)
+field_primary_keys = [
+    "metrobus_route_field", "bus_id_field", "time_entered_stop_zone_field"]
+field_col_except_primary_keys = [
+    col for col in field_col if col not in field_primary_keys]
+
+field_q_jump_rawnav_dwell_t_cntr = (
+    field_q_jump_rawnav_dwell_t_cntr
+    .assign(has_data_from_rawnav_processed=0)
+    .assign(has_data_from_rawnav_processed=
+             lambda x: (
+                 (~ x.route.isna())
+                 | x.has_data_from_rawnav_processed).astype(int)
+            )
+ )
+
+field_q_jump_rawnav_dwell_t_cntr_all = (
+    field_q_jump_rawnav_dwell_t_cntr
+    .drop(columns=field_col_except_primary_keys)
+    .merge(field_df_all_loc,
+           on=field_primary_keys,
+           how="right")
+    .assign(has_data_from_rawnav_processed=
+        lambda x: x.has_data_from_rawnav_processed.fillna(0))
+)
+
+field_q_jump_rawnav_dwell_t_cntr_all_1 = (
+    field_q_jump_rawnav_dwell_t_cntr_all
+    .merge(
+        field_q_jump_rawnav_df_fil
+        .filter(items=[
+            "metrobus_route_field", "bus_id_field",
+            "time_entered_stop_zone_field", "filename",
+            "index_run_start"])
+        .rename(columns={
+            "filename": "filename_from_unprocessed",
+            "index_run_start": "index_run_start_from_unprocessed"})
+        .assign(has_data_from_rawnav_unprocessed=1),
+        on=field_primary_keys,
+        how="left"
+    )
+    .assign(has_data_from_rawnav_unprocessed=
+            lambda df: df.has_data_from_rawnav_unprocessed.fillna(0))
+)
 
 first_cols_1 = [
     'field_qjump_loc', 'seg_name_id', 'metrobus_route_field', 'route',
     'pattern', 'bus_id_field', 'file_busid', 'time_entered_stop_zone_field',
+    'has_data_from_rawnav_processed', 'has_data_from_rawnav_unprocessed',
+    'filename_from_unprocessed','index_run_start_from_unprocessed',
     'qjump_date_time', 'diff_field_rawnav_approx_time', 'dwell_time_field',
     'dwell_time', 'diff_field_rawnav_dwell_time',
     'total_time_at_intersection_field', 'tot_time_stop_to_150_ft',
     'diff_field_rawnav_tot_int_clear_time'
 ]
 reindex_col = (first_cols_1
-               + [col for col in field_q_jump_rawnav_dwell_t_cntr.columns
+               + [col for col in field_q_jump_rawnav_dwell_t_cntr_all_1.columns
                   if col not in first_cols_1]
                )
 
-field_q_jump_rawnav_dwell_t_cntr = (
-    field_q_jump_rawnav_dwell_t_cntr
+field_q_jump_rawnav_dwell_t_cntr_all_1 = (
+    field_q_jump_rawnav_dwell_t_cntr_all_1
     .reindex(reindex_col, axis=1)
 )
 
 path_validation_df_1 = os.path.join(path_processed_data,
                                     "field_processed_rawnav_dat.csv")
-pd.DataFrame.to_csv(field_q_jump_rawnav_dwell_t_cntr, path_validation_df_1)
-
-
+pd.DataFrame.to_csv(field_q_jump_rawnav_dwell_t_cntr_all_1,
+                    path_validation_df_1)
 
 field_rawnav_combine_dwell_plt = (
-    field_q_jump_rawnav_dwell_t_cntr
+    field_q_jump_rawnav_dwell_t_cntr_all_1
     .assign(
         dwell_time_field=lambda df: (df.dwell_time_field
                                       .apply(lambda df1: df1.total_seconds())
@@ -314,7 +360,7 @@ plot(p2, filename=os.path.join(path_processed_data,
                                "dwell_time_trendline_comb.html"))
 
 field_rawnav_combine_clear_time_plt = (
-    field_q_jump_rawnav_dwell_t_cntr
+    field_q_jump_rawnav_dwell_t_cntr_all_1
     .assign(
         t_control_delay_field=(lambda df: df.t_control_delay_field
                                .apply(lambda df1: df1.total_seconds())),
