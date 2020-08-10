@@ -7,13 +7,15 @@ from plotly.offline import plot
 pyo.init_notebook_mode()
 # need for regression trendline
 import statsmodels
-# Globoals and custom function
+# 1. Globoals and custom function
+# -----------------------------------------------------------------------------
+# Import custom functions
 import wmatarawnav as wr
 from helper_function_field_validation import correct_data_types
 from helper_function_field_validation import combine_field_rawnav_dat
 from helper_function_field_validation \
     import quick_and_dirty_schedule_qjump_mapping
-# Globoals and custom function
+# 1. Set globoal paramters.
 path_source_data = (
     r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents" 
     r"\WMATA-AVL\Data\field_rawnav_dat")
@@ -27,6 +29,9 @@ path_wmata_schedule_data = (r"C:\Users\abibeka\OneDrive - "
                             r"Kittelson & Associates, Inc\Documents"
                             r"\WMATA-AVL\Data\wmata_schedule_data"
                             r"\Schedule_082719-201718.mdb")
+
+# 2. Read and clean field data
+# -----------------------------------------------------------------------------
 field_xlsx_wb = pd.ExcelFile(path_field_file)
 field_dict = {}
 
@@ -75,9 +80,13 @@ for sheet in q_jump_field_loc:
     dat.loc[:, "field_qjump_loc"] = sheet
     field_dict[sheet] = dat
 
-field_df_all_loc = pd.concat(field_dict.values())
-# Analyze data for 16th & U and Georgia & Columbia
-###############################################################################
+field_df_all_loc = (pd.concat(field_dict.values())
+                    .reset_index(drop=True)
+                    .assign(s_no=lambda x: x.index+1))
+
+# 3. Read and process rawnav travel time decomposition and summary data.
+# -----------------------------------------------------------------------------
+# Read travel time decomposition data.
 path_stop_rawnav = os.path.join(path_processed_data, "rawnav_stop_areas")
 rawnav_tt_decomp = pd.read_csv(os.path.join(path_stop_rawnav,
                                             'traveltime_decomp.csv'),
@@ -89,6 +98,7 @@ rawnav_tt_decomp = (
     .drop_duplicates(["filename", "index_run_start"])
 )
 
+# Read rawnav summary data
 analysis_routes = [
     'S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3',
     'H4', 'H8', 'W47'
@@ -103,6 +113,7 @@ rawnav_summary = wr.read_cleaned_rawnav(
 
 xwalk_seg_pattern_stop = quick_and_dirty_schedule_qjump_mapping()
 
+# Keep relevant rawnav summary data based on the wmata schedule data.
 rawnav_summary_fil = (
     rawnav_summary
     .query("dist_odom_mi >= 1")
@@ -120,7 +131,9 @@ rawnav_summary_fil = (
             )
 )
 
-
+# 4. Merge field data with rawnav summary data (with approx qjump arrival time
+# and get estimate on missing rawnav data.
+# -----------------------------------------------------------------------------
 field_q_jump_rawnav_list = []
 for q_jump_field_loc in field_dict.keys():
     field_q_jump_1loc = field_dict[q_jump_field_loc]
@@ -212,24 +225,9 @@ field_q_jump_rawnav_df_all = (
     )
 )
 
-first_cols = [
-    'field_qjump_loc', 'metrobus_route_field', 'route', 'pattern',
-    'bus_id_field', 'file_busid', 'approx_diff_field_rawnav_time',
-    'time_entered_stop_zone_field', 'qjump_approx_date_time',
-]
-reindex_col = (first_cols
-               + [col for col in field_q_jump_rawnav_df_all.columns
-                  if col not in first_cols]
-               )
-
-field_q_jump_rawnav_df_all = (field_q_jump_rawnav_df_all
-                              .reindex(reindex_col, axis=1)
-                              )
-
-path_validation_df = os.path.join(path_processed_data, "field_rawnav_dat.csv")
-pd.DataFrame.to_csv(field_q_jump_rawnav_df_all, path_validation_df)
-
-
+# 5. Merge field data with rawnav travel time decomposition and summary data.
+# Get estimate on missing rawnav data.
+# -----------------------------------------------------------------------------
 field_q_jump_rawnav_dwell_t_cntr_list = []
 for q_jump_field_loc in field_dict.keys():
     field_q_jump_1loc = field_dict[q_jump_field_loc]
@@ -261,11 +259,12 @@ for q_jump_field_loc in field_dict.keys():
 field_q_jump_rawnav_dwell_t_cntr = \
     pd.concat(field_q_jump_rawnav_dwell_t_cntr_list)
 
+# Rearrange columns and merge with the full field data.
 field_col = list(field_df_all_loc.columns)
 field_primary_keys = [
     "metrobus_route_field", "bus_id_field", "time_entered_stop_zone_field"]
 field_col_except_primary_keys = [
-    col for col in field_col if col not in field_primary_keys]
+    col for col in field_col if col not in field_primary_keys+["s_no"]]
 
 field_q_jump_rawnav_dwell_t_cntr = (
     field_q_jump_rawnav_dwell_t_cntr
@@ -307,7 +306,7 @@ field_q_jump_rawnav_dwell_t_cntr_all_1 = (
 )
 
 first_cols_1 = [
-    'field_qjump_loc', 'seg_name_id', 'metrobus_route_field', 'route',
+    's_no', 'field_qjump_loc', 'seg_name_id', 'metrobus_route_field', 'route',
     'pattern', 'bus_id_field', 'file_busid', 'time_entered_stop_zone_field',
     'has_data_from_rawnav_processed', 'has_data_from_rawnav_unprocessed',
     'filename_from_unprocessed','index_run_start_from_unprocessed',
@@ -331,6 +330,39 @@ path_validation_df_1 = os.path.join(path_processed_data,
 pd.DataFrame.to_csv(field_q_jump_rawnav_dwell_t_cntr_all_1,
                     path_validation_df_1)
 
+# Rearrange columns and merge with the full field data
+# This data compares un-processed rawnav data and field data.
+# Moved this piece here as we are appending some information
+# about processed rawnav data also.
+field_q_jump_rawnav_df_all_1 = (
+    field_q_jump_rawnav_df_all
+    .merge(field_q_jump_rawnav_dwell_t_cntr_all_1
+           .filter(items=["s_no", "has_data_from_rawnav_processed",
+                          "has_data_from_rawnav_unprocessed"]),
+           on=["s_no"],
+           how="inner")
+)
+
+first_cols = [
+    's_no', 'field_qjump_loc', 'has_data_from_rawnav_processed',
+    'has_data_from_rawnav_unprocessed', 'metrobus_route_field', 'route',
+    'pattern',
+    'bus_id_field', 'file_busid', 'approx_diff_field_rawnav_time',
+    'time_entered_stop_zone_field', 'qjump_approx_date_time',
+]
+reindex_col = (first_cols
+               + [col for col in field_q_jump_rawnav_df_all.columns
+                  if col not in first_cols]
+               )
+
+field_q_jump_rawnav_df_all_1 = (field_q_jump_rawnav_df_all_1
+                              .reindex(reindex_col, axis=1)
+                              )
+path_validation_df = os.path.join(path_processed_data, "field_rawnav_dat.csv")
+pd.DataFrame.to_csv(field_q_jump_rawnav_df_all_1, path_validation_df)
+
+# 6. Create dwell time and control delay vs. t_traffic plots
+# -----------------------------------------------------------------------------
 field_rawnav_combine_dwell_plt = (
     field_q_jump_rawnav_dwell_t_cntr_all_1
     .assign(
