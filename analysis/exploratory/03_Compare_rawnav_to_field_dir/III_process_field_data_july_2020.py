@@ -1,7 +1,13 @@
 import pandas as pd
 import os
-from IPython import get_ipython
-
+import plotly.express as px
+import plotly.offline as pyo
+from plotly.offline import plot
+# Set notebook mode to work in offline
+pyo.init_notebook_mode()
+# need for regression trendline
+import statsmodels
+# Globoals and custom function
 import wmatarawnav as wr
 from helper_function_field_validation import correct_data_types
 from helper_function_field_validation import combine_field_rawnav_dat
@@ -61,7 +67,6 @@ rawnav_qjump_nm_map = {
     "irving_fifteenth_sixteenth": "Irving & 16th",
 }
 
-field_df_all_loc = pd.DataFrame()
 for sheet in q_jump_field_loc:
     dat = field_xlsx_wb.parse(sheet)
     dat = dat.loc[:, col_keep].rename(columns=field_col_rename_map)
@@ -73,14 +78,16 @@ for sheet in q_jump_field_loc:
 field_df_all_loc = pd.concat(field_dict.values())
 # Analyze data for 16th & U and Georgia & Columbia
 ###############################################################################
-field_qjump_16_U = field_dict['16th & U']
-field_qjump_georgia_columbia = field_dict['Georgia & Columbia']
-field_qjump_irving_16th = field_dict['Irving & 16th']
-
 path_stop_rawnav = os.path.join(path_processed_data, "rawnav_stop_areas")
 rawnav_tt_decomp = pd.read_csv(os.path.join(path_stop_rawnav,
                                             'traveltime_decomp.csv'),
                                index_col=0)
+rawnav_tt_decomp = (
+    rawnav_tt_decomp
+    .assign(field_qjump_loc=(lambda df: df.seg_name_id.replace(
+                rawnav_qjump_nm_map)))
+    .drop_duplicates(["filename", "index_run_start"])
+)
 
 analysis_routes = [
     'S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3',
@@ -223,92 +230,122 @@ path_validation_df = os.path.join(path_processed_data, "field_rawnav_dat.csv")
 pd.DataFrame.to_csv(field_q_jump_rawnav_df_all, path_validation_df)
 
 
-field_rawnav_qjump_16_U_list = []
-for field_date in field_dates:
-    field_rawnav_qjump_16_U_list.append(
-        combine_field_rawnav_dat(
-            field_df=field_qjump_16_U,
-            rawnav_stop_area_df=rawnav_tt_decomp,
-            rawnav_summary_df=rawnav_summary,
-            segment_nm="sixteenth_u_shrt",
-            field_obs_time=('15:50', '18:10'),
-            field_obs_date=field_date
+field_q_jump_rawnav_dwell_t_cntr_list = []
+for q_jump_field_loc in field_dict.keys():
+    field_q_jump_1loc = field_dict[q_jump_field_loc]
+    field_dates = field_q_jump_1loc.date_obs_field.dt.date.unique()
+    for field_date in field_dates:
+        field_q_jump_1loc_1day = (
+            field_q_jump_1loc
+            .loc[lambda x:x.date_obs_field.dt.date == field_date]
         )
-    )
+        q_jump_field_loc_this_stop \
+            = field_q_jump_1loc_1day.field_qjump_loc.unique()[0]
+        min_time = (field_q_jump_1loc_1day.time_entered_stop_zone_field.min()
+                    - pd.to_timedelta(500, "s")).time()
+        max_time = (field_q_jump_1loc_1day.time_entered_stop_zone_field.max()
+                    + pd.to_timedelta(500, "s")).time()
 
-
-
-
-field_dates = field_qjump_16_U.date_obs_field.dt.date.unique()
-field_date = field_dates[0]
-field_rawnav_qjump_16_U_list = []
-for field_date in field_dates:
-    field_rawnav_qjump_16_U_list.append(
-        combine_field_rawnav_dat(
-            field_df=field_qjump_16_U,
-            rawnav_stop_area_df=rawnav_tt_decomp,
-            rawnav_summary_df=rawnav_summary,
-            segment_nm="sixteenth_u_shrt",
-            field_obs_time=('15:50', '18:10'),
-            field_obs_date=field_date
+        field_q_jump_rawnav_dwell_t_cntr_list.append(
+            combine_field_rawnav_dat(
+                field_df=field_q_jump_1loc_1day,
+                rawnav_stop_area_df=rawnav_tt_decomp,
+                rawnav_summary_df=rawnav_summary_fil,
+                field_qjump_loc=q_jump_field_loc,
+                field_obs_time=(min_time, max_time),
+                field_obs_date=field_date
+            )
         )
-    )
-field_rawnav_qjump_16_U = pd.concat(field_rawnav_qjump_16_U_list)
 
-field_dates = field_qjump_irving_16th.date_obs_field.dt.date.unique()
-field_date = field_dates[0]
-field_qjump_irving_16th_list = []
-for field_date in field_dates:
-    field_qjump_irving_16th_list.append(
-        combine_field_rawnav_dat(
-            field_df=field_qjump_irving_16th,
-            rawnav_stop_area_df=rawnav_tt_decomp,
-            rawnav_summary_df=rawnav_summary,
-            segment_nm="irving_fifteenth_sixteenth",
-            field_obs_time=('15:50', '18:10'),
-            field_obs_date=field_date
-        )
-    )
-field_qjump_irving_16th = pd.concat(field_qjump_irving_16th_list)
+field_q_jump_rawnav_dwell_t_cntr = \
+    pd.concat(field_q_jump_rawnav_dwell_t_cntr_list)
 
-# field_qjump_georgia_columbia = field_dict['Georgia & Columbia']
-# path_stop_rawnav = os.path.join(path_processed_data,"rawnav_stop_areas")
-# rawnav_stop_area_georgia_columbia_1 = (
-#     pd.read_csv(os.path.join(path_stop_rawnav,
-#                              'ourpoints_georgia_irving.csv'),index_col=0)
-# )
-# rawnav_stop_area_georgia_columbia_2 = (
-#     pd.read_csv(os.path.join(path_stop_rawnav,
-#                              'ourpoints_georgia_columbia.csv'),index_col=0)
-# )
-# rawnav_stop_area_georgia_columbia = pd.concat([
-#     rawnav_stop_area_georgia_columbia_1,
-#     rawnav_stop_area_georgia_columbia_2
-# ])
-# field_rawnav_qjump_georgia_columbia = combine_field_rawnav_dat(
-#     field_df =field_qjump_georgia_columbia,
-#     rawnav_stop_area_df=rawnav_stop_area_georgia_columbia,
-#     rawnav_summary_df=rawnav_summary,
-#     field_obs_time=('7:00', '9:10')
-# )
 
-first_4_cols = [
-    'metrobus_route_field', 'route', 'pattern', 'seg_name_id', 'bus_id_field',
-    'file_busid', 'tag_busid', 'time_entered_stop_zone_field',
+first_cols_1 = [
+    'field_qjump_loc', 'seg_name_id', 'metrobus_route_field', 'route',
+    'pattern', 'bus_id_field', 'file_busid', 'time_entered_stop_zone_field',
     'qjump_date_time', 'diff_field_rawnav_approx_time', 'dwell_time_field',
     'dwell_time', 'diff_field_rawnav_dwell_time',
     'total_time_at_intersection_field', 'tot_time_stop_to_150_ft',
     'diff_field_rawnav_tot_int_clear_time'
 ]
-reindex_col = (first_4_cols
-               + [col for col in field_rawnav_qjump_16_U.columns
-                  if col not in first_4_cols]
+reindex_col = (first_cols_1
+               + [col for col in field_q_jump_rawnav_dwell_t_cntr.columns
+                  if col not in first_cols_1]
                )
 
-field_rawnav_combine = (pd.concat([field_rawnav_qjump_16_U,
-                                   field_qjump_irving_16th])
-                        .reset_index(drop=True)
-                        .reindex(reindex_col, axis=1)
-                        )
-path_validation_df = os.path.join(path_processed_data, "field_rawnav_dat.csv")
-pd.DataFrame.to_csv(field_rawnav_combine, path_validation_df)
+field_q_jump_rawnav_dwell_t_cntr = (
+    field_q_jump_rawnav_dwell_t_cntr
+    .reindex(reindex_col, axis=1)
+)
+
+path_validation_df_1 = os.path.join(path_processed_data,
+                                    "field_processed_rawnav_dat.csv")
+pd.DataFrame.to_csv(field_q_jump_rawnav_dwell_t_cntr, path_validation_df_1)
+
+
+
+field_rawnav_combine_dwell_plt = (
+    field_q_jump_rawnav_dwell_t_cntr
+    .assign(
+        dwell_time_field=lambda df: (df.dwell_time_field
+                                      .apply(lambda df1: df1.total_seconds())
+                                     ),
+        dwell_time=lambda df: (df.dwell_time
+                               .apply(lambda df1: df1.total_seconds())),
+        route_seg_name_id=lambda x: x.route+", "+x.seg_name_id)
+)
+p1 = px.scatter(
+    data_frame=field_rawnav_combine_dwell_plt.query('route==route'),
+    x="dwell_time_field",
+    y="dwell_time",
+    symbol = "route_seg_name_id",
+    color="route_seg_name_id",
+    hover_data=["diff_field_rawnav_dwell_time"])
+plot(p1, filename=os.path.join(path_processed_data,
+                               "dwell_time_comb.html"))
+p2 = px.scatter(
+    data_frame=field_rawnav_combine_dwell_plt.query('~ route.isna()'),
+    x="dwell_time_field",
+    y="dwell_time",
+    hover_data=["diff_field_rawnav_dwell_time"],
+    trendline="ols")
+plot(p2, filename=os.path.join(path_processed_data,
+                               "dwell_time_trendline_comb.html"))
+
+field_rawnav_combine_clear_time_plt = (
+    field_q_jump_rawnav_dwell_t_cntr
+    .assign(
+        t_control_delay_field=(lambda df: df.t_control_delay_field
+                               .apply(lambda df1: df1.total_seconds())),
+        t_traffic=(lambda x: x.t_traffic.apply(lambda x:x.total_seconds())),
+        route_seg_name_id=lambda x: x.route+", "+x.seg_name_id)
+)
+
+g1 = px.scatter(
+    data_frame=field_rawnav_combine_clear_time_plt.query('~ route.isna()'),
+    y="t_control_delay_field",
+    x="t_traffic",
+    symbol="route_seg_name_id",
+    color="route_seg_name_id",
+    hover_data=[
+        "diff_field_rawnav_control_delay", "t_ff", "t_segment",
+        "traffic_conditions_field", "notes_field"])
+plot(g1, filename=os.path.join(
+    path_processed_data,
+    "approx_fieldcontrol_delay_vs_q_jump_seg_traffic_delay.html"))
+
+
+g2 = px.scatter(
+    data_frame=field_rawnav_combine_clear_time_plt.query('~ route.isna()'),
+    y="t_control_delay_field",
+    x="t_traffic",
+    hover_data=[
+        "diff_field_rawnav_control_delay", "t_ff", "t_segment",
+        "traffic_conditions_field", "notes_field"],
+    trendline="ols")
+plot(g2, filename=os.path.join(
+    path_processed_data,
+    "approx_trendline_fieldcontrol_delay_vs_q_jump_seg_traffic_delay.html"))
+
+

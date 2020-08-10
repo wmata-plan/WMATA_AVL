@@ -55,7 +55,10 @@ def time_to_sec(time_mess):
 
 def correct_data_types(dat):
     dat = dat.assign(
-        metrobus_route_field=lambda x: x.metrobus_route_field.astype("str"),
+        metrobus_route_field=(lambda df:
+                              df.metrobus_route_field
+                              .astype("str")
+                              .apply(lambda x: x.split(".")[0])),
         bus_id_field=lambda x: x.bus_id_field.astype("Int32"),
         date_obs_field=(
             lambda x: pd.to_datetime(
@@ -204,7 +207,7 @@ def quick_and_dirty_schedule_qjump_mapping():
     
 def combine_field_rawnav_dat(
         field_df, rawnav_stop_area_df, rawnav_summary_df,
-        segment_nm="sixteenth_u_shrt", field_obs_time=('15:40', '18:10'),
+        field_qjump_loc="16th & U", field_obs_time=('15:40', '18:10'),
         field_obs_date=datetime.date(2020, 7, 7)):
     # Get the bus ID
     ################################################################
@@ -214,12 +217,12 @@ def combine_field_rawnav_dat(
     )
     if (field_obs_date
             not in list(rawnav_stop_area_df.start_date_time.dt.date.unique())):
-        return None
+        return pd.DataFrame()
     rawnav_stop_area_q_jump_bus_id = (
         rawnav_stop_area_df
         .loc[
             lambda x: (x.start_date_time.dt.date == field_obs_date)
-            & (x.seg_name_id == segment_nm), :
+            & (x.field_qjump_loc == field_qjump_loc), :
         ]
         .filter(items=[
             'filename', 'index_run_start', 'seg_name_id', 'start_date_time',
@@ -227,12 +230,16 @@ def combine_field_rawnav_dat(
         ])
         .merge(
             rawnav_summary_df
+            .loc[
+                lambda x: (x.start_date_time.dt.date == field_obs_date)
+                          & (x.field_qjump_loc == field_qjump_loc), :
+            ]
             .filter(items=[
                 'filename', 'index_run_start', 'file_busid', 'tag_busid',
                 'route', 'pattern', 'wday'
             ]),
             on=['filename', 'index_run_start'],
-            how='outer'
+            how='left'
         )
         .assign(
             sec_past_st_qj_stop=(
@@ -246,19 +253,19 @@ def combine_field_rawnav_dat(
             route=lambda x: x.route.astype(str)
         )
     )
-        
     # Get the dwell time
     ################################################################
     rawnav_stop_area_q_jump = (
         rawnav_stop_area_df
         .rename(columns={'t_stop1': 'dwell_time'})
         .drop(columns=[
-            'start_date_time', 'sec_past_st_qj_stop', 'seg_name_id'
+            'start_date_time', 'sec_past_st_qj_stop', 'seg_name_id',
+            'field_qjump_loc'
         ])
         .merge(
             rawnav_stop_area_q_jump_bus_id,
             on=['filename', 'index_run_start'],
-            how='outer'
+            how='inner'
         )
         .assign(dwell_time=lambda x: pd.to_timedelta(x.dwell_time, 'sec'),
                 t_traffic=lambda x: pd.to_timedelta(x.t_traffic, 'sec')
@@ -270,20 +277,24 @@ def combine_field_rawnav_dat(
     rawnav_stop_area_q_jump_peak = (
         rawnav_stop_area_q_jump.between_time(field_obs_time[0],
                                              field_obs_time[1]).reset_index()
-        # .merge(rawnav_stop_area_tot_time,
-        #        on = ['filename','index_run_start'],
-        #        how = 'left')
         .assign(file_busid=lambda x: x.file_busid.astype(int),
                 tag_busid=lambda x: x.tag_busid.astype(int),
                 route=lambda x: x.route.astype(str))
     )
     field_rawnav_qjump = (
         field_df.loc[lambda x:x.date_obs_field.dt.date == field_obs_date]
+        .assign(
+            metrobus_route_field=(lambda df:
+                                  df.metrobus_route_field
+                                  .astype("str")
+                                  .apply(lambda x: x.split(".")[0])),
+            bus_id_field=(lambda df: df.bus_id_field.astype("int"))
+        )
         .merge(
             rawnav_stop_area_q_jump_peak,
             left_on=['metrobus_route_field', 'bus_id_field'],
             right_on=['route', 'file_busid'],
-            how='outer')
+            how='left')
         .assign(
             diff_field_rawnav_approx_time=lambda df:
             (df.time_entered_stop_zone_field - df.qjump_date_time)
