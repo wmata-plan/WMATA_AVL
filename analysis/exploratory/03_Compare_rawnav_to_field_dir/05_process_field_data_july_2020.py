@@ -190,7 +190,7 @@ for q_jump_field_loc in field_dict.keys():
                 "metrobus_route_field", "bus_id_field",
                 "route","pattern", "file_busid",
                 "qjump_approx_date_time",
-                "field_qjump_loc",
+                "field_qjump_loc", "seg_name_id",
                 "time_entered_stop_zone_field",
                 "filename", "index_run_start",
                 "run_duration_from_sec", "dist_odom_mi", "mph_run_tag",
@@ -344,7 +344,7 @@ field_q_jump_rawnav_df_all_1 = (
 )
 
 first_cols = [
-    's_no', 'field_qjump_loc', 'has_data_from_rawnav_processed',
+    's_no', 'field_qjump_loc', 'seg_name_id', 'has_data_from_rawnav_processed',
     'has_data_from_rawnav_unprocessed', 'metrobus_route_field', 'route',
     'pattern',
     'bus_id_field', 'file_busid', 'approx_diff_field_rawnav_time',
