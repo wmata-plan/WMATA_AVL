@@ -12,6 +12,17 @@ import numpy as np
 
 
 def tribble(columns, *data):
+    """
+    Parameters
+    ----------
+    columns: list
+        list of column names for dataframe
+    data: 
+        values to insert into columns 
+    Returns
+    -------
+    df: pd.DataFrame
+    """
     # I miss R
     return pd.DataFrame(
         data=list(zip(*[iter(data)]*len(columns))),
@@ -19,7 +30,17 @@ def tribble(columns, *data):
     )
 
 def reorder_first_cols(df,first_cols_list):
-    # i miss tidyselect::everything()
+    """
+    Parameters
+    ----------
+    df: pd.DataFrame
+    first_cols_list: list
+        list of columns in df to move to the beginning/left-side of the dataframe, ala
+        dplyr::select() with tidyselect::everything()
+    Returns
+    -------
+    df: pd.DataFrame
+    """
     assert(isinstance(first_cols_list, list))
     
     new_cols_order = first_cols_list + [col for col in df.columns if col not in first_cols_list]
@@ -29,21 +50,48 @@ def reorder_first_cols(df,first_cols_list):
     return df
 
 def check_convert_list(possible_list):
+    """
+    Parameters
+    ----------
+    possible_list: 'list' object or 'str'
+    Returns
+    -------
+    possible_list: if possible_list is a string value, it is converted to a list. This helps 
+        address cases where iteration over a single value inadvertently leads the iteration to
+        proceed over each character in the string.
+    """
     if isinstance(possible_list,str):
         return ([possible_list])
     else:
         return (possible_list)
     
 def drop_geometry(gdf):
-    # Inspired by 
-    # https://github.com/geopandas/geopandas/issues/544
-    # and sf::st_drop_geometry
-    # I miss R    
+    """
+    Parameters
+    ----------
+    gdf: gpd.GeoDataFrame 
+        Requires geometry in column 'geometry'
+    Returns
+    -------
+    df: pd.DataFrame
+       Dataframe containing all columns of the GeoDataFrame except for 'geometry', inspired
+       by sf::st_drop_geometry and https://github.com/geopandas/geopandas/issues/544
+    """
     df = pd.DataFrame(gdf[[col for col in gdf.columns if col != gdf._geometry_column_name]])
     
     return(df)
        
 def explode_first_last(gdf):
+    """
+    Parameters
+    ----------
+    gdf: gpd.GeoDataFrame with geometry in column 'geometry'
+    Returns
+    -------
+    line_first_last: gpd.DataFrame, geodataframe with one row for the first and last vertex 
+        of each geometry in the input gdf. The attributes of each original row are carried 
+        forward to the output gdf.
+    """
 
     line_first_last_list = []
      
@@ -92,6 +140,7 @@ def ckdnearest(gdA, gdB):
     gdf : gpd.GeoDataFrame
         wmata schedule data for the correct route and direction with the closest rawnav point.
     """
+    
     gdA.reset_index(inplace=True, drop=True);
     gdB.reset_index(inplace=True, drop=True)
     nA = np.array(list(zip(gdA.geometry.x, gdA.geometry.y)))
@@ -122,7 +171,6 @@ def reset_col_names(df):
     Pandas has a fun way of returning hierarchical column names that don't lend themselves well
     to continuing to do work on a dataframe. This addresses that.
     """
-    
     
     df.columns = ["_".join(x) for x in df.columns.ravel()]
     df = df.reset_index()

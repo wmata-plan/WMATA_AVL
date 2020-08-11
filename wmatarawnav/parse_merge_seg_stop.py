@@ -62,8 +62,7 @@ def merge_rawnav_segment(rawnav_gdf_,
     )
      
     # Cleaning
-    index_run_segment_start_end_1 =\
-        remove_runs_with_too_far_pings(index_run_segment_start_end_1)
+    index_run_segment_start_end_1 = remove_runs_with_too_far_pings(index_run_segment_start_end_1)
     
     #  - TODO: Are the nearest points in order, such that the segment start point has a lower index value than the
     #    segment end point (checks that the segment was drawn in the right direction and that any
@@ -95,7 +94,7 @@ def merge_rawnav_segment(rawnav_gdf_,
 def include_segment_summary(rawnav_q_dat, 
                             rawnav_sum_dat, 
                             nearest_stop_dat):
-    '''
+    """
     Parameters
     ----------
     rawnav_q_dat: pd.DataFrame, rawnav data
@@ -109,9 +108,13 @@ def include_segment_summary(rawnav_q_dat,
     -------
     rawnav_q_stop_sum_dat: pd.DataFrame
         trip summary data with additional information from wmata schedule data
-    '''
-    # 5 Get summary after merging files
-    ########################################################################################
+    Notes
+    -----
+    This function is largely copied and slimmed down from the schedule merge
+    implementation. Making this function more flexible to accommodate both cases would be a significant
+    investment given the variety of columns and aggregations that need to be applied in each case.     
+    """
+
     first_last_stop_dat = ws.get_first_last_stop_rawnav(nearest_stop_dat)
     rawnav_q_target_dat = \
         rawnav_q_dat.merge(first_last_stop_dat.drop(['odom_ft','sec_past_st'], axis = 1),
@@ -121,9 +124,6 @@ def include_segment_summary(rawnav_q_dat,
         rawnav_q_target_dat
         .query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
     )
-    # TODO: The points after this are largely copied and slimmed down from the schedule merge
-    # implementation. Not ideal by any stretch, but making this more flexible would be a significant
-    # chore given the variety of columns and aggregations that need to be applied in each case. 
     
     rawnav_q_target_dat = \
         rawnav_q_target_dat[
@@ -157,12 +157,15 @@ def include_segment_summary(rawnav_q_dat,
                                      'start_long_segment', 
                                      'end_long_segment',
                                      'dist_first_stop_segment'] 
+    
     rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment']] = \
         rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment']] / 5280
+        
     rawnav_q_segment_summary.loc[:, 'trip_speed_mph_segment'] = \
         round(3600 *
               rawnav_q_segment_summary.trip_dist_mi_odom_and_segment /
               rawnav_q_segment_summary.trip_dur_sec_segment, 2)
+        
     rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment', 
                                   'dist_first_stop_segment']] = \
         round(rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment', 
@@ -178,7 +181,7 @@ def include_segment_summary(rawnav_q_dat,
     return rawnav_q_segment_summary
 
 def remove_runs_with_too_far_pings(index_table,
-                                  threshold_ft = 50):
+                                   threshold_ft = 50):
     """
     Parameters
     ----------
@@ -197,6 +200,7 @@ def remove_runs_with_too_far_pings(index_table,
                    .filter(lambda x, y = threshold_ft: (x.dist_to_nearest_point < y).all()))
 
     row_after = index_table_fil.shape[0]
+    
     row_diff = row_before - row_after    
     
     if (row_diff > 0):

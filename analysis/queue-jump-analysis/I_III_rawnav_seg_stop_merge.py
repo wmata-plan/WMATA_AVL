@@ -20,14 +20,7 @@ ipython.magic("autoreload 2")
 # 1.1 Import Python Libraries
 ############################################
 from datetime import datetime
-
 import os, sys, shutil
-
-if not sys.warnoptions:
-    import warnings
-    # warnings.simplefilter("ignore")  # Stop Pandas warnings
-
-import os, sys
 import pandas as pd
 import geopandas as gpd
 import pyarrow as pa
@@ -102,23 +95,33 @@ xwalk_seg_pattern_stop_in = wr.tribble(
                 "W47",             "EAST",     "irving_fifteenth_sixteenth_stub",    2368
   )
 
-xwalk_wmata_route_dir_pattern = wr.read_sched_db_patterns(
-    path = os.path.join(path_source_data,
-                        "wmata_schedule_data",
-                        "Schedule_082719-201718.mdb"),
-    analysis_routes = analysis_routes)\
-    [['direction', 'route','pattern']]\
+xwalk_wmata_route_dir_pattern = (
+    wr.read_sched_db_patterns(
+        path = os.path.join(path_source_data,
+                            "wmata_schedule_data",
+                            "Schedule_082719-201718.mdb"),
+        analysis_routes = analysis_routes)
+    .filter(items = ['direction', 'route','pattern'])
     .drop_duplicates()
+)
     
-xwalk_seg_pattern_stop = (xwalk_seg_pattern_stop_in
-                          .merge(xwalk_wmata_route_dir_pattern, on = ['route','direction'])
-                          .drop('direction', 1)
-                          .reindex(columns = ['route','pattern','seg_name_id','stop_id']))
+xwalk_seg_pattern_stop = (
+    xwalk_seg_pattern_stop_in
+    .merge(
+        xwalk_wmata_route_dir_pattern, 
+        on = ['route','direction']
+    )
+    .drop('direction', 1)
+    .reindex(columns = ['route','pattern','seg_name_id','stop_id'])
+)
 
 del xwalk_seg_pattern_stop_in
 
-xwalk_seg_pattern = (xwalk_seg_pattern_stop.drop('stop_id', 1)
-                     .drop_duplicates())
+xwalk_seg_pattern = (
+    xwalk_seg_pattern_stop
+    .drop('stop_id', 1)
+    .drop_duplicates()
+)
 
 # 3. load shapes
 # Segments
@@ -163,15 +166,17 @@ for analysis_route in analysis_routes:
                 )
         except:
             print(f'No data on analysis route {analysis_route} for {analysis_day}')
-            # print(e) #usually no data found or something similar
             continue
         else:
    
             # Reload Data
-            rawnav_summary_dat = wr.read_cleaned_rawnav(
-                analysis_routes_ = analysis_route,
-                analysis_days_ = analysis_day,
-                path = os.path.join(path_processed_data, "rawnav_summary.parquet"))
+            rawnav_summary_dat = (
+                wr.read_cleaned_rawnav(
+                    analysis_routes_ = analysis_route,
+                    analysis_days_ = analysis_day,
+                    path = os.path.join(path_processed_data, "rawnav_summary.parquet")
+                )
+            )
 
             # Subset Rawnav Data to Records Desired
             rawnav_summary_dat = rawnav_summary_dat.query('not (run_duration_from_sec < 600 | dist_odom_mi < 2)')
@@ -181,11 +186,16 @@ for analysis_route in analysis_routes:
                                                 how='right')
             
             # Address Remaining Col Format issues
-            rawnav_qjump_gdf = gpd.GeoDataFrame(
-                rawnav_qjump_dat, 
-                geometry = gpd.points_from_xy(rawnav_qjump_dat.long,rawnav_qjump_dat.lat),
-                crs='EPSG:4326').\
-                to_crs(epsg=wmata_crs)
+            rawnav_qjump_gdf = (
+                gpd.GeoDataFrame(
+                    rawnav_qjump_dat, 
+                    geometry = gpd.points_from_xy(
+                        rawnav_qjump_dat.long,
+                        rawnav_qjump_dat.lat
+                    ),
+                    crs='EPSG:4326')
+                .to_crs(epsg=wmata_crs)
+            )
     
             # Iterate on over Pattern-Segments Combinations Applicable to Route
             xwalk_seg_pattern_subset = xwalk_seg_pattern.query('route == @analysis_route')

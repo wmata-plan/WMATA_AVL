@@ -38,16 +38,13 @@ def read_sched_db_patterns(path,
     wmata_schedule_dat: pd.DataFrame, wmata_schedule data
     """
     # Open Connection
-    #TODO: Need to give documentation to wmata on how to install access database engine
-    # I was having issue with podbc. I think I have a 64 bit python and 32 bit access.
     pyodbc_available_drivers = [x for x in pyodbc.drivers() if x.startswith('Microsoft')]
     if 'Microsoft Access Driver (*.mdb, *.accdb)' not in pyodbc_available_drivers:
         link1 = "https://ginesys.atlassian.net/wiki/spaces/PUB/pages/66617405/You+cannot+install+the+64-bit+version+of+Microsoft+Access+Database+Engine+because+you+currently+have+32-bit+Office+Product+installed+-+Error+message+shows+when+user+tries+to+install+a+64-bit+version+of+Microsoft+Access+Database+Engine"
         link2 = "https://knowledge.autodesk.com/support/autocad/learn-explore/caas/sfdcarticles/sfdcarticles/How-to-install-64-bit-Microsoft-Database-Drivers-alongside-32-bit-Microsoft-Office.html"
         raise pyodbc.InterfaceError("Likely issue with access database engine. Try the following links:\n"
                                     "link1 = {},\nlink2 = {}".format(link1,link2))
-    # https://ginesys.atlassian.net/wiki/spaces/PUB/pages/66617405/You+cannot+install+the+64-bit+version+of+Microsoft+Access+Database+Engine+because+you+currently+have+32-bit+Office+Product+installed+-+Error+message+shows+when+user+tries+to+install+a+64-bit+version+of+Microsoft+Access+Database+Engine
-    # https://knowledge.autodesk.com/support/autocad/learn-explore/caas/sfdcarticles/sfdcarticles/How-to-install-64-bit-Microsoft-Database-Drivers-alongside-32-bit-Microsoft-Office.html
+  
     cnxn = pyodbc.connect(r'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=' + path + \
                           r';UID="' + UID + \
                           r'";PWD="' + PWD + r'";')
@@ -101,17 +98,25 @@ def read_sched_db_patterns(path,
         print("Schedule data does not include the following route(s): " + miss_routes)
 
     # Join tables
-    pattern_pattern_detail_stop_q_jump_route_dat = \
-        pattern_q_jump_route_dat.merge(pattern_detail_dat, on='pattern_id', how='left') \
-            .merge(stop_dat, on='geo_id', how='left')
+    pattern_pattern_detail_stop_q_jump_route_dat = (
+        pattern_q_jump_route_dat
+        .merge(pattern_detail_dat, on='pattern_id', how='left')
+        .merge(stop_dat, on='geo_id', how='left')
+    )
 
-    pattern_pattern_detail_stop_q_jump_route_dat. \
-        sort_values(by=['route', 'pattern', 'order'], inplace=True)
+    (pattern_pattern_detail_stop_q_jump_route_dat
+     .sort_values(by=['route', 'pattern', 'order'], inplace=True)
+    )
 
     # Check for Missing Lat Long In Stops   
-    mask_nan_latlong = pattern_pattern_detail_stop_q_jump_route_dat[['stop_lat', 'stop_lon']].isna().all(axis=1)
-    assert_stop_sort_order_zero_has_nan_latlong = \
+    mask_nan_latlong = (
+        pattern_pattern_detail_stop_q_jump_route_dat[['stop_lat', 'stop_lon']].isna().all(axis=1)
+    )
+    
+    assert_stop_sort_order_zero_has_nan_latlong = (
         sum(pattern_pattern_detail_stop_q_jump_route_dat[mask_nan_latlong].stop_sort_order - 0)
+    )
+        
     assert (assert_stop_sort_order_zero_has_nan_latlong == 0), \
         print("Missing LatLong values found for stops, please address in source database")
 
@@ -159,19 +164,22 @@ def merge_rawnav_wmata_schedule(analysis_route_,
     if (rawnav_sum_subset_dat.shape[0] == 0): return None, None
 
     # Find rawnav point nearest each stop
-    nearest_rawnav_point_to_wmata_schedule_dat = \
+    nearest_rawnav_point_to_wmata_schedule_dat = (
         merge_rawnav_target(
             target_dat=wmata_schedule_dat_,
             rawnav_dat=rawnav_subset_dat)
+    )
 
     # Assert and clean stop data
     # TODO: confirm what happens if a route has no pings near a stop (unlikely, but is it dropped entirely
     # from summary and index table?)
-    nearest_rawnav_point_to_wmata_schedule_dat = \
+    nearest_rawnav_point_to_wmata_schedule_dat = (
         remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat)
+    )
 
-    nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat = \
+    nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat = (
         assert_clean_stop_order_increase_with_odom(nearest_rawnav_point_to_wmata_schedule_dat)
+    )
 
     # Generate Summary
     wmata_schedule_based_sum_dat = include_wmata_schedule_based_summary(
@@ -191,31 +199,54 @@ def merge_rawnav_wmata_schedule(analysis_route_,
          'index_run_start', 'taglist', 'route_pattern', 'route', 'pattern'],
         inplace=True,
         drop=True)
+    
     return wmata_schedule_based_sum_dat, nearest_rawnav_point_to_wmata_schedule_correct_stop_order_dat
 
 
 def add_num_missing_stops_to_sum(rawnav_wmata_schedule_dat, 
-                                 wmata_schedule_dat_
-                                 ,wmata_schedule_based_sum_dat_):
+                                 wmata_schedule_dat_,
+                                 wmata_schedule_based_sum_dat_):
 
-    rawnav_wmata_schedule_num_stops= \
-        rawnav_wmata_schedule_dat.groupby(['filename', 'index_run_start']). \
-            agg(route=('route','first'),
-                pattern=('pattern','first'),
-                num_stops_in_run=('stop_id','count')).reset_index()
-    rawnav_wmata_schedule_num_stops=\
-        pd.DataFrame(rawnav_wmata_schedule_num_stops)
-    wmata_schedule_stops_all= \
-        wmata_schedule_dat_.groupby(['route','pattern']).agg(wmata_stops_all=('stop_id','count')).reset_index()
-    rawnav_wmata_schedule_num_stops = rawnav_wmata_schedule_num_stops.merge(wmata_schedule_stops_all,
-                                                                            on=['route','pattern'],
-                                                                            how='left')
-    rawnav_wmata_schedule_num_stops=\
-        rawnav_wmata_schedule_num_stops.assign(num_missing_stops=lambda x: x.wmata_stops_all-x.num_stops_in_run)
-    wmata_schedule_based_sum_dat_with_missing_stop = wmata_schedule_based_sum_dat_.merge(rawnav_wmata_schedule_num_stops,
-                                                                      on=['filename','index_run_start',
-                                                                          'route','pattern'],
-                                                                      how='left')
+    rawnav_wmata_schedule_num_stops = (
+        rawnav_wmata_schedule_dat
+        .groupby(['filename', 'index_run_start'])
+        .agg(
+            route=('route','first'),
+            pattern=('pattern','first'),
+            num_stops_in_run=('stop_id','count')
+        )
+        .reset_index()
+    )
+            
+    rawnav_wmata_schedule_num_stops = pd.DataFrame(rawnav_wmata_schedule_num_stops)
+        
+    wmata_schedule_stops_all = (
+        wmata_schedule_dat_
+        .groupby(['route','pattern'])
+        .agg(wmata_stops_all=('stop_id','count'))
+        .reset_index()
+    )
+    
+    rawnav_wmata_schedule_num_stops = (
+        rawnav_wmata_schedule_num_stops.merge(wmata_schedule_stops_all,
+                                              on=['route','pattern'],
+                                              how='left')
+    )
+    
+    rawnav_wmata_schedule_num_stops = (
+        rawnav_wmata_schedule_num_stops
+        .assign(num_missing_stops=lambda x: x.wmata_stops_all - x.num_stops_in_run)
+    )
+    
+    wmata_schedule_based_sum_dat_with_missing_stop = (
+        wmata_schedule_based_sum_dat_.merge(rawnav_wmata_schedule_num_stops,
+                                            on=['filename',
+                                                'index_run_start',
+                                                'route',
+                                                'pattern'],
+                                            how='left')
+    )
+    
     return wmata_schedule_based_sum_dat_with_missing_stop
 
 
@@ -230,11 +261,14 @@ def merge_rawnav_target(target_dat, rawnav_dat, quiet=True):
     Returns
     -------
     nearest_rawnav_point_to_target_data : gpd.GeoDataFrame
-        A geopandas dataframe with nearest rawnav point to each of the wmata schedule stops on that route.
+        A geopandas dataframe with nearest rawnav point to each of the wmata 
+        schedule stops on that route.
     """
 
-    assert (bool(re.search("US survey foot", target_dat.crs.to_wkt()))), print('Need a CRS with feet as units')
-    assert (bool(re.search("US survey foot", rawnav_dat.crs.to_wkt()))), print('Need a CRS with feet as units')
+    assert (bool(re.search("US survey foot", target_dat.crs.to_wkt()))),\
+        print('Need a CRS with feet as units')
+    assert (bool(re.search("US survey foot", rawnav_dat.crs.to_wkt()))),\
+        print('Need a CRS with feet as units')
     assert (target_dat.crs == rawnav_dat.crs), print("CRS must match between objects")
 
     # Iterate over groups of routes and patterns in rawnav data and target object
@@ -243,6 +277,7 @@ def merge_rawnav_target(target_dat, rawnav_dat, quiet=True):
         ['route', 'pattern', 'filename', 'index_run_start'])
 
     nearest_rawnav_point_to_target_dat = pd.DataFrame()
+    
     for name, rawnav_group in rawnav_groups:
         try:
             target_dat_relevant = \
@@ -277,11 +312,20 @@ def remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat
         are removed.
     """
     row_before = nearest_rawnav_point_to_wmata_schedule_data_.shape[0]
-    nearest_rawnav_point_to_wmata_schedule_data_ = \
-        nearest_rawnav_point_to_wmata_schedule_data_.query('dist_to_nearest_point < 100')
+    
+    nearest_rawnav_point_to_wmata_schedule_data_ = (
+        nearest_rawnav_point_to_wmata_schedule_data_
+        .query('dist_to_nearest_point < 100')
+    )
+    
     row_after = nearest_rawnav_point_to_wmata_schedule_data_.shape[0]
+    
     row_diff = row_before - row_after
-    print('deleted {} rows of {} rows with distance to the nearest stop > 100 ft. from index table'.format(row_diff,row_before))
+    
+    print('deleted {} rows of {} rows with distance to the nearest stop > 100 ft. from index table'
+          .format(row_diff,row_before)
+    )
+    
     return nearest_rawnav_point_to_wmata_schedule_data_
 
 
@@ -290,14 +334,14 @@ def assert_clean_stop_order_increase_with_odom(nearest_rawnav_point_to_wmata_sch
     Parameters
     ----------
     nearest_rawnav_point_to_wmata_schedule_data_: gpd.GeoDataFrame
-        cleaned data on nearest rawnav point to wmata schedule data where all stops with closest rawnav point > 100 ft.
-        are removed.
+        cleaned data on nearest rawnav point to wmata schedule data where all stops with
+        closest rawnav point > 100 ft. are removed.
     Returns
     -------
     nearest_rawnav_point_to_wmata_schedule_data_: gpd.GeoDataFrame
         cleaned data on nearest rawnav point to wmata schedule data where
-            - stops whose ordering does not correspond to the index_loc/ time/ odometer are removed i.e. stops are
-            removed if  order does not increase with index_loc or time or distance.
+            - stops whose ordering does not correspond to the index_loc/ time/ odometer are removed 
+              i.e. stops are removed if  order does not increase with index_loc or time or distance.
             - where all stops with closest rawnav point > 100 ft. are removed.
     """
     row_before = nearest_rawnav_point_to_wmata_schedule_data_.shape[0]
@@ -354,15 +398,22 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
     rawnav_q_stop_sum_dat: pd.DataFrame
         trip summary data with additional information from wmata schedule data
     '''
-    # TODO: Currently the arguments actually come in as gdfs, should check on that...
-    # 5 Get summary after merging files
-    ########################################################################################
     first_last_stop_dat = get_first_last_stop_rawnav(nearest_stop_dat)
-    rawnav_q_stop_dat = \
-        rawnav_q_dat.merge(first_last_stop_dat.drop(['odom_ft','sec_past_st'], axis = 1),
-                           on=['filename', 'index_run_start'], how='right')
-    rawnav_q_stop_dat = rawnav_q_stop_dat.query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
-    rawnav_q_stop_dat = \
+    
+    rawnav_q_stop_dat = (
+        rawnav_q_dat
+        .merge(first_last_stop_dat
+               .drop(['odom_ft','sec_past_st'], axis = 1),
+               on=['filename', 'index_run_start'], 
+               how='right')
+    )
+    
+    rawnav_q_stop_dat = (
+        rawnav_q_stop_dat
+        .query('index_loc >= index_loc_first_stop & index_loc <= index_loc_last_stop')
+    )
+    
+    rawnav_q_stop_dat = (
         rawnav_q_stop_dat[
             ['filename', 
              'index_run_start', 
@@ -377,23 +428,28 @@ def include_wmata_schedule_based_summary(rawnav_q_dat, rawnav_sum_dat, nearest_s
              'pattern_name', 
              'direction',
              'pattern_destination', 
-             'direction_id']]
+             'direction_id']
+        ]    
+    )
+        
     Map1 = lambda x: max(x) - min(x)
-    rawnav_q_stop_sum_dat = \
-        rawnav_q_stop_dat.groupby(['filename', 'index_run_start']). \
-            agg({'odom_ft': ['min', 'max', Map1],
-                 'sec_past_st': ['min', 'max', Map1],
-                 'lat': ['first', 'last'],
-                 'long': ['first', 'last'],
-                 'first_stop_dist_nearest_point': ['first'],
-                 'trip_length': ['first'],
-                 'route_text': ['first'],
-                 'pattern_name': ['first'],
-                 'direction': ['first'],
-                 'pattern_destination': ['first'],
-                 'direction_id': ['first']})
     
-    # i don't make up the rules
+    rawnav_q_stop_sum_dat = (
+        rawnav_q_stop_dat
+        .groupby(['filename', 'index_run_start'])
+        .agg({'odom_ft': ['min', 'max', Map1],
+              'sec_past_st': ['min', 'max', Map1],
+              'lat': ['first', 'last'],
+              'long': ['first', 'last'],
+              'first_stop_dist_nearest_point': ['first'],
+              'trip_length': ['first'],
+              'route_text': ['first'],
+              'pattern_name': ['first'],
+              'direction': ['first'],
+              'pattern_destination': ['first'],
+              'direction_id': ['first']})
+    )
+    
     rawnav_q_stop_sum_dat.columns = ["_".join(x) for x in rawnav_q_stop_sum_dat.columns.ravel()]
 
     rawnav_q_stop_sum_dat = (
@@ -452,25 +508,58 @@ def get_first_last_stop_rawnav(nearest_rawnav_stop_dat):
         first and last stop information for a trip.
     '''
     last_stop_dat = nearest_rawnav_stop_dat.copy()
-    last_stop_dat.loc[:, "tempCol"] = \
-        last_stop_dat.groupby(['filename', 'index_run_start']).index_loc.transform(max)
-    last_stop_dat = last_stop_dat.query('index_loc==tempCol').reset_index(drop=True).drop(columns='tempCol')
-    last_stop_dat = last_stop_dat[['filename', 'index_run_start', 'index_loc',
-                                   'dist_to_nearest_point']]
-    last_stop_dat.rename(columns={'index_loc': 'index_loc_last_stop',
-                                  'dist_to_nearest_point': 'last_stop_dist_nearest_point'}, inplace=True)
-    first_stop_dat = \
-        nearest_rawnav_stop_dat.groupby(['filename', 'index_run_start']).index_loc.transform(min)
+    
+    last_stop_dat.loc[:, "tempCol"] = (
+        last_stop_dat
+        .groupby(['filename', 'index_run_start'])
+        .index_loc
+        .transform(max)
+    )
+        
+    last_stop_dat = (
+        last_stop_dat
+        .query('index_loc==tempCol')
+        .reset_index(drop=True)
+        .filter(items=['filename', 'index_run_start', 'index_loc', 'dist_to_nearest_point'])
+        .rename(columns={'index_loc': 'index_loc_last_stop',
+                         'dist_to_nearest_point': 'last_stop_dist_nearest_point'})
+    )
+
+    # I think we should drop this later
+    # first_stop_dat = ()
+    #     nearest_rawnav_stop_dat.groupby(['filename', 'index_run_start']).index_loc.transform(min)
     first_stop_dat = nearest_rawnav_stop_dat.copy()
-    first_stop_dat.loc[:, "tempCol"] = \
-        first_stop_dat.groupby(['filename', 'index_run_start']).index_loc.transform(min)
-    first_stop_dat = first_stop_dat.query('index_loc==tempCol').reset_index(drop=True).drop(columns='tempCol')
-    first_stop_dat.rename(columns={'index_loc': 'index_loc_first_stop',
-                                   'dist_to_nearest_point': 'first_stop_dist_nearest_point'}, inplace=True)
-    first_stop_dat.sort_values(['filename', 'index_run_start'], inplace=True)
-    first_last_stop_dat = first_stop_dat.merge(last_stop_dat, on=['filename', 'index_run_start'],
-                                               how='left')
-    first_last_stop_dat.drop(columns=['geometry', 'lat', 'long', 'pattern', 'route'], inplace=True)
+    
+    first_stop_dat.loc[:, "tempCol"] = ( 
+        first_stop_dat
+        .groupby(['filename', 'index_run_start'])
+        .index_loc
+        .transform(min)
+    )
+    
+    first_stop_dat = (
+        first_stop_dat
+        .query('index_loc==tempCol')
+        .reset_index(drop=True)
+        .drop(columns='tempCol')
+        .rename(
+            columns={'index_loc': 'index_loc_first_stop',
+                     'dist_to_nearest_point': 'first_stop_dist_nearest_point'
+            }
+        )
+        .sort_values(['filename', 'index_run_start'])
+    )
+    
+    first_last_stop_dat = (
+        first_stop_dat
+        .merge(
+            last_stop_dat, 
+            on=['filename', 'index_run_start'],
+            how='left'
+        )
+        .drop(columns=['geometry', 'lat', 'long', 'pattern', 'route'])
+    )
+        
     return first_last_stop_dat
 
 
@@ -484,26 +573,36 @@ def make_target_rawnav_linestring(index_table):
     -------
     index_table_mod: gpd.DataFrame
         rawnav index table with linestring geometry between rawnav point and nearest
+    Notes
+    -----
+    This function creates a linestring geometry between the rawnav point and target point 
+    for visualization of the merge process. 
     '''
-    # Create a linestring geometry between the rawnav point and target point for visualization
-    # Right now it's not strictly necessary
-    # TODO: complete documentation, test function
-
-    # index_table = ll.drop_geometry(index_table)
     
-    geometry_nearest_rawnav_point = gpd.points_from_xy(index_table.long,
-                                                       index_table.lat)
+    geometry_nearest_rawnav_point = (
+        gpd.points_from_xy(
+            index_table.long,
+            index_table.lat
+        )
+    )
 
-    geometry_stop_on_route = gpd.points_from_xy(index_table.stop_lon,
-                                                index_table.stop_lat)
+
+    geometry_stop_on_route = (
+        gpd.points_from_xy(
+            index_table.stop_lon,
+            index_table.stop_lat
+        )
+    )
 
     geometry = [LineString(list(xy)) for xy in zip(geometry_nearest_rawnav_point, geometry_stop_on_route)]
 
-    index_table_mod = \
+    index_table_mod = (
         gpd.GeoDataFrame(
             index_table,
             geometry=geometry,
-            crs='EPSG:4326')
+            crs='EPSG:4326'
+        )
+    )
 
     return index_table_mod
 
@@ -524,10 +623,11 @@ def plot_rawnav_trajectory_with_wmata_schedule_stops(rawnav_dat, index_table_lin
     -------
     this_map: folium.Map
         map of rawnav trajectory and stops with nearest rawnav point
+    Notes 
+    -----
+    See documentation of use in the methodology notebook.
     '''
-    # TODO: right now, the conversion to linestring of the wmata_schedule_stop .etc file
-    # needs to be done before this is run with the new function make_target_rawnav_linestring
-    # i broke it - WT
+
     ## Link to Esri World Imagery service plus attribution
     # https://www.esri.com/arcgis-blog/products/constituent-engagement/constituent-engagement/esri-world-imagery-in-openstreetmap/
     esri_imagery = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
@@ -570,7 +670,7 @@ def plot_marker_clusters(this_map, dat, lat, long, feature_grp):
     -------
     None
     '''
-    # TODO: Write Documentation
+
     popup_field_list = list(dat.columns)
     for i, row in dat.iterrows():
         label = '<br>'.join([field + ': ' + str(row[field]) for field in popup_field_list])

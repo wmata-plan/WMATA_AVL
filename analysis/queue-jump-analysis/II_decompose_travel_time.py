@@ -99,10 +99,13 @@ xwalk_seg_pattern_stop_in = wr.tribble(
 
 xwalk_wmata_route_dir_pattern = (
     wr.read_sched_db_patterns(
-        path = os.path.join(path_source_data,
-                            "wmata_schedule_data",
-                            "Schedule_082719-201718.mdb"),
-            analysis_routes = analysis_routes)
+        path = os.path.join(
+            path_source_data,
+           "wmata_schedule_data",
+           "Schedule_082719-201718.mdb"
+           ),
+        analysis_routes = analysis_routes
+    )
     .filter(items = ['direction','route','pattern'])
     .drop_duplicates()
 )
@@ -146,7 +149,8 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     rawnav_dat = (
         wr.read_cleaned_rawnav(
            analysis_routes_ = seg_routes,
-           path = os.path.join(path_processed_data, "rawnav_data.parquet"))
+           path = os.path.join(path_processed_data, "rawnav_data.parquet")
+        )
         .drop(columns=['blank', 'lat_raw', 'long_raw', 'sat_cnt'])
     )
             
@@ -194,9 +198,11 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     
     # Calculate Free Flow Travel Time through Entire Segment
     segment_ff = (
-        wr.decompose_segment_ff(rawnav_dat,
-                                segment_summary,
-                                max_fps = 73.3)
+        wr.decompose_segment_ff(
+            rawnav_dat,
+            segment_summary,
+            max_fps = 73.3
+        )
         .assign(seg_name_id = seg)
     )
                 
@@ -204,9 +210,11 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     
     # Calculate Stop-Area Decomposition
     stop_area_decomp = (
-        wr.decompose_stop_area(rawnav_dat,
-                                segment_summary,
-                                stop_index_fil)
+        wr.decompose_stop_area(
+            rawnav_dat,
+            segment_summary,
+            stop_index_fil
+        )
         .assign(seg_name_id = seg)
     )
     

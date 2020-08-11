@@ -8,12 +8,7 @@ Created on Mon Jun 22 10:18 2020
 # pytest tests
 
 # To run tests outside of terminal, set the current working directory
-# to the repository outside of the script, ala
-# import os
-# os.chdir('C:\\OD\\OneDrive - Foursquare ITP\\Projects\\WMATA_AVL')
-# Perhaps there's a way to tell pytest to run in a specific place or set sys
-# paths to avoid this. Make sure that Spyder does not reset current working
-# directory to the script location when running
+# to the repository outside of the script
 
 import pytest
 import os
@@ -29,7 +24,7 @@ import wmatarawnav as wr
 @pytest.fixture(scope="session")
 def get_cwd():
     if os.getcwd().split('\\')[-1] == 'tests':
-        os.chdir('../')
+        os.chdir('../') # assume accidentally set to script directory
     return os.getcwd()
 
 
