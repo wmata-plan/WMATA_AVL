@@ -111,22 +111,31 @@ if run_inventory:
     rawnav_inventory.to_parquet(
         path = path_rawnav_inventory,
         partition_cols = ['filename'],
-        index = False) 
+        index = False
+    )
        
 else:
     try:
         rawnav_inventory = (
             pd.read_parquet(path=os.path.join(path_processed_data,"rawnav_inventory.parquet"))
             .assign(filename = lambda x: x.filename.astype(str)) #returned as categorical
-            )
+        )
         
     except:
         raise("No rawnav inventory found")
  
-rawnav_inventory_filtered =\
-    rawnav_inventory[rawnav_inventory.groupby('filename',sort = False)['route'].transform(lambda x: x.isin(analysis_routes).any())]
+rawnav_inventory_filtered = (
+    rawnav_inventory[
+        rawnav_inventory
+        .groupby('filename',sort = False)['route']
+        .transform(lambda x: x.isin(analysis_routes).any())
+    ]
+)
    
-rawnav_inventory_filtered = rawnav_inventory_filtered.assign(line_num = lambda x: x.line_num.astype('int'))
+rawnav_inventory_filtered = (
+    rawnav_inventory_filtered
+    .assign(line_num = lambda x: x.line_num.astype('int'))
+)
     
 if len(rawnav_inventory_filtered) == 0:
     raise Exception("No Analysis Routes found in file_universe")
@@ -146,7 +155,6 @@ rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath', 'filename
 rawnav_inventory_filtered_valid = rawnav_inventory_filtered
 
 for index, row in rawnav_inv_filt_first.iterrows():
-    # TODO: I don't quite get the tag_line_info_no bit
     tag_info_line_no = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == row['filename']]
     reference = min(tag_info_line_no.line_num)
     # -1 refers to the fact that the tag line identifying the start of a run will be removed, such
@@ -160,8 +168,6 @@ for index, row in rawnav_inv_filt_first.iterrows():
     if type(temp) != type(None):
         route_rawnav_tag_dict[row['filename']] = dict(RawData=temp, tagLineInfo=tag_info_line_no)
     else:
-        # remove bad read files
-        # TODO: build tests around 'bad' reads and what's happening with these; only lose a handful of files
         remove_file = row['filename']  
         rawnav_inventory_filtered_valid  = rawnav_inventory_filtered_valid.query('filename!= @remove_file')
 
@@ -181,8 +187,7 @@ for key, datadict in route_rawnav_tag_dict.items():
         filename=key)
 
     rawnav_data_dict[key] = temp_dat['rawnavdata']
-    summary_data_dict[key] = temp_dat['summary_data']
-        
+    summary_data_dict[key] = temp_dat['summary_data']     
 
 route_rawnav_tag_dict = None
 
