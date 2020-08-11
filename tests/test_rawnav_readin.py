@@ -8,14 +8,6 @@ Created on Wed Jun 10 03:48:45 2020
 # to the repository, and then run 
 # pytest tests
 
-# To run tests outside of terminal, set the current working directory 
-# to the repository outside of the script, ala
-# import os
-# os.chdir('C:\\OD\\OneDrive - Foursquare ITP\\Projects\\WMATA_AVL')
-# Perhaps there's a way to tell pytest to run in a specific place or set sys
-# paths to avoid this. Make sure that Spyder does not reset current working
-# directory to the script location when running
-
 import pytest
 import os
 import pandas as pd
@@ -48,11 +40,24 @@ def get_rawnav_inventory(get_cwd):
 def get_rawnav_inv_filt_first(get_rawnav_inventory):
     rawnav_inventory = get_rawnav_inventory
     analysis_routes = ['U6']
-    rawnav_inventory_filtered = \
+    rawnav_inventory_filtered = (
         rawnav_inventory[
-            rawnav_inventory.groupby('filename')['route'].transform(lambda x: x.isin(analysis_routes).any())]
+            rawnav_inventory
+            .groupby('filename')['route']
+            .transform(lambda x: x.isin(analysis_routes).any())
+        ]
+    )
+    
     rawnav_inventory_filtered = rawnav_inventory_filtered.astype({"line_num": 'int'})
-    rawnav_inv_filt_first = rawnav_inventory_filtered.groupby(['fullpath', 'filename']).line_num.min().reset_index()
+    
+    rawnav_inv_filt_first = (
+        rawnav_inventory_filtered
+        .groupby(['fullpath', 'filename'])
+        .line_num
+        .min()
+        .reset_index()
+    )
+    
     return rawnav_inv_filt_first
 
 
@@ -65,7 +70,7 @@ def get_route_rawnav_tag_dict(get_rawnav_inventory, get_rawnav_inv_filt_first):
         tag_info_line_no = rawnav_inventory_filtered[rawnav_inventory_filtered['filename'] == row['filename']]
         tag_info_line_no.line_num = tag_info_line_no.line_num.astype(int)
         reference = min(tag_info_line_no.line_num)
-        tag_info_line_no.loc[:, "NewLineNo"] = tag_info_line_no.line_num - reference - 1
+        tag_info_line_no.loc[:, "new_line_no"] = tag_info_line_no.line_num - reference - 1
         # FileID gets messy; string to number conversion loose the initial zeros. "filename" is easier to deal with.
         temp = wr.load_rawnav_data(zip_folder_path=row['fullpath'], skiprows=row['line_num'])
         route_rawnav_tag_dict[row['filename']] = {'RawData': temp, 'tagLineInfo': tag_info_line_no}
@@ -89,8 +94,7 @@ def get_rawnav_rawnav_summary_dict(get_route_rawnav_tag_dict):
 
 def test_expect_certain_flags_1(get_rawnav_inventory):
     # Expect to get certain set of tags from a file
-    # We manually reviewed a rawnav file for tags. The inventory return
-    # should match this list
+    # We manually reviewed a rawnav file for tags. The inventory should match this list
     rawnav_inventory = get_rawnav_inventory
     found_tags = rawnav_inventory.loc[rawnav_inventory['file_id'] == '00008191007', 'taglist'].tolist()
 
@@ -117,13 +121,18 @@ def test_expect_certain_flags_1(get_rawnav_inventory):
 
 def test_expect_first_row(get_route_rawnav_tag_dict):
     route_rawnav_tag_dict = get_route_rawnav_tag_dict
-    # expect that first lines are what you would expect
+    # Expect that first lines are what you would expect
     # Note that we drop the last column, as the NaN's there make for problems
-    # in comparison 
-    found_first = \
-        route_rawnav_tag_dict.get("rawnav00008191007.txt").get("RawData").head(1).drop(['TripEndTime'], axis=1,
-                                                                                       errors='ignore'). \
-            values.tolist()
+    # in comparison with JSON expectation
+    found_first = (
+        route_rawnav_tag_dict
+        .get("rawnav00008191007.txt")
+        .get("RawData")
+        .head(1)
+        .drop(['run_end_time'], axis=1,errors='ignore')
+        .values
+        .tolist()
+    )
     expected_first = json.loads(
         '[["38.921298", -76.969803, "312", "C", "S", 0.0, 0.0, 17.0, "   ", 9.0, 38.921298, -76.969803]]')
     assert found_first == expected_first
@@ -133,7 +142,7 @@ def test_expect_nlines(get_rawnav_rawnav_summary_dict):
     rawnav_data_dict, summary_data_dict = get_rawnav_rawnav_summary_dict
     # expect that the number of lines is expected after removing certain rows
     df = rawnav_data_dict.get("rawnav00008191007.txt").head(1)
-    found_start_end = df[['IndexTripStartInCleanData', 'IndexTripEndInCleanData']].values.tolist()
+    found_start_end = df[['index_run_start', 'index_run_end']].values.tolist()
     # this one indeed ends on 597
     # The value might be confusing though - this is based on index after 
     # read in, not based on index after tags removed
@@ -151,32 +160,10 @@ def test_summary_match(get_rawnav_rawnav_summary_dict):
     test_summary = summary_data_dict.get("rawnav00008191007.txt")
 
     found_summary_vals = test_summary[(test_summary.taglist == "608,   U601,8,10/06/19,05:36:41,36476,05280")][
-        ['SecEnd', 'OdomFtEnd', 'TripDurFromSec']].values.tolist()
-
-    # TODO: update test to use processed rawnav data instaed of referring back
-    # to the text file
-    # test_rawnav = rawnav_data_dict.get("rawnav00008191007.txt")
-
-    # found_rawnav_vals = test_rawnav[(test_rawnav.)]
+        ['sec_end', 'odom_ft_end', 'run_duration_from_sec']].values.tolist()
 
     expect_summary_vals = [[1409, 28214, 1409]]
     # also manually checked others here, but only wrote tests for this.
 
     assert found_summary_vals == expect_summary_vals
 
-# expect that the apc tags are added as expected
-# The APC data seems unusable so will hold off on this
-# Anecdotally, seems to match
-
-# Expect no duplicate results after certain joins occur
-
-###############################################################################
-# data Quality Checks
-
-# Expect that we get a rawnav record to look like a busstate line
-
-# Expect that speeds don't exceed __ mph
-
-# expect that odometer and seconds are monotonically increasing 
-
-# trips that begin with odometer or secs after 0?
