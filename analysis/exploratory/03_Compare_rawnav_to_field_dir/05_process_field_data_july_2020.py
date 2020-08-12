@@ -16,20 +16,33 @@ from helper_function_field_validation import combine_field_rawnav_dat
 from helper_function_field_validation \
     import quick_and_dirty_schedule_qjump_mapping
 # 1. Set globoal paramters.
-path_source_data = (
-    r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents" 
-    r"\WMATA-AVL\Data\field_rawnav_dat")
-path_processed_data = os.path.join(path_source_data, "processed_data")
-path_field_dir = (
-    r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents'
-    r'\WMATA-AVL\Data\field_rawnav_dat')
-path_field_file = os.path.join(
-    path_field_dir, 'WMATA AVL field obsv spreadsheet v.2-axb.xlsx')
-path_wmata_schedule_data = (r"C:\Users\abibeka\OneDrive - "
-                            r"Kittelson & Associates, Inc\Documents"
-                            r"\WMATA-AVL\Data\wmata_schedule_data"
-                            r"\Schedule_082719-201718.mdb")
 
+if os.getlogin() == "WylieTimmerman":
+    # Working Paths
+    path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL"
+    os.chdir(os.path.join(path_working))
+    sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
+    path_sp = r"C:\Users\WylieTimmerman\Documents\projects_local\wmata_avl_local"
+    path_source_data = os.path.join(path_sp, "data", "00-raw")
+    path_processed_data = os.path.join(path_sp, "data", "02-processed")
+    path_segments = path_processed_data
+    path_field_file = os.path.join(
+        path_source_data, 'WMATA AVL field obsv spreadsheet v.2-axb.xlsx')
+elif os.getlogin() == "abibeka":
+    # Working Paths
+    path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
+    os.chdir(os.path.join(path_working))
+    sys.path.append(path_working)
+    # Source data
+    path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents" \
+                       r"\WMATA-AVL\Data\field_rawnav_dat"
+    path_processed_data = os.path.join(path_source_data, "processed_data")
+    path_field_file = os.path.join(
+        path_source_data, 'WMATA AVL field obsv spreadsheet v.2-axb.xlsx')
+    path_segments = path_processed_data
+else:
+    raise FileNotFoundError("Define the path_working, path_source_data, gtfs_dir, \
+                            ZippedFilesloc, and path_processed_data in a new elif block")
 # 2. Read and clean field data
 # -----------------------------------------------------------------------------
 field_xlsx_wb = pd.ExcelFile(path_field_file)
@@ -111,7 +124,14 @@ rawnav_summary = wr.read_cleaned_rawnav(
                 path=os.path.join(path_processed_data,
                                   "rawnav_summary.parquet"))
 
-xwalk_seg_pattern_stop = quick_and_dirty_schedule_qjump_mapping()
+xwalk_seg_pattern_stop = quick_and_dirty_schedule_qjump_mapping(
+    path_wmata_schedule_data=os.path.join(
+            path_source_data,
+           "wmata_schedule_data",
+           "Schedule_082719-201718.mdb"
+           ),
+    analysis_routes=analysis_routes
+)
 
 # Keep relevant rawnav summary data based on the wmata schedule data.
 rawnav_summary_fil = (

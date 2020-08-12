@@ -4,26 +4,6 @@ import os
 import wmatarawnav as wr
 import datetime
 
-# Hard coding things---Not fit for sharing
-path_source_data = (
-    r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents"
-    r"\WMATA-AVL\Data\field_data_rawnav_data_july_week_2_and_3"
-)
-# Processed data
-path_processed_data = os.path.join(path_source_data, "processed_data")
-path_wmata_schedule_data = (
-    r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents"
-    r"\WMATA-AVL\Data\wmata_schedule_data\Schedule_082719-201718.mdb"
-)
-q_jump_route_list = ['S1', 'S2', 'S4', 'S9',
-                     '70', '79',
-                     '64', 'G8',
-                     'D32', 'H1', 'H2', 'H3', 'H4', 'H8', 'W47']
-# If desired, a subset of routes above or the entire list.
-# Code will iterate on the analysis_routes list
-analysis_routes = q_jump_route_list
-
-
 def time_to_sec(time_mess):
     hr_min_sec = str(time_mess).split(":")
     if len(hr_min_sec) == 3:
@@ -149,7 +129,8 @@ def correct_data_types(dat):
     return dat
 
 
-def quick_and_dirty_schedule_qjump_mapping():
+def quick_and_dirty_schedule_qjump_mapping(path_wmata_schedule_data,
+                                           analysis_routes):
     xwalk_seg_pattern_stop_in = wr.tribble(
         ['route', 'direction', 'seg_name_id', 'stop_id', "approx_time_qjump"],
         "79", "SOUTH", "georgia_columbia", 10981, 1500,

@@ -8,29 +8,34 @@ import geopandas as gpd
 import sys
 import pyarrow as pa
 import pyarrow.parquet as pq
-path_working = (r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc"
-                r"\Documents\Github\WMATA_AVL")
-sys.path.append(path_working)
-import wmatarawnav as wr  # noqa E402
-from helper_function_field_validation \
-    import quick_and_dirty_schedule_qjump_mapping  # noqa E402
-path_source_data = (
-    r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents"
-    r"\WMATA-AVL\Data\field_rawnav_dat")
-path_processed_data = os.path.join(path_source_data, "processed_data")
-path_processed_route_data = os.path.join(path_processed_data, "RouteData")
-path_field_dir = (
-    r'C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents'
-    r'\WMATA-AVL\Data\field_rawnav_dat')
+
+if os.getlogin() == "WylieTimmerman":
+    # Working Paths
+    path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL"
+    os.chdir(os.path.join(path_working))
+    sys.path.append(r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL")
+    path_sp = r"C:\Users\WylieTimmerman\Documents\projects_local\wmata_avl_local"
+    path_source_data = os.path.join(path_sp, "data", "00-raw")
+    path_processed_data = os.path.join(path_sp, "data", "02-processed")
+elif os.getlogin() == "abibeka":
+    # Working Paths
+    path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
+    os.chdir(os.path.join(path_working))
+    sys.path.append(path_working)
+    # Source data
+    path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents" \
+                       r"\WMATA-AVL\Data\field_rawnav_dat"
+    path_processed_data = os.path.join(path_source_data, "processed_data")
+else:
+    raise FileNotFoundError("Define the path_working, path_source_data, gtfs_dir, \
+                            ZippedFilesloc, and path_processed_data in a new elif block")
 path_debug_dir = os.path.join(path_processed_data, "debug")
-path_wmata_schedule_data = (r"C:\Users\abibeka\OneDrive - "
-                            r"Kittelson & Associates, Inc\Documents"
-                            r"\WMATA-AVL\Data\wmata_schedule_data"
-                            r"\Schedule_082719-201718.mdb")
-path_share_data_with_Wylie = (r"C:\Users\abibeka\OneDrive - Kittelson &"
-                              r" Associates, Inc\Documents\Github\WMATA_AVL"
-                              r"\analysis\exploratory"
-                              r"\03_Compare_rawnav_to_field_dir")
+path_share_data_with_Wylie = os.path.join(path_working,
+                                          "analysis",
+                                          "exploratory",
+                                          "03_Compare_rawnav_to_field_dir")
+import wmatarawnav as wr  # noqa E402
+
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None
