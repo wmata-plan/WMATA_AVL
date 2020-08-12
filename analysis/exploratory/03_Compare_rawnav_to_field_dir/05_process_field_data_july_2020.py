@@ -75,14 +75,12 @@ q_jump_field_loc = [
 ]
 
 rawnav_qjump_nm_map = {
-    "georgia_columbia": "Georgia & Columbia",
-    "georgia_piney_branch_long": "Georgia & Piney Branch",
-    "georgia_piney_branch_shrt": "Georgia & Piney Branch",
-    "georgia_irving": "Georgia & Irving",
-    "sixteenth_u_shrt": "16th & U",
-    "sixteenth_u_long": "16th & U",
-    "eleventh_i_new_york": "11th & NY",
-    "irving_fifteenth_sixteenth": "Irving & 16th",
+    "georgia_columbia_stub": "Georgia & Columbia",
+    "georgia_piney_branch_stub": "Georgia & Piney Branch",
+    "georgia_irving_stub": "Georgia & Irving",
+    "sixteenth_u_stub": "16th & U",
+    "eleventh_i_new_york_stub": "11th & NY",
+    "irving_fifteenth_sixteenth_stub": "Irving & 16th",
 }
 
 for sheet in q_jump_field_loc:
