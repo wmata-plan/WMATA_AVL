@@ -27,6 +27,8 @@ else:
 path_debug_dir = os.path.join(path_processed_data, "debug")
 
 import wmatarawnav as wr  # noqa E402
+from helper_function_field_validation \
+    import tribble_xwalk_seg_pattern_stop_in
 # Globals
 # Restrict number of zip files to parse to this number for testing.
 # For all cases, use None
@@ -92,28 +94,7 @@ rawnav_qjump_nm_map = {
 
 # 2. Read qjump location and stop data
 # -----------------------------------------------------------------------------
-xwalk_seg_pattern_stop_in = wr.tribble(
-    ['route', 'direction', 'seg_name_id', 'stop_id', "approx_time_qjump"],
-    "79", "SOUTH", "georgia_columbia", 10981, 1500,
-    "79", "SOUTH", "georgia_piney_branch_long", 4217, 900,
-    "70", "SOUTH", "georgia_irving", 19186, 1500, # irving stop
-    "70", "SOUTH", "georgia_columbia", 10981, 1500,  # columbia stop
-    "70", "SOUTH", "georgia_piney_branch_shrt", 4217, 900,
-    "S1", "NORTH", "sixteenth_u_shrt", 18042, 1500,
-    "S2", "NORTH", "sixteenth_u_shrt", 18042, 1500,
-    "S4", "NORTH", "sixteenth_u_shrt", 18042, 1500,
-    "S9", "NORTH", "sixteenth_u_long", 18042, 1500,
-    "64", "NORTH", "eleventh_i_new_york", 16490, 480,
-    "G8", "EAST", "eleventh_i_new_york", 16490, 360,
-    "D32", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
-    "H1", "NORTH", "irving_fifteenth_sixteenth", 2368, 2500,
-    "H2", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
-    "H3", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
-    "H4", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
-    "H8", "EAST", "irving_fifteenth_sixteenth", 2368, 180,
-    "W47", "EAST", "irving_fifteenth_sixteenth", 2368, 1200
-)
-xwalk_wmata_route_dir_pattern = (
+xwalk_seg_pattern_stop_in = tribble_xwalk_seg_pattern_stop_in()
     wr.read_sched_db_patterns(
         path = os.path.join(
             path_source_data,
