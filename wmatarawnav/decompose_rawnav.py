@@ -9,13 +9,13 @@ import numpy as np
 from . import low_level_fns as ll
 
 def decompose_segment_ff(rawnav,
-                         segment_summary,
+                         segment_summary_,
                          max_fps = 73.3):
     """
     Parameters
     ----------
     rawnav: pd.DataFrame, rawnav data. Expect cols sec_past_st and odom_ft
-    segment_summary: pd.DataFrame, defines segment start and end points
+    segment_summary_: pd.DataFrame, defines segment start and end points
     max_fps: np.int or np.float, defines maximum speed above which values will be converted to NA.
         By default, approx 50 mph (73.3 fps)
     Returns
@@ -26,7 +26,7 @@ def decompose_segment_ff(rawnav,
     # Even though we lose last three points inside segment, this way we don't pick up points outside
     # This filter-calculate order appears opposite elsewhere, but is appropriate there.
     rawnav_fil = filter_to_segment(rawnav,
-                                   segment_summary)
+                                   segment_summary_)
     
     rawnav_fil = calc_rolling_vals(rawnav)
            
@@ -42,7 +42,7 @@ def decompose_segment_ff(rawnav,
 
 def decompose_traveltime(
         rawnav,
-        segment_summary,
+        segment_summary_,
         stop_area_decomp,
         segment_ff_seg
     ):
@@ -50,7 +50,7 @@ def decompose_traveltime(
     Parameters
     ----------
     rawnav: pd.DataFrame, rawnav data. Expect cols sec_past_st and odom_ft.
-    segment_summary: pd.DataFrame, defines segment start and end points
+    segment_summary_: pd.DataFrame, defines segment start and end points
     stop_area_decomp: pd.DataFrame, subset of ranwav data within a stop area with column
         stop_area_phase indicating the phase of the vehicle at each stage.
     segment_ff_seg: np.int or np.float, the freeflow speed in feet per segment
@@ -145,7 +145,7 @@ def decompose_traveltime(
     rawnav_fil_seg = calc_rolling_vals(rawnav)
 
     rawnav_fil_seg = filter_to_segment(rawnav_fil_seg,
-                                       segment_summary)
+                                       segment_summary_)
 
     totals = (
         rawnav_fil_seg
@@ -158,15 +158,24 @@ def decompose_traveltime(
     )
     
     # Join inputs together and calculate
-    # TODO: start merge with a summary table - get all records
     travel_time_decomp = (
-        t_stop1_by_run
+        segment_summary_
+        .merge(
+            t_stop1_by_run,
+            on = ['filename','index_run_start'],
+            how = "left"
+        )
         .merge(
             totals,
             on = ['filename','index_run_start'],
             how = "left"
         )
-        .fillna(0) 
+        .assign(
+            flag_failed_qj_stop_merge = lambda x: (x.t_stop1.isna() & x.t_stop.isna())
+        )
+        .fillna({'t_stop1': 0,
+                 't_stop' : 0,
+                 't_l_initial': 0}) 
         .assign(
             ff_fps = lambda x, y = segment_ff_seg: y,
             t_ff = lambda x: x.odom_ft_seg_total / x.ff_fps
@@ -189,7 +198,7 @@ def decompose_traveltime(
     return(travel_time_decomp)
     
 def decompose_stop_area(rawnav,
-                        segment_summary,
+                        segment_summary_,
                         stop_index_fil,
                         stop_area_upstream_ft = 150,
                         stop_area_downstream_ft = 150):
@@ -197,7 +206,7 @@ def decompose_stop_area(rawnav,
     Parameters
     ----------
     rawnav: pd.DataFrame, rawnav data. Expect cols sec_past_st and odom_ft
-    segment_summary: pd.DataFrame, defines segment start and end points. Should already
+    segment_summary_: pd.DataFrame, defines segment start and end points. Should already
         be filtered to the correct patterns relevant to segments
     stop_index_fil: pd.DataFrame, defines index points of stops
     stop_area_upstream_ft: float, number of feet upstream to define the stop area. Will not
@@ -224,11 +233,11 @@ def decompose_stop_area(rawnav,
 
     # Parameter Checks
     assert(len(rawnav) > 0), print("Halting, no stops provided in rawnav data")
-    assert(len(segment_summary) > 0), print("Halting, no stops provided in segment_summary")
+    assert(len(segment_summary_) > 0), print("Halting, no stops provided in segment_summary_")
     assert(len(stop_index_fil) > 0), print("Halting, no stops provided in stop_index_fil")
 
     rawnav_fil_1 = filter_to_segment(rawnav,
-                                     segment_summary)
+                                     segment_summary_)
 
     # We'll also filter to those runs that have a match to the QJ stop while adding detail
     # about the QJ stop zone, just in case any of these runs behaved normally at segment ends

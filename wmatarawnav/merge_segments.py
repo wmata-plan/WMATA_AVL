@@ -45,9 +45,10 @@ def merge_rawnav_segment(rawnav_gdf_,
     seg_pattern_shape = (
         target_
         # Add route and pattern identifier
-        .merge(patterns_by_seg_,
-               on = ['seg_name_id'],
-               how = "left")
+        .merge(
+            patterns_by_seg_,
+            on = ['seg_name_id'],
+            how = "left")
     )
     
     # Prepare segment shape for merge    
@@ -62,62 +63,73 @@ def merge_rawnav_segment(rawnav_gdf_,
     )
      
     # Cleaning
-    index_run_segment_start_end_1 = remove_runs_with_too_far_pings(index_run_segment_start_end_1)
-    
-    #  - TODO: Are the nearest points in order, such that the segment start point has a lower index value than the
-    #    segment end point (checks that the segment was drawn in the right direction and that any
-    #    future bidirectional segment is actually drawn once for every segment)
-    #  -  TODO: Are rawnav points continuously within a buffer of ~Y feet around a segment?
-    #  - TODO: Are the odometer readings increasing as expected? Can sometimes get odometer 
-    #      advancing 3x as fast as it should.
-    #  - TODO: do we get first and last points for each run? later we filter on cases where we have
-    #       both, but it'd be good to know in advance what we have.
 
-
+    # Note that while we could run some additional checks (Are both ends of the segment
+    # present? Does the run stay 'within' a certain radius of the segment line?) these 
+    # checks are largely superceded by checks that the odometer reading approximately matches
+    # the segment length (done further below). 
+    index_run_segment_start_end_2 = (
+        index_run_segment_start_end_1
+        .assign(flag_too_far = lambda x: x.dist_to_nearest_point > 50)
+        # note that we will give both the whole run the 'wrong order' flag in the summary table
+        # if the order test fails for any point
+        .assign(
+            flag_wrong_order = lambda x: 
+                x
+                .groupby(['filename','index_run_start'], sort = False)
+                .index_loc
+                .diff()
+                .fillna(0)
+                .lt(0) 
+        )
+    )
+        
     # Generate Summary
     summary_run_segment = (
         include_segment_summary(
             rawnav_q_dat = rawnav_gdf_,
             rawnav_sum_dat = rawnav_sum_dat_,
-            nearest_stop_dat = index_run_segment_start_end_1
+            nearest_seg_boundary_dat = index_run_segment_start_end_2
         )
     )
     
-    # Additional Checks
-    summary_run_segment = remove_runs_with_too_long_odom(summary_run_segment, seg_length)
-    
+    # Additional Checks on Segment Length
+    summary_run_segment = (
+        summary_run_segment 
+        .assign(
+            flag_too_long_odom = lambda x, y = seg_length:
+                abs(y - (x.trip_dist_mi_odom_and_segment*5280)) > 150
+        )
+    )
+
     # Could do this earlier, but need to remove geometry reference in get_first_last_stop_rawnav if so
-    index_run_segment_start_end = ll.drop_geometry(index_run_segment_start_end_1)
+    index_run_segment_start_end = ll.drop_geometry(index_run_segment_start_end_2)
       
     return(index_run_segment_start_end, summary_run_segment)
     
 def include_segment_summary(rawnav_q_dat, 
                             rawnav_sum_dat, 
-                            nearest_stop_dat):
+                            nearest_seg_boundary_dat):
     """
     Parameters
     ----------
     rawnav_q_dat: pd.DataFrame, rawnav data
     rawnav_sum_dat: pd.DataFrame, rawnav summary data
-    nearest_stop_dat: gpd.GeoDataFrame
-        cleaned data on nearest rawnav point to  where
-            - stops whose ordering does not correspond to the index_loc/ time/ odometer are removed 
-            i.e. stops are removed if  order does not increase with index_loc or time or distance.
-            - where all stops with closest rawnav point > 100 ft. are removed.
+    nearest_seg_boundary_dat: gpd.GeoDataFrame
+        cleaned data on nearest rawnav point to where segment boundary lies
     Returns
     -------
-    rawnav_q_stop_sum_dat: pd.DataFrame
-        trip summary data with additional information from wmata schedule data
+    rawnav_q_segment_summary: pd.DataFrame
+        run summary data with additional information from segment data
     Notes
     -----
     This function is largely copied and slimmed down from the schedule merge
     implementation. Making this function more flexible to accommodate both cases would be a significant
     investment given the variety of columns and aggregations that need to be applied in each case.     
     """
-
-    first_last_stop_dat = ws.get_first_last_stop_rawnav(nearest_stop_dat)
+    seg_boundary_dat = ws.get_first_last_stop_rawnav(nearest_seg_boundary_dat)
     rawnav_q_target_dat = \
-        rawnav_q_dat.merge(first_last_stop_dat.drop(['odom_ft','sec_past_st'], axis = 1),
+        rawnav_q_dat.merge(seg_boundary_dat.drop(['odom_ft','sec_past_st'], axis = 1),
                            on=['filename', 'index_run_start'], 
                            how='right')
     rawnav_q_target_dat = (
@@ -172,82 +184,32 @@ def include_segment_summary(rawnav_q_dat,
                                             'dist_first_stop_segment']], 2)
     
     rawnav_q_segment_summary.reset_index(inplace = True)
-        
-    rawnav_q_segment_summary =\
-        rawnav_q_segment_summary.merge(rawnav_sum_dat, on=['filename', 
-                                                           'index_run_start'], 
-                                       how='left')
-                
-    return rawnav_q_segment_summary
-
-def remove_runs_with_too_far_pings(index_table,
-                                   threshold_ft = 50):
-    """
-    Parameters
-    ----------
-    index_table: gpd.GeoDataFrame
-        A geopandas dataframe with nearest rawnav point to each of the segment start or endpoints.
-    Returns
-    -------
-    index_table: gpd.GeoDataFrame
-        cleaned data on nearest rawnav point to data where all stops with closest
-        rawnav point > threshold are removed.
-    """
-    row_before = index_table.shape[0]
     
-    index_table_fil = (
-        index_table.groupby(['filename','index_run_start'],sort = False)
-                   .filter(lambda x, y = threshold_ft: (x.dist_to_nearest_point < y).all()))
-
-    row_after = index_table_fil.shape[0]
-    
-    row_diff = row_before - row_after    
-    
-    if (row_diff > 0):
-        print(
-            'deleted {} rows from {} rows in index table where nearest points to rawnav both not <{} ft.'
-            .format(row_diff, row_before, round(threshold_ft))
-        )
-    
-    return index_table_fil
-
-def remove_runs_with_too_long_odom(summary_table,
-                                   seg_length_,
-                                   threshold_ft = 150):
-    """
-    Parameters
-    ----------
-    summary_table: pd.DataFrame
-        A dataframe with one row for each rawnav trip
-    Returns
-    -------
-    summary_table: pd.DataFrame
-        A dataframe with one row for each rawnav trip
-    Notes
-    -----
-    We want to to ensure that no segment is too long -- occassionally odometers will advance 3X as fast as 
-    expected. 150 ft is a semi-arbitrary leeway to account for not all pings falling exactly at
-    segment boundaries, additional odometer mileage that some routes will experience.
-    """
-    
-    row_before = summary_table.shape[0]
-
-    summary_table = (
-        summary_table
-        .loc[
-                (summary_table.trip_dist_mi_odom_and_segment < ((seg_length_ + threshold_ft)/5280)) &
-                (summary_table.trip_dist_mi_odom_and_segment > ((seg_length_ - threshold_ft)/5280))
-            ]
+    # Summarize flags
+    flags = (
+        nearest_seg_boundary_dat
+        .groupby(['filename','index_run_start'])
+        .agg({'flag_too_far':['any'],
+              'flag_wrong_order':['any']})
+        .pipe(ll.reset_col_names)
     )
     
-    row_after = summary_table.shape[0]
-    row_diff = row_before - row_after
-    if (row_diff > 0):
-        print(
-            'deleted {} runs from {} runs in summary table where run length not within {} ft of segment length {} ft'
-            .format(row_diff, row_before, threshold_ft, round(seg_length_))
-        )
+    # Merge 
     
-    return(summary_table)
+    rawnav_q_segment_summary = (
+        rawnav_q_segment_summary
+        .merge(
+            rawnav_sum_dat, 
+            on=['filename', 'index_run_start'], 
+            how='left'
+        )
+        .merge(
+            flags,
+            on=['filename', 'index_run_start'], 
+            how='left'
+        )
+    )
+        
+    return rawnav_q_segment_summary
 
     

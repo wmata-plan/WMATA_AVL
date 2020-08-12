@@ -136,7 +136,7 @@ path_exports = (
 if not os.path.isdir(path_exports):
     os.mkdir(path_exports)
 
-for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleventh_i_new_york"]: #list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
+for seg in ["sixteenth_u_stub"]:  #["eleventh_i_new_york"]: #list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     print('now on {}'.format(seg))
     # 2.1. Read-in Data 
     ###################
@@ -159,6 +159,11 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
                       filters = [['seg_name_id', "=", seg]],
                       use_pandas_metadata = True)
         .to_pandas()
+    )
+    
+    segment_summary_fil = (
+        segment_summary
+        .query('~(flag_too_far_any | flag_wrong_order_any | flag_too_long_odom)')
     )
        
     stop_index = (
@@ -200,7 +205,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     segment_ff = (
         wr.decompose_segment_ff(
             rawnav_dat,
-            segment_summary,
+            segment_summary_fil,
             max_fps = 73.3
         )
         .assign(seg_name_id = seg)
@@ -212,7 +217,7 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     stop_area_decomp = (
         wr.decompose_stop_area(
             rawnav_dat,
-            segment_summary,
+            segment_summary_fil,
             stop_index_fil
         )
         .assign(seg_name_id = seg)
@@ -226,18 +231,13 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
         .loc["fps_next3"]
     )
 
-    # For the sake of having a nicer output, we'll join in segment summary data
+    # Run decomposition
     traveltime_decomp = (
         wr.decompose_traveltime(
             rawnav_dat,
-            segment_summary,
+            segment_summary_fil,
             stop_area_decomp,
             segment_ff_val
-        )
-        .merge(
-            segment_summary,
-            on = ['filename','index_run_start'],
-            how = "left"
         )
     )
     traveltime_decomp_list.append(traveltime_decomp)
