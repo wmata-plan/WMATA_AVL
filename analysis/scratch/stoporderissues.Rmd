@@ -1,0 +1,225 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(sf)
+library(mapview)
+
+path_project <- "C:/Users/WylieTimmerman/Documents/projects_local/wmata_avl_local" 
+```
+
+
+```{r}
+rawnav_raw <-
+  read_csv(
+    file = file.path("C:/OD/OneDrive - Foursquare ITP/Projects/WMATA_AVL/bustedorder.csv"),
+    col_types = 
+      cols(
+        .default = col_double(),
+        filename = col_character(),
+        pattern_name = col_character(),
+        direction = col_character(),
+        route = col_character(),
+        pattern_destination = col_character(),
+        route_text = col_character(),
+        geo_description = col_character(),
+        geometry = col_character()
+      )
+  )
+```
+```{r}
+rawnav <-
+  rawnav_raw %>%
+  mutate(geometry = str_remove_all(geometry, fixed("(")),
+         geometry = str_remove_all(geometry, fixed(")"))) %>%
+  separate(geometry, into = c("gtype","coord_x","coord_y"), sep = " ") %>%
+  mutate(coord_x = as.numeric(coord_x),
+         coord_y = as.numeric(coord_y)) %>%
+  st_as_sf(., 
+           coords = c("coord_x","coord_y"),
+           crs = 2248L, #WGS84
+           agr = "constant")
+```
+
+```{r}
+rawnav_errs <-
+  rawnav %>%
+  group_by(filename, index_run_start) %>%
+  filter(any(diff_index < 0)) %>%
+  mutate(err = diff_index <0 ) %>%
+  ungroup()
+
+err_filename <- "rawnav02820191012.txt"
+err_index_run_start <- 3346
+
+rawnav_errs %>%
+  filter(filename == err_filename,
+         index_run_start == err_index_run_start) %>%
+  mapview(.,
+          zcol = "err")
+
+```
+
+```{r}
+rawnav_errs %>%
+  filter(filename == err_filename,
+         index_run_start == err_index_run_start) %>%
+  mapview(.,
+          zcol = "index_loc")
+
+```
+
+```{r}
+route_search_string <- "route=S1"
+# seg_search_string <- "seg_name_id=sixteenth_u_shrt"
+
+filelist <- 
+  list.files(path = file.path(path_project,"data","02-processed","rawnav_data.parquet"),
+             recursive = TRUE,
+             full.names = TRUE)
+
+filelist_fil <-
+  filelist[str_detect(filelist,route_search_string)]
+
+rawnav_s1_orig <-
+  map_dfr(filelist_fil,
+        ~ arrow::read_parquet(.x))
+
+rawnav_pings_case <-
+  rawnav_s1_orig %>%
+  filter(filename == err_filename,
+         index_run_start == err_index_run_start) %>%
+  st_as_sf(., 
+           coords = c("long", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") 
+
+mapview(rawnav_pings_case,
+        zcol = "index_loc")
+```
+
+```{r}
+err_filename <- "rawnav02852191005.txt"
+err_index_run_start <- 10304
+
+
+rawnav_pings_case <-
+  rawnav_s1_orig %>%
+  filter(filename == err_filename,
+         index_run_start == err_index_run_start) %>%
+  st_as_sf(., 
+           coords = c("long", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") 
+
+mapview(rawnav_pings_case,
+        zcol = "index_loc")
+```
+
+```{r}
+err_filename <- "rawnav02878191019.txt"
+err_index_run_start <- 0
+
+
+rawnav_pings_case <-
+  rawnav_s1_orig %>%
+  filter(filename == err_filename,
+         index_run_start == err_index_run_start) %>%
+  st_as_sf(., 
+           coords = c("long", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") %>%
+  mutate(stop_window = str_replace_all(stop_window," ","")) %>%
+  mutate(stop_window = if_else(stop_window == "",NA_character_,stop_window)) %>%
+  tidyr::fill(stop_window, .direction = "downup")
+
+mapview(rawnav_pings_case,
+        zcol = "index_loc")
+```
+
+```{r}
+err_filename <- "rawnav03261191028.txt"
+err_index_run_start <- 15521
+
+rawnav_pings_case <-
+  rawnav_s1_orig %>%
+  filter(filename == err_filename,
+         index_run_start == err_index_run_start) %>%
+  st_as_sf(., 
+           coords = c("long", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") %>%
+  mutate(stop_window = str_replace_all(stop_window," ","")) %>%
+  mutate(stop_window = if_else(stop_window == "",NA_character_,stop_window)) %>%
+  tidyr::fill(stop_window, .direction = "downup")
+
+mapview(rawnav_pings_case,
+        zcol = "index_loc")
+```
+
+```{r}
+err_filename <- "rawnav03268191026.txt"
+err_index_run_start <- 8505
+
+rawnav_pings_case <-
+  rawnav_s1_orig %>%
+  filter(filename == err_filename,
+         index_run_start == err_index_run_start) %>%
+  st_as_sf(., 
+           coords = c("long", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") %>%
+  mutate(stop_window = str_replace_all(stop_window," ","")) %>%
+  mutate(stop_window = if_else(stop_window == "",NA_character_,stop_window)) %>%
+  tidyr::fill(stop_window, .direction = "downup")
+
+mapview(rawnav_pings_case,
+        zcol = "index_loc")
+```
+
+
+
+
+```{r}
+err_filename <- "rawnav05467191019.txt"
+err_index_run_start <- 3328
+
+rawnav_pings_case <-
+  rawnav_s1_orig %>%
+  filter(filename == err_filename,
+         index_run_start == err_index_run_start) %>%
+  st_as_sf(., 
+           coords = c("long", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") %>%
+  mutate(stop_window = str_replace_all(stop_window," ","")) %>%
+  mutate(stop_window = if_else(stop_window == "",NA_character_,stop_window)) %>%
+  tidyr::fill(stop_window, .direction = "downup")
+
+mapview(rawnav_pings_case,
+        zcol = "index_loc")
+```
+
+```{r}
+err_filename <- "rawnav06025191019.txt"
+err_index_run_start <- 5127
+
+rawnav_pings_case <-
+  rawnav_s1_orig %>%
+  filter(filename == err_filename,
+         index_run_start == err_index_run_start) %>%
+  st_as_sf(., 
+           coords = c("long", "lat"),
+           crs = 4326L, #WGS84
+           agr = "constant") %>%
+  mutate(stop_window = str_replace_all(stop_window," ","")) %>%
+  mutate(stop_window = if_else(stop_window == "",NA_character_,stop_window)) %>%
+  tidyr::fill(stop_window, .direction = "downup")
+
+mapview(rawnav_pings_case,
+        zcol = "index_loc")
+```
+
