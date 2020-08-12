@@ -76,7 +76,7 @@ def decompose_traveltime(
         .rename(columns = {'odom_ft_qj_stop_first':'odom_ft_qj_stop',
                            'start_data_time_first':'start_date_time'})
     )
-    
+  
     t_stop1_by_run = (
         basic_decomp_agg
         .loc[lambda x: x.stop_area_phase.isin(["t_stop1","t_stop",'t_l_initial'])]

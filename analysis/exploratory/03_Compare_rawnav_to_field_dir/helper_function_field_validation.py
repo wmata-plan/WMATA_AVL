@@ -1,5 +1,6 @@
 import numpy as np, pandas as pd, os
 import wmatarawnav as wr
+import datetime
 
 # Hard coding things---Not fit for sharing
 path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents" \
@@ -25,6 +26,9 @@ def time_to_sec(time_mess):
         if hr_min_sec[0].strip() == '':
             tot_sec = hr_min_sec[1]
             return (int(tot_sec))
+        else:
+            tot_sec = int(hr_min_sec[0]) * 60 + int(hr_min_sec[1])
+            return (int(tot_sec))
     elif len(hr_min_sec) == 1:
         tot_sec = hr_min_sec[0]
         if tot_sec.isnumeric():
@@ -39,20 +43,22 @@ def time_to_sec(time_mess):
 def correct_data_types(dat):
     dat = dat.assign(metrobus_route_field=lambda x: x.metrobus_route_field.astype("str"),
                               bus_id_field =lambda x: x.bus_id_field.astype("Int32"),
-                              date_obs_field = lambda x: x.date_obs_field.astype("str"),
+                              date_obs_field = lambda x: pd.to_datetime(x.date_obs_field, infer_datetime_format=True,errors='coerce'),
                               signal_phase_field = lambda x: x.signal_phase_field.astype('str'),
-                              time_entered_stop_zone_field = lambda x: pd.to_datetime(x.date_obs_field+" "+x.time_entered_stop_zone_field.astype(str),infer_datetime_format=True,errors='coerce'),
-                              time_left_stop_zone_field = lambda x: pd.to_datetime(x.date_obs_field+" "+x.time_left_stop_zone_field.astype(str),infer_datetime_format=True,errors='coerce'),
-                              front_door_open_time_field = lambda x: pd.to_datetime(x.date_obs_field+" "+x.front_door_open_time_field.astype(str),infer_datetime_format=True,errors='coerce'),
-                              front_door_close_time_field = lambda x: pd.to_datetime(x.date_obs_field+" "+x.front_door_close_time_field.astype(str),infer_datetime_format=True,errors='coerce'),
-                              rear_door_open_time_field = lambda x: pd.to_datetime(x.date_obs_field+" "+x.rear_door_open_time_field.astype(str),infer_datetime_format=True,errors='coerce'),
-                              rear_door_close_time_field = lambda x: pd.to_datetime(x.date_obs_field+" "+x.rear_door_close_time_field.astype(str),infer_datetime_format=True,errors='coerce'),
+                              time_entered_stop_zone_field = lambda x: pd.to_datetime(x.date_obs_field.astype(str)+" "+x.time_entered_stop_zone_field.astype(str),infer_datetime_format=True,errors='coerce'),
+                              time_left_stop_zone_field = lambda x: pd.to_datetime(x.date_obs_field.astype(str)+" "+x.time_left_stop_zone_field.astype(str),infer_datetime_format=True,errors='coerce'),
+                              front_door_open_time_field = lambda x: pd.to_datetime(x.date_obs_field.astype(str)+" "+x.front_door_open_time_field.astype(str),infer_datetime_format=True,errors='coerce'),
+                              front_door_close_time_field = lambda x: pd.to_datetime(x.date_obs_field.astype(str)+" "+x.front_door_close_time_field.astype(str),infer_datetime_format=True,errors='coerce'),
+                              rear_door_open_time_field = lambda x: pd.to_datetime(x.date_obs_field.astype(str)+" "+x.rear_door_open_time_field.astype(str),infer_datetime_format=True,errors='coerce'),
+                              rear_door_close_time_field = lambda x: pd.to_datetime(x.date_obs_field.astype(str)+" "+x.rear_door_close_time_field.astype(str),infer_datetime_format=True,errors='coerce'),
                               dwell_time_field =lambda x: pd.to_timedelta(x.dwell_time_field.apply(time_to_sec),unit='s'),
                               number_of_boarding_field = lambda x: x.number_of_boarding_field.astype('Int32'),
                               number_of_alightings_field = lambda x: x.number_of_alightings_field.astype('Int32'),
                               total_time_at_intersection_field =lambda x: pd.to_timedelta(x.total_time_at_intersection_field.apply(time_to_sec),unit='s'),
                               traffic_conditions_field = lambda x: x.traffic_conditions_field.astype('str'),
-                              notes_field = lambda x: x.notes_field.astype('str')
+                              notes_field = lambda x: x.notes_field.astype('str'),
+                              max_front_rear_door_close_time_field = lambda x: x[['front_door_close_time_field','rear_door_close_time_field']].min(axis= 1),
+                              t_control_delay_field = lambda x: x.time_left_stop_zone_field - x.max_front_rear_door_close_time_field
                              )
     return dat
 
@@ -98,69 +104,72 @@ def quick_and_dirty_schedule_qjump_mapping():
                          .drop_duplicates())
     return xwalk_seg_pattern
 
-
-
-def combine_field_rawnav_dat(field_df, rawnav_stop_area_df, rawnav_summary_df, field_obs_time=['15:40', '18:10']):
-
+    
+def combine_field_rawnav_dat(field_df, rawnav_stop_area_df, rawnav_summary_df,segment_nm = "sixteenth_u_shrt",
+                             field_obs_time=['15:40', '18:10'],field_obs_date=datetime.date(2020, 7, 7)):    
     # Get the bus ID
     ################################################################
+    rawnav_stop_area_df.loc[:,'start_date_time'] = pd.to_datetime(rawnav_stop_area_df.start_date_time, infer_datetime_format=True)
+    if field_obs_date not in list(rawnav_stop_area_df.start_date_time.dt.date.unique()):
+      return None
     rawnav_stop_area_q_jump_bus_id = (
-        rawnav_stop_area_df.loc[lambda x: x.odom_ft == x.odom_ft_qj_stop, :]
-            .filter(items=['filename', 'index_run_start', 'seg_name_id', 'route', 'pattern', 'start_date_time', 'wday',
-                           'sec_past_st'])
+        rawnav_stop_area_df.loc[lambda x: (x.start_date_time.dt.date==field_obs_date) & (x.seg_name_id==segment_nm), :]
+            .filter(items=['filename', 'index_run_start', 'seg_name_id', 'start_date_time','sec_past_st_qj_stop'])
             .merge(
             rawnav_summary_df.
-                filter(items=['filename', 'index_run_start', 'file_busid', 'tag_busid']),
+                filter(items=['filename', 'index_run_start', 'file_busid', 'tag_busid', 'route', 'pattern', 'wday']),
             on=['filename', 'index_run_start'],
-            how='left'
+            how='outer'
         )
-            .assign(sec_past_st=lambda x: pd.to_timedelta(x.sec_past_st, 'sec'),
-                    start_date_time=lambda x: pd.to_datetime(x.start_date_time, infer_datetime_format=True),
-                    qjump_date_time=lambda x: x.sec_past_st + x.start_date_time,
+            .assign(sec_past_st_qj_stop=lambda x: pd.to_timedelta(x.sec_past_st_qj_stop, 'sec'),
+                    qjump_date_time=lambda x: x.sec_past_st_qj_stop + x.start_date_time,
                     file_busid=lambda x: x.file_busid.astype(int),
                     tag_busid=lambda x: x.tag_busid.astype(int),
                     route=lambda x: x.route.astype(str))
     )
-
+        
     # Get the dwell time
     ################################################################
     rawnav_stop_area_q_jump = (
-        rawnav_stop_area_df.loc[lambda x: x.stop_area_phase == "t_stop1", :]
-            .filter(items=['filename', 'index_run_start', 'secs_marg'])
-            .rename(columns={'secs_marg': 'dwell_time'})
-            .groupby(['filename','index_run_start']).dwell_time.sum().reset_index()
+        rawnav_stop_area_df
+            .rename(columns={'t_stop1': 'dwell_time'})
+            .drop(columns = ['start_date_time','sec_past_st_qj_stop','seg_name_id'])
             .merge(
             rawnav_stop_area_q_jump_bus_id,
             on=['filename', 'index_run_start'],
-            how='left'
+            how='outer'
         )
-            .assign(dwell_time=lambda x: pd.to_timedelta(x.dwell_time, 'sec'))
+            .assign(dwell_time=lambda x: pd.to_timedelta(x.dwell_time, 'sec'),
+                    t_traffic=lambda x: pd.to_timedelta(x.t_traffic, 'sec'))
             .set_index('qjump_date_time')
     )
 
-    # Get the time from the stop zone start to crossing the intersection
-    rawnav_stop_area_tot_time = (
-        rawnav_stop_area_df.loc[lambda x: x.odom_ft >= x.odom_ft_qj_stop - 40, :] #40 ft. back from the queue jump
-         .filter(items=['filename', 'index_run_start', 'sec_past_st'])
-        .groupby(['filename', 'index_run_start'])
-        .agg(tot_time_stop_to_150_ft= pd.NamedAgg("sec_past_st", lambda x:x.max()-x.min()))
-        .reset_index()
-        .assign(tot_time_stop_to_150_ft = lambda x: pd.to_timedelta(x.tot_time_stop_to_150_ft, 'sec'))
-    )
+    # # Get the time from the stop zone start to crossing the intersection
+    # rawnav_stop_area_tot_time = (
+    #     rawnav_stop_area_df.loc[lambda x: x.odom_ft >= x.odom_ft_qj_stop - 40, :] #40 ft. back from the queue jump
+    #      .filter(items=['filename', 'index_run_start', 'sec_past_st'])
+    #     .groupby(['filename', 'index_run_start'])
+    #     .agg(tot_time_stop_to_150_ft= pd.NamedAgg("sec_past_st", lambda x:x.max()-x.min()))
+    #     .reset_index()
+    #     .assign(tot_time_stop_to_150_ft = lambda x: pd.to_timedelta(x.tot_time_stop_to_150_ft, 'sec'))
+    # )
 
 
     # Use runs that were during the field obs
     ################################################################
     rawnav_stop_area_q_jump_peak = (
         rawnav_stop_area_q_jump.between_time(field_obs_time[0],field_obs_time[1]).reset_index()
-        .merge(rawnav_stop_area_tot_time,
-               on = ['filename','index_run_start'],
-               how = 'left')
+        # .merge(rawnav_stop_area_tot_time,
+        #        on = ['filename','index_run_start'],
+        #        how = 'left')
+        .assign(file_busid=lambda x: x.file_busid.astype(int),
+                tag_busid=lambda x: x.tag_busid.astype(int),
+                route=lambda x: x.route.astype(str))
     )
-
+        
 
     field_rawnav_qjump = (
-        field_df
+        field_df.loc[lambda x:x.date_obs_field.dt.date==field_obs_date]
             .merge(rawnav_stop_area_q_jump_peak,
                    left_on=['metrobus_route_field', 'bus_id_field'],
                    right_on=['route', 'file_busid'],
@@ -169,7 +178,7 @@ def combine_field_rawnav_dat(field_df, rawnav_stop_area_df, rawnav_summary_df, f
                     .apply(lambda x: x.total_seconds()),
                     diff_field_rawnav_dwell_time=lambda x: (x.dwell_time_field - x.dwell_time)
                     .apply(lambda x: x.total_seconds()),
-                    diff_field_rawnav_tot_int_clear_time=lambda x: (x.total_time_at_intersection_field - x.tot_time_stop_to_150_ft)
+                    diff_field_rawnav_control_delay=lambda x: (x.t_traffic - x.t_control_delay_field)
                     .apply(lambda x: x.total_seconds()))
     )
     return field_rawnav_qjump
