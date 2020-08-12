@@ -196,7 +196,8 @@ for analysis_route in analysis_routes:
             # Subset Rawnav Data to Records Desired
             rawnav_summary_dat = rawnav_summary_dat.query(
                 'not (run_duration_from_sec < 600 | dist_odom_mi < 2)')
-
+            if  rawnav_summary_dat.shape[0] == 0:
+                continue
             rawnav_qjump_dat = rawnav_dat.merge(
                 rawnav_summary_dat[['filename', 'index_run_start']],
                 on=['filename', 'index_run_start'],
