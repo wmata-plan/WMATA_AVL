@@ -9,14 +9,7 @@ pyo.init_notebook_mode()
 import statsmodels
 # 1. Globoals and custom function
 # -----------------------------------------------------------------------------
-# Import custom functions
-import wmatarawnav as wr
-from helper_function_field_validation import correct_data_types
-from helper_function_field_validation import combine_field_rawnav_dat
-from helper_function_field_validation \
-    import quick_and_dirty_schedule_qjump_mapping
 # 1. Set globoal paramters.
-
 if os.getlogin() == "WylieTimmerman":
     # Working Paths
     path_working = r"C:\OD\OneDrive - Foursquare ITP\Projects\WMATA_AVL"
@@ -43,6 +36,13 @@ elif os.getlogin() == "abibeka":
 else:
     raise FileNotFoundError("Define the path_working, path_source_data, gtfs_dir, \
                             ZippedFilesloc, and path_processed_data in a new elif block")
+
+# Import custom functions
+import wmatarawnav as wr
+from helper_function_field_validation import correct_data_types
+from helper_function_field_validation import combine_field_rawnav_dat
+from helper_function_field_validation \
+    import quick_and_dirty_schedule_qjump_mapping
 # 2. Read and clean field data
 # -----------------------------------------------------------------------------
 field_xlsx_wb = pd.ExcelFile(path_field_file)
