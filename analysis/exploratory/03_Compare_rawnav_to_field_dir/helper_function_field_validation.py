@@ -128,30 +128,33 @@ def correct_data_types(dat):
     ] = pd.NaT
     return dat
 
+def tribble_xwalk_seg_pattern_stop_in():
+    xwalk_seg_pattern_stop_in = wr.tribble(
+        ['route', 'direction', 'seg_name_id', 'stop_id', "approx_time_qjump"],
+        "79", "SOUTH", "georgia_columbia_stub", 10981, 1500,
+        "79", "SOUTH", "georgia_piney_branch_stub", 4217, 900,
+        "70", "SOUTH", "georgia_irving_stub", 19186, 1500,  # irving stop
+        "70", "SOUTH", "georgia_columbia_stub", 10981, 1500, # columbia stop
+        "70", "SOUTH", "georgia_piney_branch_stub", 4217, 900,
+        "S1", "NORTH", "sixteenth_u_stub", 18042, 1500,
+        "S2", "NORTH", "sixteenth_u_stub", 18042, 1500,
+        "S4", "NORTH", "sixteenth_u_stub", 18042, 1500,
+        "S9", "NORTH", "sixteenth_u_stub", 18042, 1500,
+        "64", "NORTH", "eleventh_i_new_york_stub", 16490, 480,
+        "G8", "EAST", "eleventh_i_new_york_stub", 16490, 360,
+        "D32", "EAST", "irving_fifteenth_sixteenth_stub", 2368, 1200,
+        "H1", "NORTH", "irving_fifteenth_sixteenth_stub", 2368, 2500,
+        "H2", "EAST", "irving_fifteenth_sixteenth_stub", 2368, 1200,
+        "H3", "EAST", "irving_fifteenth_sixteenth_stub", 2368, 1200,
+        "H4", "EAST", "irving_fifteenth_sixteenth_stub", 2368, 1200,
+        "H8", "EAST", "irving_fifteenth_sixteenth_stub", 2368, 180,
+        "W47", "EAST", "irving_fifteenth_sixteenth_stub", 2368, 1200,
+    )
+    return xwalk_seg_pattern_stop_in
 
 def quick_and_dirty_schedule_qjump_mapping(path_wmata_schedule_data,
                                            analysis_routes):
-    xwalk_seg_pattern_stop_in = wr.tribble(
-        ['route', 'direction', 'seg_name_id', 'stop_id', "approx_time_qjump"],
-        "79", "SOUTH", "georgia_columbia", 10981, 1500,
-        "79", "SOUTH", "georgia_piney_branch_long", 4217, 900,
-        "70", "SOUTH", "georgia_irving", 19186, 1500, # irving stop
-        "70", "SOUTH", "georgia_columbia", 10981, 1500,  # columbia stop
-        "70", "SOUTH", "georgia_piney_branch_shrt", 4217, 900,
-        "S1", "NORTH", "sixteenth_u_shrt", 18042, 1500,
-        "S2", "NORTH", "sixteenth_u_shrt", 18042, 1500,
-        "S4", "NORTH", "sixteenth_u_shrt", 18042, 1500,
-        "S9", "NORTH", "sixteenth_u_long", 18042, 1500,
-        "64", "NORTH", "eleventh_i_new_york", 16490, 480,
-        "G8", "EAST", "eleventh_i_new_york", 16490, 360,
-        "D32", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
-        "H1", "NORTH", "irving_fifteenth_sixteenth", 2368, 2500,
-        "H2", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
-        "H3", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
-        "H4", "EAST", "irving_fifteenth_sixteenth", 2368, 1200,
-        "H8", "EAST", "irving_fifteenth_sixteenth", 2368, 180,
-        "W47", "EAST", "irving_fifteenth_sixteenth", 2368, 1200
-    )
+    xwalk_seg_pattern_stop_in = tribble_xwalk_seg_pattern_stop_in()
     xwalk_wmata_route_dir_pattern = (
         wr.read_sched_db_patterns(
             path=path_wmata_schedule_data,
