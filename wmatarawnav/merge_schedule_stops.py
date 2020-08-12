@@ -298,7 +298,7 @@ def merge_rawnav_target(target_dat, rawnav_dat, quiet=True):
     return nearest_rawnav_point_to_target_dat
 
 
-def remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_data_):
+def remove_stops_with_dist_over_500ft(nearest_rawnav_point_to_wmata_schedule_data_):
     """
     Parameters
     ----------
@@ -316,15 +316,13 @@ def remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat
         nearest_rawnav_point_to_wmata_schedule_data_
         .query('dist_to_nearest_point < 100')
     )
-    
+
     row_after = nearest_rawnav_point_to_wmata_schedule_data_.shape[0]
     
-    row_diff = row_before - row_after
-    
+    row_diff = row_before - row_after    
     print('deleted {} rows of {} rows with distance to the nearest stop > 100 ft. from index table'
           .format(row_diff,row_before)
     )
-    
     return nearest_rawnav_point_to_wmata_schedule_data_
 
 
