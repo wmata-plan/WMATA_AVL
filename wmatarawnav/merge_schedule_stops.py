@@ -290,7 +290,6 @@ def merge_rawnav_target(target_dat, rawnav_dat, quiet=True):
             if (quiet == False):
                 print("No target geometry found for {} - {}".format(name[0],name[1]))
     
-    # TODO: set index? 
     nearest_rawnav_point_to_target_dat = (
         ll.reorder_first_cols(nearest_rawnav_point_to_target_dat,
                               ['filename','index_run_start','index_loc'])
@@ -527,9 +526,6 @@ def get_first_last_stop_rawnav(nearest_rawnav_stop_dat):
                          'dist_to_nearest_point': 'last_stop_dist_nearest_point'})
     )
 
-    # I think we should drop this later
-    # first_stop_dat = ()
-    #     nearest_rawnav_stop_dat.groupby(['filename', 'index_run_start']).index_loc.transform(min)
     first_stop_dat = nearest_rawnav_stop_dat.copy()
     
     first_stop_dat.loc[:, "tempCol"] = ( 

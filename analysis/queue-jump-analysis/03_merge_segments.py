@@ -139,7 +139,6 @@ segments = (
 # 3.1 Rawnav-Segment ########################
 
 # Make Output Directory
-# TODO: Update to match method in I_II
 path_seg_summary = os.path.join(path_processed_data, "segment_summary.parquet")
 shutil.rmtree(path_seg_summary, ignore_errors=True) 
 os.mkdir(path_seg_summary)
