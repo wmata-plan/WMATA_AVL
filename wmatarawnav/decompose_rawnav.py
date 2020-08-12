@@ -171,7 +171,8 @@ def decompose_traveltime(
             how = "left"
         )
         .assign(
-            flag_failed_qj_stop_merge = lambda x: (x.t_stop1.isna() & x.t_stop.isna())
+            flag_failed_qj_stop_merge = lambda x: (x.t_stop1.isna() & x.t_stop.isna()),
+            flag_odometer_reset = lambda x: ((x.end_sec_segment- x.start_sec_segment) != x.t_segment)
         )
         .fillna({'t_stop1': 0,
                  't_stop' : 0,
