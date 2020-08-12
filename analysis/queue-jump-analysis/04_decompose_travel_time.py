@@ -136,7 +136,7 @@ path_exports = (
 if not os.path.isdir(path_exports):
     os.mkdir(path_exports)
 
-for seg in ["sixteenth_u_stub"]:  #["eleventh_i_new_york"]: #list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
+for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleventh_i_new_york"]: #list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
     print('now on {}'.format(seg))
     # 2.1. Read-in Data 
     ###################

@@ -156,7 +156,7 @@ def decompose_traveltime(
         .rename(columns = {'odom_ft_<lambda>': 'odom_ft_seg_total',
                            'sec_past_st_<lambda>':'t_segment'})
     )
-    
+
     # Join inputs together and calculate
     travel_time_decomp = (
         segment_summary_
