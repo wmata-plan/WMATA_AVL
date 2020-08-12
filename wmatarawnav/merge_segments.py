@@ -5,7 +5,7 @@ Created on Mon Jul  6 22:28:17 2020
 @author: WylieTimmerman
 """
 
-from . import parse_wmata_schedule as ws
+from . import merge_schedule_stops as ws
 from . import low_level_fns as ll
 import pyarrow as pa
 import pyarrow.parquet as pq
