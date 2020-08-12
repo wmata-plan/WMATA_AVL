@@ -69,8 +69,12 @@ def decompose_traveltime(
         .agg({"secs_marg" : ['sum'],
               "sec_past_st": ['min','max'], 
               "odom_ft": ['min','max'],
-              "fps_next3" : ['first','last']})
+              "fps_next3" : ['first','last'],
+              "odom_ft_qj_stop" : ['first'],
+              "start_date_time" :['first']})
         .pipe(ll.reset_col_names)
+        .rename(columns = {'odom_ft_qj_stop_first':'odom_ft_qj_stop',
+                           'start_data_time_first':'start_date_time'})
     )
     
     t_stop1_by_run = (
@@ -150,10 +154,11 @@ def decompose_traveltime(
               "sec_past_st" : [lambda x: max(x) - min(x)]})
         .pipe(ll.reset_col_names)
         .rename(columns = {'odom_ft_<lambda>': 'odom_ft_seg_total',
-                           'sec_past_st_<lambda>':'secs_seg_total'})
+                           'sec_past_st_<lambda>':'t_segment'})
     )
     
     # Join inputs together and calculate
+    # TODO: start merge with a summary table - get all records
     travel_time_decomp = (
         t_stop1_by_run
         .merge(
@@ -176,7 +181,7 @@ def decompose_traveltime(
                                          x.t_stop2)
         )
         .assign(
-            t_traffic = lambda x: x.secs_seg_total - x.t_ff - x.t_stop2 - x.t_stop1 - x.t_stop
+            t_traffic = lambda x: x.t_segment - x.t_ff - x.t_stop2 - x.t_stop1 - x.t_stop
         )
         .drop(columns = ['ff_fps'])
     )

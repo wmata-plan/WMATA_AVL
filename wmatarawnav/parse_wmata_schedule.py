@@ -370,9 +370,11 @@ def delete_rows_with_incorrect_stop_order(nearest_rawnav_point_to_wmata_schedule
     nearest_rawnav_point_to_wmata_schedule_data_: gpd.GeoDataFrame
         input data with the offending row deleted.
     """
+
     nearest_rawnav_point_to_wmata_schedule_data_.loc[:, 'diff_index'] = \
         nearest_rawnav_point_to_wmata_schedule_data_.groupby(['filename', 'index_run_start']). \
             index_loc.diff().fillna(0)
+                        
     wrong_snapping_dat = nearest_rawnav_point_to_wmata_schedule_data_.query('diff_index<0')
     nearest_rawnav_point_to_wmata_schedule_data_ = (
         nearest_rawnav_point_to_wmata_schedule_data_
@@ -689,8 +691,8 @@ def plot_lines_clusters(this_map, dat, feature_grp):
         folium base map with feature groups.
     dat : gpd.GeoDataFrame
         cleaned data on nearest rawnav point to wmata schedule data where
-            - stops whose ordering does not correspond to the index_loc/ time/ odometer are removed i.e. stops are
-            removed if  order does not increase with index_loc or time or distance.
+            - stops whose ordering does not correspond to the index_loc/ time/ odometer are removed 
+            i.e. stops are  removed if  order does not increase with index_loc or time or distance.
             - where all stops with closest rawnav point > 100 ft. are removed.
     feature_grp : folium.plugin.FeatureGroup
         feature group used for stops with nearest rawnav point.
