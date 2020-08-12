@@ -210,7 +210,7 @@ def combine_field_rawnav_dat(
         ]
         .filter(items=[
             'filename', 'index_run_start', 'seg_name_id', 'start_date_time',
-            'sec_past_st_qj_stop'
+            'start_sec_segment'
         ])
         .merge(
             rawnav_summary_df
@@ -226,11 +226,11 @@ def combine_field_rawnav_dat(
             how='left'
         )
         .assign(
-            sec_past_st_qj_stop=(
-                lambda x: pd.to_timedelta(x.sec_past_st_qj_stop, 'sec')
+            start_sec_segment=(
+                lambda x: pd.to_timedelta(x.start_sec_segment, 'sec')
             ),
             qjump_date_time=(
-                lambda x: x.sec_past_st_qj_stop + x.start_date_time
+                lambda x: x.start_sec_segment + x.start_date_time
             ),
             file_busid=lambda x: x.file_busid.astype(int),
             tag_busid=lambda x: x.tag_busid.astype(int),
@@ -243,8 +243,9 @@ def combine_field_rawnav_dat(
         rawnav_stop_area_df
         .rename(columns={'t_stop1': 'dwell_time'})
         .drop(columns=[
-            'start_date_time', 'sec_past_st_qj_stop', 'seg_name_id',
-            'field_qjump_loc'
+            'start_date_time', 'start_sec_segment', 'seg_name_id',
+            'field_qjump_loc', 'file_busid', 'tag_busid', 'route',
+            'pattern', 'wday',
         ])
         .merge(
             rawnav_stop_area_q_jump_bus_id,
@@ -290,5 +291,7 @@ def combine_field_rawnav_dat(
             (df.t_traffic - df.t_control_delay_field)
             .apply(lambda df1: df1.total_seconds())
         )
+        .query("diff_field_rawnav_approx_time.abs() <= 1000")
     )
+        
     return field_rawnav_qjump

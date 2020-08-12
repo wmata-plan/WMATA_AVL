@@ -3,6 +3,7 @@ import os
 import plotly.express as px
 import plotly.offline as pyo
 from plotly.offline import plot
+import sys
 # Set notebook mode to work in offline
 pyo.init_notebook_mode()
 # need for regression trendline
@@ -24,7 +25,6 @@ if os.getlogin() == "WylieTimmerman":
 elif os.getlogin() == "abibeka":
     # Working Paths
     path_working = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents\Github\WMATA_AVL"
-    os.chdir(os.path.join(path_working))
     sys.path.append(path_working)
     # Source data
     path_source_data = r"C:\Users\abibeka\OneDrive - Kittelson & Associates, Inc\Documents" \
@@ -98,7 +98,7 @@ field_df_all_loc = (pd.concat(field_dict.values())
 # 3. Read and process rawnav travel time decomposition and summary data.
 # -----------------------------------------------------------------------------
 # Read travel time decomposition data.
-path_stop_rawnav = os.path.join(path_processed_data, "rawnav_stop_areas")
+path_stop_rawnav = os.path.join(path_processed_data, "exports_20200812")
 rawnav_tt_decomp = pd.read_csv(os.path.join(path_stop_rawnav,
                                             'traveltime_decomp.csv'),
                                index_col=0)
@@ -106,9 +106,8 @@ rawnav_tt_decomp = (
     rawnav_tt_decomp
     .assign(field_qjump_loc=(lambda df: df.seg_name_id.replace(
                 rawnav_qjump_nm_map)))
-    .drop_duplicates(["filename", "index_run_start"])
+    .drop_duplicates(["filename", "index_run_start", "seg_name_id"])
 )
-
 # Read rawnav summary data
 analysis_routes = [
     'S1', 'S2', 'S4', 'S9', '70', '79', '64', 'G8', 'D32', 'H1', 'H2', 'H3',
@@ -262,10 +261,14 @@ for q_jump_field_loc in field_dict.keys():
         max_time = (field_q_jump_1loc_1day.time_entered_stop_zone_field.max()
                     + pd.to_timedelta(500, "s")).time()
 
+        rawnav_stop_area_df_fil_this_stop = (
+            rawnav_tt_decomp
+            .loc[lambda x: (x.field_qjump_loc == q_jump_field_loc_this_stop)]
+        )
         field_q_jump_rawnav_dwell_t_cntr_list.append(
             combine_field_rawnav_dat(
                 field_df=field_q_jump_1loc_1day,
-                rawnav_stop_area_df=rawnav_tt_decomp,
+                rawnav_stop_area_df=rawnav_stop_area_df_fil_this_stop,
                 rawnav_summary_df=rawnav_summary_fil,
                 field_qjump_loc=q_jump_field_loc,
                 field_obs_time=(min_time, max_time),
@@ -326,7 +329,9 @@ field_q_jump_rawnav_dwell_t_cntr_all_1 = (
 first_cols_1 = [
     's_no', 'field_qjump_loc', 'seg_name_id', 'metrobus_route_field', 'route',
     'pattern', 'bus_id_field', 'file_busid', 'time_entered_stop_zone_field',
-    'has_data_from_rawnav_processed', 'has_data_from_rawnav_unprocessed',
+    'has_data_from_rawnav_processed', 
+    'filename','index_run_start',
+    'has_data_from_rawnav_unprocessed',
     'filename_from_unprocessed','index_run_start_from_unprocessed',
     'qjump_date_time', 'diff_field_rawnav_approx_time', 'dwell_time_field',
     'dwell_time', 'diff_field_rawnav_dwell_time',
@@ -341,12 +346,14 @@ reindex_col = (first_cols_1
 field_q_jump_rawnav_dwell_t_cntr_all_1 = (
     field_q_jump_rawnav_dwell_t_cntr_all_1
     .reindex(reindex_col, axis=1)
+    .sort_values("s_no")
 )
 
 path_validation_df_1 = os.path.join(path_processed_data,
                                     "field_processed_rawnav_dat.csv")
 pd.DataFrame.to_csv(field_q_jump_rawnav_dwell_t_cntr_all_1,
-                    path_validation_df_1)
+                    path_validation_df_1,
+                    index = False)
 
 # Rearrange columns and merge with the full field data
 # This data compares un-processed rawnav data and field data.
@@ -375,13 +382,14 @@ reindex_col = (first_cols
 
 field_q_jump_rawnav_df_all_1 = (field_q_jump_rawnav_df_all_1
                               .reindex(reindex_col, axis=1)
+                              .sort_values("s_no")
                               )
 path_validation_df = os.path.join(path_processed_data, "field_rawnav_dat.csv")
 pd.DataFrame.to_csv(field_q_jump_rawnav_df_all_1, path_validation_df)
 
 # 6. Create dwell time and control delay vs. t_traffic plots
 # -----------------------------------------------------------------------------
-field_rawnav_combine_dwell_plt = (
+field_rawnav_combine_dwell_cntr_plt = (
     field_q_jump_rawnav_dwell_t_cntr_all_1
     .assign(
         dwell_time_field=lambda df: (df.dwell_time_field
@@ -389,56 +397,86 @@ field_rawnav_combine_dwell_plt = (
                                      ),
         dwell_time=lambda df: (df.dwell_time
                                .apply(lambda df1: df1.total_seconds())),
-        route_seg_name_id=lambda x: x.route+", "+x.seg_name_id)
-)
+        t_control_delay_field=(lambda df: df.t_control_delay_field
+                               .apply(lambda df1: df1.total_seconds())),
+        t_traffic=(lambda x: x.t_traffic.apply(lambda x:x.total_seconds())),
+        route_seg_name_id=lambda x: x.route+", "+x.seg_name_id,
+        time_entered_stop_zone_field = lambda x: 
+            x.time_entered_stop_zone_field.astype(str),
+        qjump_date_time = lambda x:
+            x.qjump_date_time.astype(str))
+    )
+
 p1 = px.scatter(
-    data_frame=field_rawnav_combine_dwell_plt.query('route==route'),
+    data_frame=field_rawnav_combine_dwell_cntr_plt.query('route==route'),
     x="dwell_time_field",
     y="dwell_time",
     symbol = "route_seg_name_id",
     color="route_seg_name_id",
-    hover_data=["diff_field_rawnav_dwell_time"])
+    hover_data=[
+        "diff_field_rawnav_dwell_time",
+        "diff_field_rawnav_control_delay", "t_ff", "t_segment",
+        "t_stop2", 
+        "time_entered_stop_zone_field", "qjump_date_time",
+        "diff_field_rawnav_approx_time", "signal_phase_field",
+        "traffic_conditions_field", "notes_field", "filename",
+        "index_run_start", "flag_too_far_any", 
+        "flag_wrong_order_any", "flag_too_long_odom"]
+    )
+
 plot(p1, filename=os.path.join(path_processed_data,
                                "dwell_time_comb.html"))
 p2 = px.scatter(
-    data_frame=field_rawnav_combine_dwell_plt.query('~ route.isna()'),
+    data_frame=field_rawnav_combine_dwell_cntr_plt.query('~ route.isna()'),
     x="dwell_time_field",
     y="dwell_time",
-    hover_data=["diff_field_rawnav_dwell_time"],
+    hover_data=[
+        "diff_field_rawnav_dwell_time",
+        "diff_field_rawnav_control_delay", "t_ff", "t_segment",
+        "t_stop2",
+        "time_entered_stop_zone_field", "qjump_date_time",
+        "diff_field_rawnav_approx_time", "signal_phase_field",
+        "traffic_conditions_field", "notes_field", "filename",
+        "index_run_start", "flag_too_far_any", 
+        "flag_wrong_order_any", "flag_too_long_odom"],  
     trendline="ols")
 plot(p2, filename=os.path.join(path_processed_data,
                                "dwell_time_trendline_comb.html"))
 
-field_rawnav_combine_clear_time_plt = (
-    field_q_jump_rawnav_dwell_t_cntr_all_1
-    .assign(
-        t_control_delay_field=(lambda df: df.t_control_delay_field
-                               .apply(lambda df1: df1.total_seconds())),
-        t_traffic=(lambda x: x.t_traffic.apply(lambda x:x.total_seconds())),
-        route_seg_name_id=lambda x: x.route+", "+x.seg_name_id)
-)
 
 g1 = px.scatter(
-    data_frame=field_rawnav_combine_clear_time_plt.query('~ route.isna()'),
+    data_frame=field_rawnav_combine_dwell_cntr_plt.query('~ route.isna()'),
     y="t_control_delay_field",
     x="t_traffic",
     symbol="route_seg_name_id",
     color="route_seg_name_id",
     hover_data=[
         "diff_field_rawnav_control_delay", "t_ff", "t_segment",
-        "traffic_conditions_field", "notes_field"])
+        "t_stop2", "dwell_time", "dwell_time_field",
+        "diff_field_rawnav_dwell_time",
+        "time_entered_stop_zone_field", "qjump_date_time",
+        "diff_field_rawnav_approx_time", "signal_phase_field",
+        "traffic_conditions_field", "notes_field", "filename",
+        "index_run_start", "flag_too_far_any", 
+        "flag_wrong_order_any", "flag_too_long_odom"])
 plot(g1, filename=os.path.join(
     path_processed_data,
     "approx_fieldcontrol_delay_vs_q_jump_seg_traffic_delay.html"))
 
 
 g2 = px.scatter(
-    data_frame=field_rawnav_combine_clear_time_plt.query('~ route.isna()'),
+    data_frame=field_rawnav_combine_dwell_cntr_plt.query('~ route.isna()'),
     y="t_control_delay_field",
     x="t_traffic",
     hover_data=[
         "diff_field_rawnav_control_delay", "t_ff", "t_segment",
-        "traffic_conditions_field", "notes_field"],
+        "t_stop2", "dwell_time", "dwell_time_field", 
+        "diff_field_rawnav_dwell_time",
+        "time_entered_stop_zone_field", "qjump_date_time",
+        "diff_field_rawnav_approx_time", "signal_phase_field",
+        "traffic_conditions_field", "notes_field", "filename",
+        "index_run_start", "flag_too_far_any", 
+        "flag_wrong_order_any", "flag_too_long_odom"],
     trendline="ols")
 plot(g2, filename=os.path.join(
     path_processed_data,
