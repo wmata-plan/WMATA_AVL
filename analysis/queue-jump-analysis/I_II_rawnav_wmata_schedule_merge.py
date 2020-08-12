@@ -29,7 +29,6 @@ import os, sys, pandas as pd, geopandas as gpd
 
 if not sys.warnoptions:
     import warnings
-
     warnings.simplefilter("ignore")  # Stop Pandas warnings
 
 # 1.2 Set Global Parameters
@@ -61,7 +60,6 @@ q_jump_route_list = ['S1', 'S2', 'S4', 'S9',
                      '70', '79', 
                      '64', 'G8', 
                      'D32', 'H1', 'H2', 'H3', 'H4', 'H8', 'W47']
-
 analysis_routes = q_jump_route_list
 # analysis_routes = ['W47']
 # analysis_routes = ['70', '64', 'D32', 'H8', 'S2']
@@ -91,14 +89,16 @@ wmata_schedule_dat = wr.read_sched_db_patterns(
                         "Schedule_082719-201718.mdb"),
     analysis_routes = analysis_routes)
 
-wmata_schedule_gdf = gpd.GeoDataFrame(
-            wmata_schedule_dat, 
-            geometry = gpd.points_from_xy(wmata_schedule_dat.stop_lon,wmata_schedule_dat.stop_lat),
-            crs='EPSG:4326').\
-            to_crs(epsg=wmata_crs)
+wmata_schedule_gdf = (
+    gpd.GeoDataFrame(
+        wmata_schedule_dat, 
+        geometry = gpd.points_from_xy(wmata_schedule_dat.stop_lon,wmata_schedule_dat.stop_lat),
+        crs='EPSG:4326'
+    )
+    .to_crs(epsg=wmata_crs)
+)
 
 # Make Output Directory
-# TODO: Function or something that makes this safer?
 path_stop_summary = os.path.join(path_processed_data, "stop_summary.parquet")
 if not os.path.isdir(path_stop_summary):
     os.mkdir(path_stop_summary)
@@ -119,61 +119,80 @@ for analysis_route in analysis_routes:
                 wr.read_cleaned_rawnav(
                    analysis_routes_ = analysis_route,
                    analysis_days_ = analysis_day,
-                   path = os.path.join(path_processed_data, "rawnav_data.parquet"))
-                .drop(columns=['blank', 'lat_raw', 'long_raw', 'sat_cnt'])
+                   path = os.path.join(path_processed_data, "rawnav_data.parquet")
                 )
+                .drop(columns=['blank', 'lat_raw', 'long_raw', 'sat_cnt'])
+            )
         except Exception as e:
             print(e)  # usually no data found or something similar
             continue
         else:
 
-            rawnav_summary_dat = wr.read_cleaned_rawnav(
-                analysis_routes_ = analysis_route,
-                analysis_days_ = analysis_day,
-                path = os.path.join(path_processed_data, "rawnav_summary.parquet"))
+            rawnav_summary_dat = (
+                wr.read_cleaned_rawnav(
+                    analysis_routes_ = analysis_route,
+                    analysis_days_ = analysis_day,
+                    path = os.path.join(path_processed_data, "rawnav_summary.parquet")
+                )
+            )
 
             # Subset Rawnav Data to Records Desired
             rawnav_summary_dat = rawnav_summary_dat.query('not (run_duration_from_sec < 600 | dist_odom_mi < 2)')
             
             rawnav_summary_keys_col = rawnav_summary_dat[['filename', 'index_run_start']]
+            
             rawnav_qjump_dat = rawnav_dat.merge(rawnav_summary_keys_col,
                                                 on=['filename', 'index_run_start'],
                                                 how='right')
 
-            rawnav_qjump_gdf = gpd.GeoDataFrame(
-                rawnav_qjump_dat,
-                geometry=gpd.points_from_xy(rawnav_qjump_dat.long, rawnav_qjump_dat.lat),
-                crs='EPSG:4326'). \
-                to_crs(epsg=wmata_crs)
+            rawnav_qjump_gdf = (
+                gpd.GeoDataFrame(
+                    rawnav_qjump_dat,
+                    geometry=gpd.points_from_xy(rawnav_qjump_dat.long, rawnav_qjump_dat.lat),
+                    crs='EPSG:4326'
+                )
+                .to_crs(epsg=wmata_crs)
+            )
 
-        stop_summary, stop_index = \
+        stop_summary, stop_index = (
             wr.merge_rawnav_wmata_schedule(
                 analysis_route_=analysis_route,
                 analysis_day_=analysis_day,
                 rawnav_dat_=rawnav_qjump_gdf,
                 rawnav_sum_dat_=rawnav_summary_dat,
-                wmata_schedule_dat_=wmata_schedule_gdf)
+                wmata_schedule_dat_=wmata_schedule_gdf
+            )
+        )
         
         if type(stop_summary) == type(None):
             print('No data on analysis route {} for {}'.format(analysis_route,analysis_day))
             continue
         
         # Write Summary Table 
-        shutil.rmtree(os.path.join(path_stop_summary,
-                                   "route={}".format(analysis_route),
-                                   "wday={}".format(analysis_day)),
-                      ignore_errors=True) 
+        shutil.rmtree(
+            os.path.join(
+                path_stop_summary,
+                "route={}".format(analysis_route),
+                "wday={}".format(analysis_day)
+            ),
+            ignore_errors=True
+        ) 
         
         pq.write_to_dataset(
             table=pa.Table.from_pandas(stop_summary),
             root_path=path_stop_summary,
-            partition_cols=['route', 'wday'])
+            partition_cols=['route', 'wday']
+        )
         
         # Write Index Table
-        shutil.rmtree(os.path.join(path_stop_index,
-                                   "route={}".format(analysis_route),
-                                   "wday={}".format(analysis_day)),
-                      ignore_errors=True) 
+        shutil.rmtree(
+            os.path.join(
+                path_stop_index,
+                "route={}".format(analysis_route),
+                "wday={}".format(analysis_day)
+            ),
+            ignore_errors=True
+        ) 
         
         stop_index = wr.drop_geometry(stop_index)
         
@@ -182,8 +201,12 @@ for analysis_route in analysis_routes:
         pq.write_to_dataset(
             table=pa.Table.from_pandas(stop_index),
             root_path=path_stop_index,
-            partition_cols=['route', 'wday'])
+            partition_cols=['route', 'wday']
+        )
 
 executionTime = str(datetime.now() - begin_time).split('.')[0]
-print("Run Time Section Section 2: Read, analyze and summarize rawnav, WMATA schedule data : {}".format(executionTime))
+print(
+      "Run Time Section Section 2: Read, analyze and summarize rawnav, WMATA schedule data : {}"
+      .format(executionTime)
+)
 print("*" * 100)
