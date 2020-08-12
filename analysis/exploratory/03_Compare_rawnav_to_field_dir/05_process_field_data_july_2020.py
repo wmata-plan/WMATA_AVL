@@ -36,6 +36,11 @@ elif os.getlogin() == "abibeka":
 else:
     raise FileNotFoundError("Define the path_working, path_source_data, gtfs_dir, \
                             ZippedFilesloc, and path_processed_data in a new elif block")
+path_to_helper = os.path.join(path_working,
+                                          "analysis",
+                                          "exploratory",
+                                          "03_Compare_rawnav_to_field_dir")
+sys.path.append(path_to_helper)
 
 # Import custom functions
 import wmatarawnav as wr
@@ -403,8 +408,24 @@ field_rawnav_combine_dwell_cntr_plt = (
         route_seg_name_id=lambda x: x.route+", "+x.seg_name_id,
         time_entered_stop_zone_field = lambda x: 
             x.time_entered_stop_zone_field.astype(str),
+        time_left_stop_zone_field = lambda x: 
+            x.time_left_stop_zone_field.astype(str), 
+        front_door_open_time_field = lambda x: 
+            x.front_door_open_time_field.astype(str),
+        front_door_close_time_field = lambda x: 
+            x.front_door_close_time_field.astype(str),
+        rear_door_open_time_field = lambda x: 
+            x.rear_door_open_time_field.astype(str),
+        rear_door_close_time_field = lambda x: 
+            x.rear_door_close_time_field.astype(str),
+        min_front_rear_door_close_time_field = lambda x: 
+            x.min_front_rear_door_close_time_field.astype(str),
         qjump_date_time = lambda x:
-            x.qjump_date_time.astype(str))
+            x.qjump_date_time.astype(str),
+        total_time_at_intersection_field = lambda df: (
+            df.total_time_at_intersection_field
+            .apply(lambda df1: df1.total_seconds()))
+        )
     )
 
 p1 = px.scatter(
@@ -414,12 +435,19 @@ p1 = px.scatter(
     symbol = "route_seg_name_id",
     color="route_seg_name_id",
     hover_data=[
+        "route_seg_name_id", "route", "pattern",
         "diff_field_rawnav_dwell_time",
         "diff_field_rawnav_control_delay", "t_ff", "t_segment",
         "t_stop2", 
         "time_entered_stop_zone_field", "qjump_date_time",
         "diff_field_rawnav_approx_time", "signal_phase_field",
-        "traffic_conditions_field", "notes_field", "filename",
+        "traffic_conditions_field", "notes_field",
+        "time_left_stop_zone_field",
+        "min_front_rear_door_close_time_field",
+        "front_door_open_time_field",
+        "rear_door_open_time_field","front_door_close_time_field",
+        "rear_door_open_time_field", "total_time_at_intersection_field",
+        "filename",
         "index_run_start", "flag_too_far_any", 
         "flag_wrong_order_any", "flag_too_long_odom"]
     )
@@ -431,12 +459,19 @@ p2 = px.scatter(
     x="dwell_time_field",
     y="dwell_time",
     hover_data=[
+        "route_seg_name_id", "route", "pattern",
         "diff_field_rawnav_dwell_time",
         "diff_field_rawnav_control_delay", "t_ff", "t_segment",
         "t_stop2",
         "time_entered_stop_zone_field", "qjump_date_time",
         "diff_field_rawnav_approx_time", "signal_phase_field",
-        "traffic_conditions_field", "notes_field", "filename",
+        "traffic_conditions_field", "notes_field", 
+        "time_left_stop_zone_field",
+        "min_front_rear_door_close_time_field",
+        "front_door_open_time_field",
+        "rear_door_open_time_field","front_door_close_time_field",
+        "rear_door_open_time_field", "total_time_at_intersection_field",
+        "filename",
         "index_run_start", "flag_too_far_any", 
         "flag_wrong_order_any", "flag_too_long_odom"],  
     trendline="ols")
@@ -451,12 +486,19 @@ g1 = px.scatter(
     symbol="route_seg_name_id",
     color="route_seg_name_id",
     hover_data=[
+        "route_seg_name_id", "route", "pattern",
         "diff_field_rawnav_control_delay", "t_ff", "t_segment",
         "t_stop2", "dwell_time", "dwell_time_field",
         "diff_field_rawnav_dwell_time",
         "time_entered_stop_zone_field", "qjump_date_time",
         "diff_field_rawnav_approx_time", "signal_phase_field",
-        "traffic_conditions_field", "notes_field", "filename",
+        "traffic_conditions_field", "notes_field", 
+        "time_left_stop_zone_field",
+        "min_front_rear_door_close_time_field",
+        "front_door_open_time_field",
+        "rear_door_open_time_field","front_door_close_time_field",
+        "rear_door_open_time_field", "total_time_at_intersection_field",
+        "filename",
         "index_run_start", "flag_too_far_any", 
         "flag_wrong_order_any", "flag_too_long_odom"])
 plot(g1, filename=os.path.join(
@@ -469,12 +511,19 @@ g2 = px.scatter(
     y="t_control_delay_field",
     x="t_traffic",
     hover_data=[
+        "route_seg_name_id", "route", "pattern",
         "diff_field_rawnav_control_delay", "t_ff", "t_segment",
         "t_stop2", "dwell_time", "dwell_time_field", 
         "diff_field_rawnav_dwell_time",
         "time_entered_stop_zone_field", "qjump_date_time",
         "diff_field_rawnav_approx_time", "signal_phase_field",
-        "traffic_conditions_field", "notes_field", "filename",
+        "traffic_conditions_field", "notes_field", 
+        "time_left_stop_zone_field",
+        "min_front_rear_door_close_time_field",
+        "front_door_open_time_field",
+        "rear_door_open_time_field","front_door_close_time_field",
+        "rear_door_open_time_field", "total_time_at_intersection_field",
+        "filename",
         "index_run_start", "flag_too_far_any", 
         "flag_wrong_order_any", "flag_too_long_odom"],
     trendline="ols")
