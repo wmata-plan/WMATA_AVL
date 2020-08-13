@@ -483,8 +483,8 @@ plot(p2, filename=os.path.join(path_processed_data,
 
 g1 = px.scatter(
     data_frame=field_rawnav_combine_dwell_cntr_plt.query('~ route.isna()'),
-    y="t_control_delay_field",
-    x="t_traffic",
+    x="t_control_delay_field",
+    y="t_traffic",
     symbol="route_seg_name_id",
     color="route_seg_name_id",
     hover_data=[
@@ -511,8 +511,8 @@ plot(g1, filename=os.path.join(
 
 g2 = px.scatter(
     data_frame=field_rawnav_combine_dwell_cntr_plt.query('~ route.isna()'),
-    y="t_control_delay_field",
-    x="t_traffic",
+    x="t_control_delay_field",
+    y="t_traffic",
     hover_data=[
         "route_seg_name_id", "route", "pattern",
         "diff_field_rawnav_control_delay", "t_ff", "t_segment",

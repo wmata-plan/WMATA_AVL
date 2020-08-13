@@ -298,7 +298,7 @@ def merge_rawnav_target(target_dat, rawnav_dat, quiet=True):
     return nearest_rawnav_point_to_target_dat
 
 
-def remove_stops_with_dist_over_500ft(nearest_rawnav_point_to_wmata_schedule_data_):
+def remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_data_):
     """
     Parameters
     ----------
