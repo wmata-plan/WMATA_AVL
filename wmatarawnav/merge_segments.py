@@ -203,12 +203,11 @@ def include_segment_summary(rawnav_q_dat,
         .pipe(ll.reset_col_names)
     )
     
-    # Merge 
-    
+    # Merge
     rawnav_q_segment_summary = (
-        rawnav_q_segment_summary
+        rawnav_sum_dat # we start with the original summary to not silently drop runs
         .merge(
-            rawnav_sum_dat, 
+            rawnav_q_segment_summary, 
             on=['filename', 'index_run_start'], 
             how='left'
         )
