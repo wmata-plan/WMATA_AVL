@@ -64,15 +64,19 @@ def merge_rawnav_segment(rawnav_gdf_,
      
     # Cleaning
 
-    # Note that while we could run some additional checks (Are both ends of the segment
+    # Note that while we could run some additional checks (Are *both* ends of the segment
     # present? Does the run stay 'within' a certain radius of the segment line?) these 
-    # checks are largely superceded by checks that the odometer reading approximately matches
+    # checks are largely superseded by checks that the odometer reading approximately matches
     # the segment length (done further below). 
     index_run_segment_start_end_2 = (
         index_run_segment_start_end_1
         .assign(flag_too_far = lambda x: x.dist_to_nearest_point > 50)
         # note that we will give both the whole run the 'wrong order' flag in the summary table
         # if the order test fails for any point
+        # This wrong order flag is necessary because some early login and late close out runs
+        # will have pings around certain segments, resulting in misshapen joins. This could 
+        # be addressed if we spent more time cleaning up those runs, but instead we just drop 
+        # them through these filters.
         .assign(
             flag_wrong_order = lambda x: 
                 x
@@ -128,10 +132,15 @@ def include_segment_summary(rawnav_q_dat,
     investment given the variety of columns and aggregations that need to be applied in each case.     
     """
     seg_boundary_dat = ws.get_first_last_stop_rawnav(nearest_seg_boundary_dat)
-    rawnav_q_target_dat = \
-        rawnav_q_dat.merge(seg_boundary_dat.drop(['odom_ft','sec_past_st'], axis = 1),
-                           on=['filename', 'index_run_start'], 
-                           how='right')
+    rawnav_q_target_dat = (
+        rawnav_q_dat
+        .merge(seg_boundary_dat
+               .drop(['odom_ft','sec_past_st'], axis = 1),
+               on=['filename', 'index_run_start'], 
+               how='right'
+        )
+    )
+    
     rawnav_q_target_dat = (
         rawnav_q_target_dat
         .query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')

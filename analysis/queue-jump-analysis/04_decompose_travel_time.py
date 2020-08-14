@@ -68,7 +68,7 @@ import wmatarawnav as wr
 
 # 1.4 Reload Relevant Files 
 ###########################
-# 2.1. Load segment-pattern-stop crosswalk 
+# Load segment-pattern-stop crosswalk 
 # This crosswalk is used to connect segment shapes to rawnav data. 
 # - The 'route' field must match the same string used in the rawnav data. 
 # - 'direction' will be looked up in a moment against the WMATA schedule database and 
@@ -122,11 +122,12 @@ del xwalk_seg_pattern_stop_in
 # 2. Decompose Travel Time
 ##########################
 
+# 2.0 Setup exports
+###################
 freeflow_list = []
 stop_area_decomp_list = []
 traveltime_decomp_list = []
 
-# Set up folder to dump results to
 path_exports = (
     os.path.join(
         path_processed_data,
@@ -137,6 +138,7 @@ if not os.path.isdir(path_exports):
     os.mkdir(path_exports)
 
 for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleventh_i_new_york"]: #list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()):
+# Iterate over Segments
     print('now on {}'.format(seg))
     # 2.1. Read-in Data 
     ###################
