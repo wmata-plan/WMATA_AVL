@@ -205,9 +205,9 @@ def include_segment_summary(rawnav_q_dat,
     
     # Merge
     rawnav_q_segment_summary = (
-        rawnav_sum_dat # we start with the original summary to not silently drop runs
+        rawnav_q_segment_summary
         .merge(
-            rawnav_q_segment_summary, 
+            rawnav_sum_dat, # we start with the original summary to not silently drop runs
             on=['filename', 'index_run_start'], 
             how='left'
         )
