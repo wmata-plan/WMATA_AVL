@@ -54,6 +54,7 @@ rawnav_summary_dat = (
         path = os.path.join(path_processed_data, "rawnav_summary.parquet")
     )
 )
+print("Number of rawnav runs in analysis routes is {}".format(len(rawnav_summary_dat)))
 
 # Stop summary
 stop_summary = (
@@ -63,7 +64,11 @@ stop_summary = (
     )
     .to_pandas()
 )
-# 35041 runs remain
+print("Number of rawnav runs after stop merge is {}".format(len(stop_summary)))
+print(
+      "{} runs were removed where distances were less than 2 miles or 10 minutes long."
+      .format(len(rawnav_summary_dat) - len(stop_summary))
+)
 
 # Segment Summary
 # Note: filter by pattern here, so expect a number of runs to drop out
@@ -74,7 +79,11 @@ segment_summary = (
     )
     .to_pandas()
 )
-# valid records remaining: 22871 (number that appear in traveltime_decomp) 
+print("Number of rawnav runs after segment merge is {}".format(len(segment_summary)))
+print(
+      "{} additional runs were removed because they do not travel in the same direction as the evaluation segment"
+      .format(len(stop_summary) - len(segment_summary))
+)
 
 # Decomposition 
 traveltime_decomp = (
@@ -82,12 +91,21 @@ traveltime_decomp = (
         os.path.join(path_processed_data,"exports_20200812","traveltime_decomp.csv")
     )   
 )
+print("Number of rawnav runs before decomposition is {}".format(len(traveltime_decomp)))
+print("""{} runs were removed for having pings too far from segment boundaries, 
+      for traveling in the wrong direction as the segment, or for having odometer distance
+      traveled values inconsistent with the segment length""".format(len(segment_summary) - len(traveltime_decomp)))
 
 # Final
 traveltime_decomp_fil = (
     traveltime_decomp
-    .loc[(traveltime_decomp.flag_failed_qj_stop_merge == False) & (traveltime_decomp.flag_odometer_reset == False) ]    
+    .loc[(traveltime_decomp.flag_odometer_reset == False) ]    
 )
+print("Number of ranwav runs decomposed is {}".format(len(traveltime_decomp_fil)))
+print(
+      """{} runs were removed for failing an apparent odometer reset within the segment"""
+      .format(len(traveltime_decomp) - len(traveltime_decomp_fil)))
+
 # End with 18037 valid runs (number that appear in traveltime_decomp_fil)
 
 
@@ -110,3 +128,23 @@ traveltime_cases = (
     .pipe(wr.reset_col_names)
 )
 
+# Load additional files for debugging
+stop_index = (
+        pq.read_table(source=os.path.join(path_processed_data,"stop_index.parquet"),
+                      filters=[[('route','=',route)] for route in analysis_routes],
+                        columns = ['seg_name_id',
+                                    'route',
+                                    'pattern',
+                                    'stop_id',
+                                    'filename',
+                                    'index_run_start',
+                                    'index_loc',
+                                    'odom_ft',
+                                    'sec_past_st',
+                                    'geo_description'],
+                      use_pandas_metadata = True)
+        .to_pandas()
+        # As a bit of proofing, we confirm this is int32 and not string, may remove later
+        .assign(pattern = lambda x: x.pattern.astype('int32')) 
+        .rename(columns = {'odom_ft' : 'odom_ft_qj_stop'})
+    ) 
