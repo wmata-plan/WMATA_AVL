@@ -70,11 +70,6 @@ q_jump_route_list = ['S1', 'S2', 'S4', 'S9',
                      'D32', 'H1', 'H2', 'H3', 'H4', 'H8', 'W47']
 # If desired, a subset of routes above or the entire list. Code will iterate on the analysis_routes list
 analysis_routes = q_jump_route_list
-zip_parent_folder_name = "October 2019 Rawnav"
-# Assumes directory structure:
-# zip_parent_folder_name (e.g, October 2019 Rawnav)
-#  -- zipped_files_dirs (e.g., Vehicles 0-2999.zip)
-#     -- file_universe (items in various zipped_files_dirs ala rawnav##########.txt.zip
 
 run_inventory = False # inventory (or re-inventory files), otherwise reload saved inventory if available
 run_existing = False # whether to redo outputs that currently exist or skip over them
@@ -90,14 +85,10 @@ print("Run Time Section 1 Import Libraries and Set Global Parameters : {}".forma
 ########################################################################################################################
 begin_time = datetime.now()  ##
 
-# Extract parent zipped folder and get the zipped files path
-zipped_files_dir_parent = os.path.join(path_source_data, zip_parent_folder_name)
-zipped_files_dirs = glob.glob(os.path.join(zipped_files_dir_parent, 'Vehicles *.zip'))
-
-file_universe = wr.get_zipped_files_from_zip_dir(
-    zip_dir_list=zipped_files_dirs,
-    zipped_files_dir_parent=zipped_files_dir_parent,
-    glob_search="*.zip")
+# Create a list of zipped rawnavfiles (ala 'rawnav06544171027.txt.zip') as 
+# file_universe. 
+zipped_files_dir_parent = os.path.join(path_source_data, "October 2019 Rawnav")
+file_universe = glob.glob(os.path.join(zipped_files_dir_parent, "*.txt.zip"))
 
 if run_inventory: 
     rawnav_inventory = wr.find_rawnav_routes(file_universe, nmax=restrict_n, quiet=True)
