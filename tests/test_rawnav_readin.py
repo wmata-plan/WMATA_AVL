@@ -30,7 +30,7 @@ def get_cwd():
 #change_cwd
 @pytest.fixture(scope="session")
 def get_rawnav_inventory(get_cwd):
-    zipped_files_dir_parent = os.path.join(get_cwd, "data/00-raw/demo_data")
+    zipped_files_dir_parent = os.path.join(get_cwd, "data/00-raw/demo_data/01_notebook_data")
     file_universe = glob.glob(os.path.join(zipped_files_dir_parent, 'rawnav*.zip'))
     rawnav_inventory = wr.find_rawnav_routes(file_universe, nmax=None, quiet=True)
     return rawnav_inventory

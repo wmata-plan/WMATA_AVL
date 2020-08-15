@@ -84,9 +84,12 @@ def find_rawnav_routes(file_universe, nmax=None, quiet=True):
     -------
     ReturnDict.
     '''
+    assert(len(file_universe)>0), print("No files present in file universe")
+    assert((nmax == None) or (nmax > 0)), print("nmax must be greater than 0 or None")
     file_universe_set = file_universe[0:nmax]
     # Setup dataframe for iteration
     file_universe_df = pd.DataFrame({'fullpath': file_universe_set})
+
     file_universe_df['filename'] = file_universe_df['fullpath'].str.extract('(rawnav\d+.txt)')
     file_universe_df['file_busid'] = file_universe_df['fullpath'].str.extract('rawnav(\d{5})\S+.txt')
     file_universe_df['file_id'] = file_universe_df['fullpath'].str.extract('rawnav(\d+).txt')
