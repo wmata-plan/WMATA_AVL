@@ -130,7 +130,7 @@ def test_stop_order_nearest_point_to_rawnav(get_stops_results):
     
     each_stop_seq_more_than_last = all(
         stop_index
-        .groupby(['filename', 'index_trip_start_in_clean_data'])
+        .groupby(['filename', 'index_run_start'])
         .index_loc
         .diff()
         .dropna() 
@@ -141,7 +141,7 @@ def test_stop_order_nearest_point_to_rawnav(get_stops_results):
 
 def test_stop_dist_nearest_point_to_rawnav(get_stops_results):
     stop_summary, stop_index = get_stops_results
-    each_stop_close_enough = all(stop_index.dist_nearest_point_from_stop<=100)
+    each_stop_close_enough = all(stop_index.dist_to_nearest_point<=100)
     assert(each_stop_close_enough)
 
 def test_nearest_point(get_stops_results):
