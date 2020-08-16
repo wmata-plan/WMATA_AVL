@@ -1,0 +1,86 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+# Create Charts
+```{r}
+
+# DEBUG SPEED STUFF
+# case <- "rawnav03235191030.txt_26551"
+# case <- "rawnav03259191029.txt_28005"
+# case <- "rawnav03232191024.txt_9587"
+# 
+
+stop_pass_decomp_4 %>%
+  filter(busrun == "rawnav03232191024.txt_9587") %>%
+  filter(seg_name_id == first(seg_name_id)) %>%
+  decomp_stack()
+
+
+```
+
+```{r}
+checkme <- 
+  stop_pass_decomp_4 %>%
+  filter(busrun == "rawnav03215191019.txt_11241") %>%
+  filter(seg_name_id == first(seg_name_id)) 
+
+doublecheck("rawnav02833191007.txt_1494", "irving_fifteenth_sixteenth")
+
+```
+
+
+# Export Charts
+```{r}
+frame <-
+  rawnav_stop_area %>%
+  distinct(busrun, seg_name_id) %>%
+  sample_n(size = 500) %>%
+  mutate(
+    busrunshow = str_replace(busrun, '\\.txt', 'txt'),
+    filename = glue::glue("{seg_name_id}_{busrunshow}.png"),
+    plot = pmap(list(busrun, seg_name_id),
+                doublecheck)
+  )
+
+height = 8
+asp = 1.2
+
+frame %>%
+  select(filename,
+         plot) %>%
+  pwalk(.,
+        ggsave,
+        path = file.path(path_project,'data','01-interim','images'),
+        width = height * asp,
+        height = height,
+        units = "in",
+        scale = .9,
+        dpi = 300)
+```
+
+```{r}
+stop_pass_decomp_4 %>%
+  select(
+      busrun,
+      seg_name_id,
+      ts_approach_min,
+      tr_approach_delay,
+      tr_init_wait,
+      tr_stop1,
+      tr_stop,
+      tr_signal_wait,
+      ts_accel_min,
+      tr_accel_delay,
+      ts_nostop_min,
+      tr_nostop_delay,
+      subsegment_min_sec_before_stop_area,
+      subsegment_delay_sec_before_stop_area,
+      subsegment_min_sec_after_stop_area,
+      subsegment_delay_sec_after_stop_area
+    ) %>%
+  write_csv(.,file.path(path_data,'acceldecel_decomp_byrun.csv'),na = "")
+```
+

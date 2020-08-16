@@ -33,11 +33,12 @@ if ("WylieTimmerman" %in% Sys.info()){
 # Define -----------------------------------------------------------------
 
 # segment-name
-seg_route_xwalk <-
+seg_pattern_xwalk <-
   tribble(
-    ~route_short_name, ~direction_id,                   ~seg_name_id,
-                 "79",            1,             "georgia_columbia",
-                 "79",            1,         "georgia_piney_branch_long",
+    ~route_short_name, ~direction_id,                   ~seg_name_id, 
+                 "79",            1,             "georgia_columbia",          
+                 "79",            1,         "georgia_piney_branch_long",      
+                 "70",            1,               "georgia_irving",
                  "70",            1,               "georgia_irving",
                  "70",            1,         "georgia_piney_branch_shrt",
                  "S1",            0,                  "sixteenth_u_shrt",
@@ -54,6 +55,9 @@ seg_route_xwalk <-
                  "H8",            0,   "irving_fifteenth_sixteenth",
                 "W47",            0,   "irving_fifteenth_sixteenth"
   )
+
+seg_pattern_stop_xwalk <-
+  
 
 #TODO: add nicename?  
 segments <-
