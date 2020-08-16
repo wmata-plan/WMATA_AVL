@@ -93,8 +93,7 @@ def explode_first_last(gdf):
         of each geometry in the input gdf. The attributes of each original row are carried 
         forward to the output gdf.
     """
-    # Currently this is only tests 
-    assert(gdf.geom_type.to_numpy() == "LineString"), print("Currently only LineString segment geometry supported")
+    assert(all(gdf.geom_type.to_numpy() == "LineString")), print("Currently only LineString segment geometry supported")
     line_first_last_list = []
      
     # Not especially pythonic, but preserves dtypes nicely relative to itertuples and esp. iterrows
