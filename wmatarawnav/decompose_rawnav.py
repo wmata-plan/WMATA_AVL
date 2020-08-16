@@ -121,9 +121,11 @@ def decompose_traveltime(
         )
         .assign(fpsps_phase = lambda x: abs(x.fpsps_phase))
     )
-    
+
     t_decacc_by_seg = (
-        decacc_by_run 
+        decacc_by_run
+        .loc[lambda x: x.stop_area_phase.isin(['t_accel_phase','t_decel_phase'])]
+        .loc[lambda x: ~(x.fpsps_phase.isna())]
         .groupby(['stop_area_phase'])
         .agg({'fpsps_phase' : ['mean',
                                lambda x: x.quantile(.5),
@@ -135,7 +137,6 @@ def decompose_traveltime(
         .rename(columns = {"fpsps_phase_<lambda_0>" : "fpsps_phase_median",
                            "fpsps_phase_<lambda_1>" : "fpsps_phase_p90",
                            "fpsps_phase_<lambda_2>" : "fpsps_phase_p95"})
-        .loc[lambda x: x.stop_area_phase.isin(['t_accel_phase','t_decel_phase'])]
         # If the vehicle decelerated from freeflow at the given acceleration/deceleration rates
         # this is how long it would take
         .assign(t_decacc = lambda x, ff = segment_ff_seg: abs(ff / (2 * x.fpsps_phase_p95)))
