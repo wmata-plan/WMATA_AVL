@@ -171,8 +171,6 @@ def merge_rawnav_wmata_schedule(analysis_route_,
     )
 
     # Assert and clean stop data
-    # TODO: confirm what happens if a route has no pings near a stop (unlikely, but is it dropped entirely
-    # from summary and index table?)
     nearest_rawnav_point_to_wmata_schedule_dat = (
         remove_stops_with_dist_over_100ft(nearest_rawnav_point_to_wmata_schedule_dat)
     )
