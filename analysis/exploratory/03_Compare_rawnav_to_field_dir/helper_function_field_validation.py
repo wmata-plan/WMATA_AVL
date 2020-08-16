@@ -89,9 +89,9 @@ def correct_data_types(dat):
             )
         ),
         dwell_time_field=(
-            lambda x: pd.to_timedelta(
-                x.dwell_time_field.apply(time_to_sec),
-                unit='s'
+            lambda x: (
+                x.rear_door_close_time_field
+                - x.rear_door_open_time_field
             )
         ),
         number_of_boarding_field=(lambda x: x.number_of_boarding_field
@@ -116,15 +116,15 @@ def correct_data_types(dat):
             ]
             .min(axis=1)
         ),
-        t_control_delay_field=(
+        t_signal_delay_field=(
             lambda x:
             x.time_left_stop_zone_field
             - x.min_front_rear_door_close_time_field
         )
         )
     dat.loc[
-        lambda x: x.t_control_delay_field.dt.total_seconds() < 0,
-        "t_control_delay_field"
+        lambda x: x.t_signal_delay_field.dt.total_seconds() < 0,
+        "t_signal_delay_field"
     ] = pd.NaT
     return dat
 
@@ -288,7 +288,7 @@ def combine_field_rawnav_dat(
             (df.dwell_time_field - df.dwell_time)
             .apply(lambda df1: df1.total_seconds()),
             diff_field_rawnav_control_delay=lambda df:
-            (df.t_traffic - df.t_control_delay_field)
+            (df.t_traffic - df.t_signal_delay_field)
             .apply(lambda df1: df1.total_seconds())
         )
         .query("diff_field_rawnav_approx_time.abs() <= 1000")

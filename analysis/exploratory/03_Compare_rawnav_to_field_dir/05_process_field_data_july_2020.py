@@ -3,6 +3,7 @@ import os
 import plotly.express as px
 import plotly.offline as pyo
 from plotly.offline import plot
+import plotly.graph_objects as go
 import sys
 # Set notebook mode to work in offline
 pyo.init_notebook_mode()
@@ -100,6 +101,8 @@ field_df_all_loc = (pd.concat(field_dict.values())
                     .reset_index(drop=True)
                     .assign(s_no=lambda x: x.index+1))
 
+field_df_all_loc = (field_df_all_loc.loc[
+    lambda x: x.front_door_open_time_field.isna()])
 # 3. Read and process rawnav travel time decomposition and summary data.
 # -----------------------------------------------------------------------------
 # Read travel time decomposition data.
@@ -402,8 +405,8 @@ field_rawnav_combine_dwell_cntr_plt = (
                                      ),
         dwell_time=lambda df: (df.dwell_time
                                .apply(lambda df1: df1.total_seconds())),
-        t_control_delay_field=(lambda df: df.t_control_delay_field
-                               .apply(lambda df1: df1.total_seconds())),
+        t_signal_delay_field=(lambda df: df.t_signal_delay_field
+                              .apply(lambda df1: df1.total_seconds())),
         t_traffic=(lambda x: x.t_traffic.apply(lambda x:x.total_seconds())),
         route_seg_name_id=lambda x: x.route+", "+x.seg_name_id,
         time_entered_stop_zone_field = lambda x: 
@@ -428,6 +431,10 @@ field_rawnav_combine_dwell_cntr_plt = (
         )
     )
 
+field_rawnav_combine_dwell_cntr_plt=(
+    field_rawnav_combine_dwell_cntr_plt.loc[
+        lambda x: (~ x.dwell_time_field.isna())
+                   & (~ x.route.isna())])  
 p1 = px.scatter(
     data_frame=field_rawnav_combine_dwell_cntr_plt.query('route==route'),
     x="dwell_time_field",
@@ -452,6 +459,14 @@ p1 = px.scatter(
         "index_run_start", "flag_too_far_any", 
         "flag_wrong_order_any", "flag_too_long_odom"]
     )
+p1.add_trace(
+    go.Scatter(
+        x=[0, 70],
+        y=[0, 70],
+        mode="lines",
+        line=go.scatter.Line(color="gray"),
+        showlegend=False)
+)
 
 plot(p1, filename=os.path.join(path_processed_data,
                                "dwell_time_comb.html"))
@@ -477,13 +492,13 @@ p2 = px.scatter(
         "index_run_start", "flag_too_far_any", 
         "flag_wrong_order_any", "flag_too_long_odom"],  
     trendline="ols")
-plot(p2, filename=os.path.join(path_processed_data,
-                               "dwell_time_trendline_comb.html"))
+# plot(p2, filename=os.path.join(path_processed_data,
+#                                "dwell_time_trendline_comb.html"))
 
 
 g1 = px.scatter(
     data_frame=field_rawnav_combine_dwell_cntr_plt.query('~ route.isna()'),
-    x="t_control_delay_field",
+    x="t_signal_delay_field",
     y="t_traffic",
     symbol="route_seg_name_id",
     color="route_seg_name_id",
@@ -504,14 +519,23 @@ g1 = px.scatter(
         "filename",
         "index_run_start", "flag_too_far_any", 
         "flag_wrong_order_any", "flag_too_long_odom"])
+
+g1.add_trace(
+    go.Scatter(
+        x=[0, 110],
+        y=[0, 110],
+        mode="lines",
+        line=go.scatter.Line(color="gray"),
+        showlegend=False)
+)
 plot(g1, filename=os.path.join(
     path_processed_data,
-    "approx_fieldcontrol_delay_vs_q_jump_seg_traffic_delay.html"))
+    "approx_field_signal_delay_vs_q_jump_seg_traffic_delay.html"))
 
 
 g2 = px.scatter(
     data_frame=field_rawnav_combine_dwell_cntr_plt.query('~ route.isna()'),
-    x="t_control_delay_field",
+    x="t_signal_delay_field",
     y="t_traffic",
     hover_data=[
         "route_seg_name_id", "route", "pattern",
@@ -531,8 +555,8 @@ g2 = px.scatter(
         "index_run_start", "flag_too_far_any", 
         "flag_wrong_order_any", "flag_too_long_odom"],
     trendline="ols")
-plot(g2, filename=os.path.join(
-    path_processed_data,
-    "approx_trendline_fieldcontrol_delay_vs_q_jump_seg_traffic_delay.html"))
+# plot(g2, filename=os.path.join(
+#     path_processed_data,
+#     "approx_trendline_field_signal_delay_vs_q_jump_seg_traffic_delay.html"))
 
 
