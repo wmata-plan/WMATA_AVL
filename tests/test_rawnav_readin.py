@@ -8,6 +8,10 @@ Created on Wed Jun 10 03:48:45 2020
 # to the repository, and then run 
 # pytest tests
 
+# Alternatively, to run tests interactively in ipython, change directory to the repository, then run
+# run -m pytest ./tests
+# breakpoint() can be set to interrupt execution as needed
+
 import pytest
 import os
 import pandas as pd
