@@ -157,15 +157,17 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
     )
             
     segment_summary = (
-        pq.read_table(source = os.path.join(path_processed_data,"segment_summary.parquet"),
-                      filters = [['seg_name_id', "=", seg]],
-                      use_pandas_metadata = True)
+        pq.read_table(
+            source = os.path.join(path_processed_data,"segment_summary_2017_test.parquet"),
+            filters = [['seg_name_id', "=", seg]],
+            use_pandas_metadata = True
+        )
         .to_pandas()
     )
-    
+
     segment_summary_fil = (
         segment_summary
-        .query('~(flag_too_far_any | flag_wrong_order_any | flag_too_long_odom)')
+        .query('~(flag_too_far_any | flag_wrong_order_any | flag_too_long_odom | flag_secs_total_mismatch | flag_odom_total_mismatch)')
     )
        
     stop_index = (
@@ -181,7 +183,8 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
                                     'odom_ft',
                                     'sec_past_st',
                                     'geo_description'],
-                      use_pandas_metadata = True)
+                      use_pandas_metadata = True
+        )
         .to_pandas()
         # As a bit of proofing, we confirm this is int32 and not string, may remove later
         .assign(pattern = lambda x: x.pattern.astype('int32')) 

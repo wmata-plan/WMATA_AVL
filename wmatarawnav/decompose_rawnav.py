@@ -162,6 +162,7 @@ def decompose_traveltime(
     )
 
     # Join inputs together and calculate
+
     travel_time_decomp = (
         segment_summary_
         .merge(
@@ -175,12 +176,12 @@ def decompose_traveltime(
             how = "left"
         )
         .assign(
-            flag_nostop = lambda x: (x.t_stop1.isna() & x.t_stop.isna()),
-            flag_odometer_reset = lambda x: ((x.end_sec_segment- x.start_sec_segment) != x.t_segment)
+            flag_nostop = lambda x: (x.t_stop1.isna() & x.t_stop.isna())
         )
         .fillna({'t_stop1': 0,
                  't_stop' : 0,
-                 't_l_initial': 0}) 
+                 't_l_initial': 0,
+                 't_l_addl':0}) 
         .assign(
             ff_fps = segment_ff_seg,
             t_ff = lambda x: x.odom_ft_seg_total / x.ff_fps
@@ -209,7 +210,6 @@ def decompose_traveltime(
                      'wday',
                      'start_date_time',
                      'flag_nostop',
-                     'flag_odometer_reset',
                      't_segment',
                      't_stop',
                      't_stop1',
@@ -622,13 +622,13 @@ def filter_to_segment(rawnav,
     rawnav_seg_fil = (
         rawnav
         .merge(summary[["filename",
-                                "index_run_start",
-                                "start_odom_ft_segment",
-                                "end_odom_ft_segment"]],
+                        "index_run_start",
+                        "start_index_loc_segment",
+                        "end_index_loc_segment"]],
                on = ["filename","index_run_start"],
                how = "right")        
-        .query('odom_ft >= start_odom_ft_segment & odom_ft <= end_odom_ft_segment')
-        .drop(['start_odom_ft_segment','end_odom_ft_segment'], axis = 1)
+        .query('index_loc >= start_index_loc_segment & index_loc <= end_index_loc_segment')
+        .drop(['start_index_loc_segment','end_index_loc_segment'], axis = 1)
     )
     
     return(rawnav_seg_fil)

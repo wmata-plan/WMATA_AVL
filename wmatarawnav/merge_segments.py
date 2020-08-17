@@ -93,16 +93,8 @@ def merge_rawnav_segment(rawnav_gdf_,
         include_segment_summary(
             rawnav_q_dat = rawnav_gdf_,
             rawnav_sum_dat = rawnav_sum_dat_,
-            nearest_seg_boundary_dat = index_run_segment_start_end_2
-        )
-    )
-    
-    # Additional Checks on Segment Length
-    summary_run_segment = (
-        summary_run_segment 
-        .assign(
-            flag_too_long_odom = lambda x, y = seg_length:
-                abs(y - (x.trip_dist_mi_odom_and_segment*5280)) > 150
+            nearest_seg_boundary_dat = index_run_segment_start_end_2,
+            seg_length_ = seg_length
         )
     )
 
@@ -113,7 +105,8 @@ def merge_rawnav_segment(rawnav_gdf_,
     
 def include_segment_summary(rawnav_q_dat, 
                             rawnav_sum_dat, 
-                            nearest_seg_boundary_dat):
+                            nearest_seg_boundary_dat,
+                            seg_length_):
     """
     Parameters
     ----------
@@ -121,6 +114,8 @@ def include_segment_summary(rawnav_q_dat,
     rawnav_sum_dat: pd.DataFrame, rawnav summary data
     nearest_seg_boundary_dat: gpd.GeoDataFrame
         cleaned data on nearest rawnav point to where segment boundary lies
+    seg_length_: float
+        length of segment in feet
     Returns
     -------
     rawnav_q_segment_summary: pd.DataFrame
@@ -145,56 +140,114 @@ def include_segment_summary(rawnav_q_dat,
         rawnav_q_target_dat
         .query('index_loc>=index_loc_first_stop & index_loc<=index_loc_last_stop')
     )
+
+    rawnav_q_target_dat = (
+        rawnav_q_target_dat
+        .filter(
+            items = 
+                ['filename',
+                 'index_run_start', 
+                 'seg_name_id', 
+                 'index_loc',
+                 'lat', 
+                 'long', 
+                 'heading', 
+                 'odom_ft', 
+                 'sec_past_st', 
+                 'first_stop_dist_nearest_point'
+                ]
+        )
+    )
     
-    rawnav_q_target_dat = \
-        rawnav_q_target_dat[
-            ['filename',
-             'index_run_start', 
-             'seg_name_id', 
-             'lat', 
-             'long', 
-             'heading', 
-             'odom_ft', 
-             'sec_past_st', 
-             'first_stop_dist_nearest_point']]
+    # We'll add some additional calcs to check on the odometer values within the segment
+    rawnav_q_target_dat[['odom_ft_next','sec_past_st_next']] = (
+        rawnav_q_target_dat
+        .groupby(['filename','index_run_start','seg_name_id'], sort = False)[['odom_ft','sec_past_st']]
+        .shift(-1)
+    )
+        
+    rawnav_q_target_dat = (
+        rawnav_q_target_dat
+        .assign(
+            secs_marg=lambda x: x.sec_past_st_next - x.sec_past_st,
+            odom_ft_marg=lambda x: x.odom_ft_next - x.odom_ft
+        )
+    )
     
     Map1 = lambda x: max(x) - min(x)
-    rawnav_q_segment_summary = \
-        rawnav_q_target_dat.groupby(['filename', 'index_run_start', 'seg_name_id']).\
-            agg({'odom_ft': ['min', 'max', Map1],
-                 'sec_past_st': ['min', 'max', Map1],
-                 'lat': ['first', 'last'],
-                 'long': ['first', 'last'],
-                 'first_stop_dist_nearest_point': ['first']})
+    rawnav_q_segment_summary = (
+        rawnav_q_target_dat
+        .groupby(['filename', 'index_run_start', 'seg_name_id'])
+        .agg(
+            {'odom_ft': ['min', 'max', Map1, 'sum'],
+             'sec_past_st': ['min', 'max', Map1, 'sum'],
+             'lat': ['first', 'last'],
+             'long': ['first', 'last'],
+             'first_stop_dist_nearest_point': ['first'],
+             'index_loc' : ['first','last']}
+        )
+    )
 
     rawnav_q_segment_summary.columns = ['start_odom_ft_segment', 
                                      'end_odom_ft_segment',
-                                     'trip_dist_mi_odom_and_segment', 
+                                     'trip_dist_ft_segment', 
+                                     'odom_ft_marg_sum',
                                      'start_sec_segment',
                                      'end_sec_segment', 
                                      'trip_dur_sec_segment',
+                                     'secs_marg_sum',
                                      'start_lat_segment', 
                                      'end_lat_segment',
                                      'start_long_segment', 
                                      'end_long_segment',
-                                     'dist_first_stop_segment'] 
+                                     'dist_first_stop_segment',
+                                     'start_index_loc_segment',
+                                     'end_index_loc_segment'] 
     
-    rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment']] = \
-        rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment']] / 5280
-        
-    rawnav_q_segment_summary.loc[:, 'trip_speed_mph_segment'] = \
-        round(3600 *
-              rawnav_q_segment_summary.trip_dist_mi_odom_and_segment /
-              rawnav_q_segment_summary.trip_dur_sec_segment, 2)
-        
-    rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment', 
-                                  'dist_first_stop_segment']] = \
-        round(rawnav_q_segment_summary.loc[:, ['trip_dist_mi_odom_and_segment', 
-                                            'dist_first_stop_segment']], 2)
+    rawnav_q_segment_summary = (
+        rawnav_q_segment_summary
+        .assign(
+            trip_dist_mi_odom_and_segment = lambda x: x.trip_dist_ft_segment / 5280,
+            trip_speed_mph_segment = lambda x:
+                round(3600 * x.trip_dist_mi_odom_and_segment / x.trip_dur_sec_segment, 2)
+        )
+        .assign(
+            trip_dist_mi_odom_and_segment = lambda x: round(x.trip_dist_mi_odom_and_segment, 2),
+            dist_first_stop_segment = lambda x: round(x.dist_first_stop_segment, 2)
+        )
+        .reset_index()
+    )
     
-    rawnav_q_segment_summary.reset_index(inplace = True)
-    
-    # Summarize flags
+    # Add flags at summary level
+    # For example, we occassionally see the odometer reset in teh middle of a run
+    # see 'rawnav05447191026.txt' and index_run_start 8055. If this occurred in a segment
+    # it could affect decomposition calculations
+    # Runs with these flags will be removed before downstream calculations are performed
+    rawnav_q_segment_summary = (
+        rawnav_q_segment_summary
+        .assign(
+            flag_too_long_odom = lambda x, y = seg_length_:
+                abs(y - (x.trip_dist_ft_segment)) > 150,
+            secs_total_mismatch = lambda x: 
+                ((x.end_sec_segment - x.start_sec_segment) 
+                 - x.trip_dur_sec_segment),
+            flag_secs_total_mismatch = lambda x: x.secs_total_mismatch != 0,
+            odom_total_mismatch = lambda x:
+                (x.end_odom_ft_segment - x.start_odom_ft_segment ) 
+                 - (x.trip_dist_ft_segment),
+            flag_odom_total_mismatch = lambda x: x.odom_total_mismatch != 0
+        )
+        .drop(
+            columns = [
+                'secs_marg_sum',
+                'odom_ft_marg_sum',
+                'secs_total_mismatch',
+                'odom_total_mismatch',
+                'trip_dist_ft_segment'
+                ]
+            )
+    )
+    # Summarize index-level flags
     flags = (
         nearest_seg_boundary_dat
         .groupby(['filename','index_run_start'])
@@ -203,7 +256,7 @@ def include_segment_summary(rawnav_q_dat,
         .pipe(ll.reset_col_names)
     )
     
-    # Merge
+    # Merge and column clean up
     rawnav_q_segment_summary = (
         rawnav_q_segment_summary
         .merge(
@@ -215,6 +268,26 @@ def include_segment_summary(rawnav_q_dat,
             flags,
             on=['filename', 'index_run_start'], 
             how='left'
+        )
+        .pipe(
+            ll.reorder_first_cols,
+            first_cols_list = [
+                'filename',
+                'index_run_start',
+                'seg_name_id',
+                'route',
+                'pattern',
+                'start_date_time',
+                'wday',
+                'flag_too_far_any',
+                'flag_wrong_order_any',
+                'flag_too_long_odom',
+                'flag_secs_total_mismatch',
+                'flag_odom_total_mismatch',
+                'start_odom_ft_segment', 
+                'end_odom_ft_segment',
+                'trip_dist_mi_odom_and_segment'
+                ]
         )
     )
         
