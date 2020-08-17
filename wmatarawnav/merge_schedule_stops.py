@@ -169,6 +169,11 @@ def merge_rawnav_wmata_schedule(analysis_route_,
             target_dat=wmata_schedule_dat_,
             rawnav_dat=rawnav_subset_dat)
     )
+    
+    # Trialing resetting index as suggested by Benjamin Malnor
+    # In general indices past the initial read-in don't matter much, so this seems like a safe
+    # way of addressing the issue he hit
+    nearest_rawnav_point_to_wmata_schedule_dat.reset_index(drop=True, inplace=True)
 
     # Assert and clean stop data
     nearest_rawnav_point_to_wmata_schedule_dat = (
@@ -572,6 +577,22 @@ def make_target_rawnav_linestring(index_table):
     This function creates a linestring geometry between the rawnav point and target point 
     for visualization of the merge process. 
     '''
+    # Note: Alternate approach here provided by Benjamin Malnor, could implement.
+    # geometry = (
+    #     index_table
+    #     .loc[:,['stop_lat','stop_lon','lat','long']]
+    #     .apply(lambda x: 
+    #         LineString(
+    #             [
+    #             Point(x['long'],x['lat']),
+    #             Point(x['stop_lon'],x['stop_lat'])
+    #             ]
+    #         ), 
+    #         axis=1
+    #     )
+    #     .tolist()
+    # )
+    # index_table_mod = gpd.GeoDataFrame(index_table, crs="EPSG:4326",geometry=geometry)
     
     geometry_nearest_rawnav_point = (
         gpd.points_from_xy(
