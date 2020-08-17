@@ -697,20 +697,22 @@ def calc_ad_decomp(nonstop,stop, summary):
     The 'accerlation-deceleration' decomposition method parent function. 
     
     In practice, this decomposition method remains incomplete and unused, with some calculations 
-    remaining in exploratory R notebooks. The code is left-as-is and not deleted in the expectation
-    that it may be completed in the future. 
+    remaining in exploratory R notebooks. The code is left-as-is and not deleted in the possibility
+    that it may be completed in the future. This method separates out upstream and downstream delay
+    from the stop. 
     
     A few issues remain to be addressed:    
     -- Vehicles can appear to be in the 'acceleration' phase for a long time despite
     actually moving at very slow speeds near a stop (i.e. experiencing signal delay). While this
     is also a challenge in the simpler traveltime decomposition method ultimately used, the 
     specificity of this method can result in somewhat misleadingly precise values for phases of the
-    decomposition.
+    decomposition. Future development should set a threshold for the start of the acceleration phase
+    as the vehicle moving at, say, more than 2 mph or accelerating more sharply. 
     -- Additional challenges remained in ensuring the sum of the in-stop-area and out-of-stop-area 
-    values produced consistent totals--the development on this method was paused before all of those
-    issues could be addressed. In particular, multi-stop cases and cases where there are two 
-    rawnav pings with the same odometer value at the beginning or end of a segment require more
-    careful handling
+    values produced consistent segment travel time totals--the development on this method was paused
+    before all of those issues could be addressed. In particular, multi-stop cases and cases where 
+    there are two rawnav pings with the same odometer value at the beginning or end of a segment
+    require more careful handling. 
     """
 
     ad_method_stop_by_run = (
