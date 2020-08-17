@@ -167,7 +167,12 @@ for seg in list(xwalk_seg_pattern_stop.seg_name_id.drop_duplicates()): #["eleven
 
     segment_summary_fil = (
         segment_summary
-        .query('~(flag_too_far_any | flag_wrong_order_any | flag_too_long_odom | flag_secs_total_mismatch | flag_odom_total_mismatch)')
+        .query('~(flag_too_far_any\
+                  | flag_wrong_order_any\
+                  | flag_too_long_odom\
+                  | flag_secs_total_mismatch\
+                  | flag_odom_total_mismatch)'
+        )
     )
        
     stop_index = (
