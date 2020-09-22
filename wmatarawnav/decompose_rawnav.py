@@ -28,7 +28,7 @@ def decompose_segment_ff(rawnav,
     rawnav_fil = filter_to_segment(rawnav,
                                    segment_summary_)
     
-    rawnav_fil = calc_rolling_vals(rawnav)
+    rawnav_fil = calc_rolling_vals(rawnav_fil)
            
     freeflow_seg = (
         rawnav_fil
